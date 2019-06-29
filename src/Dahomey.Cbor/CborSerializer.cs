@@ -8,7 +8,7 @@ using System.Runtime.CompilerServices;
 
 namespace Dahomey.Cbor
 {
-    public class CborSerializer
+    public static class CborSerializer
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static T Deserialize<T>(
@@ -49,6 +49,8 @@ namespace Dahomey.Cbor
         {
             ByteBufferWriter bufferWriter = new ByteBufferWriter();
             CborWriter writer = new CborWriter(bufferWriter, settings);
+            ICborConverter<T> converter = CborConverter.Lookup<T>();
+            converter.Write(ref writer, input);
             ReadOnlySpan<byte> span = bufferWriter.WrittenSpan;
             stream.Write(span);
         }

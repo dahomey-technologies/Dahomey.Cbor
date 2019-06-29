@@ -1,12 +1,10 @@
 ﻿using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
 
 namespace Dahomey.Cbor.Util
 {
-    public static class StreamExtensions
+    internal static class StreamExtensions
     {
         public static int Read(this Stream stream, Span<byte> buffer)
         {

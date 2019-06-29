@@ -1,6 +1,6 @@
 ﻿namespace System.Collections.Generic
 {
-    public static class ListExtensions
+    internal static class ListExtensions
     {
         public static int BinarySearch<T>(this List<T> list, Func<T, int> comparer)
         {

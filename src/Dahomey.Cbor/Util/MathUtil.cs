@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Dahomey.Cbor.Util
 {
-    public static class MathUtil
+    internal static class MathUtil
     {
         /// <summary>
         /// Multiplies a floating point value x by the number 2 raised to the exp power.

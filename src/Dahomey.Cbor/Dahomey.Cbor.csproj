@@ -3,13 +3,9 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>7.3</LangVersion>
-    <PackageReleaseNotes>* Serialization/Deserialization from/to Streams, byte buffer
-* Object Model
-* Mapping to any .Net class
-* Extensible Polymorphism support based on discriminator conventions
-* Extensible Naming conventions
-* Custom converters for not supported types
-* .Net standard 2.0 support</PackageReleaseNotes>
+    <PackageReleaseNotes>* fix CborSerializer.Serialize
+* added CborSerializer tests
+* hide internal classes</PackageReleaseNotes>
     <Authors>Michaël Catanzariti</Authors>
     <Company>Dahomey Technologies</Company>
     <Description>High-performance CBOR serialization framework for .Net</Description>
@@ -20,6 +16,7 @@
     <RepositoryType>Git</RepositoryType>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/29336625?s=200&amp;v=4</PackageIconUrl>
     <Copyright>Copyright © Dahomey Technologies 2019</Copyright>
+    <Version>1.0.1</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

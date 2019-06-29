@@ -8,7 +8,7 @@ using System.Linq;
 namespace Dahomey.Cbor.Tests
 {
     [TestClass]
-    public class CborReaderValueTest
+    public class CborReaderValueTests
     {
         [DataTestMethod]
         [DataRow("F5", true, null)]
