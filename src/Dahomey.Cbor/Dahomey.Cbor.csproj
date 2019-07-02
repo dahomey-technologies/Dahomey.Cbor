@@ -9,7 +9,7 @@
     <Authors>Michaël Catanzariti</Authors>
     <Company>Dahomey Technologies</Company>
     <Description>High-performance CBOR serialization framework for .Net</Description>
-    <PackageLicense>https://licenses.nuget.org/MIT</PackageLicense>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/dahomey-technologies/Dahomey.Cbor</PackageProjectUrl>
     <PackageTags>cbor;serialization;json</PackageTags>
     <RepositoryUrl>https://github.com/dahomey-technologies/Dahomey.Cbor.git</RepositoryUrl>
