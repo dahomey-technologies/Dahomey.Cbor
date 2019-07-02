@@ -23,7 +23,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("F4", false, null)]
         public void WriteBoolean(string hexBuffer, bool value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -35,7 +35,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("61", (sbyte)0, typeof(CborException))]
         public void WriteSByte(string hexBuffer, sbyte value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -46,7 +46,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("61", (byte)0, typeof(CborException))]
         public void WriteByte(string hexBuffer, byte value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -58,7 +58,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("61", (short)0, typeof(CborException))]
         public void WriteInt16(string hexBuffer, short value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -69,7 +69,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("61", (ushort)0, typeof(CborException))]
         public void WriteUInt16(string hexBuffer, ushort value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -81,7 +81,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("61", 0, typeof(CborException))]
         public void WriteInt32(string hexBuffer, int value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -92,7 +92,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("61", 0u, typeof(CborException))]
         public void WriteUInt32(string hexBuffer, uint value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -120,7 +120,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("1F", 0, typeof(CborException))]
         public void WriteInt64(string hexBuffer, long value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -148,7 +148,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("1F", 0ul, typeof(CborException))]
         public void WriteUInt64(string hexBuffer, ulong value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -158,7 +158,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("FAFF800000", float.NegativeInfinity, null)]
         public void WriteSingle(string hexBuffer, float value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -168,7 +168,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("FBFFF0000000000000", double.NegativeInfinity, null)]
         public void WriteDouble(string hexBuffer, double value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -177,7 +177,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("60", "", null)]
         public void WriteString(string hexBuffer, string value, Type expectedExceptionType)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -187,7 +187,7 @@ namespace Dahomey.Cbor.Tests
         {
             DateTime dateTime = DateTime.ParseExact(value,
                 "yyyy-MM-dd'T'HH:mm:ss.FFFK", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-            TestWrite(dateTime, hexBuffer, null, new CborSerializationSettings { DateTimeFormat = dateTimeFormat });
+            Helper.TestWrite(dateTime, hexBuffer, null, new CborSerializationSettings { DateTimeFormat = dateTimeFormat });
         }
 
         [DataTestMethod]
@@ -201,7 +201,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("04", (EnumTest)4, null, ValueFormat.WriteToString)]
         public void WriteEnum(string hexBuffer, EnumTest value, Type expectedExceptionType, ValueFormat enumFormat)
         {
-            TestWrite(value, hexBuffer, expectedExceptionType, new CborSerializationSettings { EnumFormat = enumFormat });
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType, new CborSerializationSettings { EnumFormat = enumFormat });
         }
 
         [DataTestMethod]
@@ -209,7 +209,7 @@ namespace Dahomey.Cbor.Tests
         public void WriteInt32List(string hexBuffer, string value, Type expectedExceptionType)
         {
             List<int> list = value.Split(',').Select(int.Parse).ToList();
-            TestWrite(list, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(list, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -217,7 +217,7 @@ namespace Dahomey.Cbor.Tests
         public void WriteStringList(string hexBuffer, string value, Type expectedExceptionType)
         {
             List<string> list = value.Split(',').ToList();
-            TestWrite(list, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(list, hexBuffer, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -225,7 +225,7 @@ namespace Dahomey.Cbor.Tests
         public void WriteInt32Array(string hexBuffer, string value, Type expectedExceptionType)
         {
             int[] array = value.Split(',').Select(int.Parse).ToArray();
-            TestWrite(array, hexBuffer, expectedExceptionType);
+            Helper.TestWrite(array, hexBuffer, expectedExceptionType);
         }
 
         [TestMethod]
@@ -250,7 +250,7 @@ namespace Dahomey.Cbor.Tests
             };
 
             const string hexBuffer = "AE67426F6F6C65616EF56553427974650D64427974650C65496E7431360E6655496E7431360F65496E743332106655496E7433321165496E743634126655496E7436341366537472696E6766737472696E676653696E676C65FA41A1AE1466446F75626C65FB40363AE147AE147B684461746554696D6574323031342D30322D32315431393A30303A30305A64456E756D6656616C756531";
-            TestWrite(obj, hexBuffer, null, new CborSerializationSettings { EnumFormat = ValueFormat.WriteToString });
+            Helper.TestWrite(obj, hexBuffer, null, new CborSerializationSettings { EnumFormat = ValueFormat.WriteToString });
         }
 
         [TestMethod]
@@ -275,7 +275,7 @@ namespace Dahomey.Cbor.Tests
             };
 
             const string hexBuffer = "AE67426F6F6C65616EF56553427974650D64427974650C65496E7431360E6655496E7431360F65496E743332106655496E7433321165496E743634126655496E7436341366537472696E6766737472696E676653696E676C65FA41A1AE1466446F75626C65FB40363AE147AE147B684461746554696D6574323031342D30322D32315431393A30303A30305A64456E756D6656616C756531";
-            TestWrite(obj, hexBuffer, null, new CborSerializationSettings { EnumFormat = ValueFormat.WriteToString });
+            Helper.TestWrite(obj, hexBuffer, null, new CborSerializationSettings { EnumFormat = ValueFormat.WriteToString });
         }
 
         [TestMethod]
@@ -289,7 +289,7 @@ namespace Dahomey.Cbor.Tests
                 new IntObject { IntValue = 13 }
             };
 
-            TestWrite(lst, hexBuffer);
+            Helper.TestWrite(lst, hexBuffer);
         }
 
         [TestMethod]
@@ -302,7 +302,7 @@ namespace Dahomey.Cbor.Tests
                 CborValue = new CborArray(1, true, null)
             };
 
-            TestWrite(obj, hexBuffer);
+            Helper.TestWrite(obj, hexBuffer);
         }
 
         [TestMethod]
@@ -321,7 +321,7 @@ namespace Dahomey.Cbor.Tests
                 StringList = new List<string> { "a", "b" }
             };
 
-            TestWrite(obj, hexBuffer);
+            Helper.TestWrite(obj, hexBuffer);
         }
 
         [TestMethod]
@@ -340,7 +340,7 @@ namespace Dahomey.Cbor.Tests
                 StringArray = new[] { "a", "b" }
             };
 
-            TestWrite(obj, hexBuffer);
+            Helper.TestWrite(obj, hexBuffer);
         }
 
         [TestMethod]
@@ -384,7 +384,7 @@ namespace Dahomey.Cbor.Tests
                 }
             };
 
-            TestWrite(obj, hexBuffer, null, 
+            Helper.TestWrite(obj, hexBuffer, null, 
                 new CborSerializationSettings { EnumFormat = ValueFormat.WriteToString });
         }
 
@@ -404,7 +404,7 @@ namespace Dahomey.Cbor.Tests
                 StringHashSet = new HashSet<string> { "a", "b" }
             };
 
-            TestWrite(obj, hexBuffer);
+            Helper.TestWrite(obj, hexBuffer);
         }
 
         [TestMethod]
@@ -420,7 +420,7 @@ namespace Dahomey.Cbor.Tests
                 }
             };
 
-            TestWrite(obj, hexBuffer);
+            Helper.TestWrite(obj, hexBuffer);
         }
 
         [TestMethod]
@@ -433,7 +433,7 @@ namespace Dahomey.Cbor.Tests
                 Value = 1
             };
 
-            TestWrite(obj, hexBuffer);
+            Helper.TestWrite(obj, hexBuffer);
         }
 
         [TestMethod]
@@ -446,7 +446,7 @@ namespace Dahomey.Cbor.Tests
                 Id = 12
             };
 
-            TestWrite(obj, hexBuffer);
+            Helper.TestWrite(obj, hexBuffer);
         }
         [TestMethod]
         public void WritePolymorphicObject()
@@ -460,7 +460,7 @@ namespace Dahomey.Cbor.Tests
                     Name = "foo"
                 }
             };
-            TestWrite(obj, hexBuffer);
+            Helper.TestWrite(obj, hexBuffer);
         }
 
         [TestMethod]
@@ -471,39 +471,7 @@ namespace Dahomey.Cbor.Tests
             {
                 Guid = Guid.Parse("67EBF45D-016C-4B48-8AE6-1E389127B717")
             };
-            TestWrite(obj, hexBuffer);
+            Helper.TestWrite(obj, hexBuffer);
         }
-
-        #region Helpers
-
-        private string Write<T>(T value, CborSerializationSettings settings = null)
-        {
-            ByteBufferWriter bufferWriter = new ByteBufferWriter();
-            CborWriter writer = new CborWriter(bufferWriter, settings);
-            ICborConverter<T> converter = CborConverter.Lookup<T>();
-            converter.Write(ref writer, value);
-            return BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", "");
-        }
-
-        private void TestWrite<T>(T value, string hexBuffer, Type expectedExceptionType = null, CborSerializationSettings settings = null)
-        {
-            if (expectedExceptionType != null)
-            {
-                try
-                {
-                    Write(value, settings);
-                }
-                catch (Exception ex)
-                {
-                    Assert.IsInstanceOfType(ex, expectedExceptionType);
-                }
-            }
-            else
-            {
-                Assert.AreEqual(hexBuffer, Write(value, settings));
-            }
-        }
-
-        #endregion Helpers
     }
 }

@@ -15,7 +15,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("F4", false, null)]
         public void ReadBoolean(string hexBuffer, bool value, Type expectedExceptionType)
         {
-            TestRead(hexBuffer, (CborBoolean)value, expectedExceptionType);
+            Helper.TestRead(hexBuffer, (CborValue)value, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -36,7 +36,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("1F", -1, typeof(CborException))]
         public void ReadNegative(string hexBuffer, long expectedValue, Type expectedExceptionType)
         {
-            TestRead(hexBuffer, (CborNegative)expectedValue, expectedExceptionType);
+            Helper.TestRead(hexBuffer, (CborValue)expectedValue, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -58,7 +58,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("1F", 0ul, typeof(CborException))]
         public void ReadPositive(string hexBuffer, ulong expectedValue, Type expectedExceptionType)
         {
-            TestRead(hexBuffer, (CborPositive)expectedValue, expectedExceptionType);
+            Helper.TestRead(hexBuffer, (CborValue)expectedValue, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -68,7 +68,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("FAFF800000", float.NegativeInfinity, null)]
         public void ReadSingle(string hexBuffer, float expectedValue, Type expectedExceptionType)
         {
-            TestRead(hexBuffer, (CborSingle)expectedValue, expectedExceptionType);
+            Helper.TestRead(hexBuffer, (CborValue)expectedValue, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -78,7 +78,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("FBFFF0000000000000", double.NegativeInfinity, null)]
         public void ReadDouble(string hexBuffer, double expectedValue, Type expectedExceptionType)
         {
-            TestRead(hexBuffer, (CborDouble)expectedValue, expectedExceptionType);
+            Helper.TestRead(hexBuffer, (CborValue)expectedValue, expectedExceptionType);
         }
 
         [DataTestMethod]
@@ -86,29 +86,29 @@ namespace Dahomey.Cbor.Tests
         [DataRow("60", "", null)]
         public void ReadString(string hexBuffer, string expectedValue, Type expectedExceptionType)
         {
-            TestRead(hexBuffer, (CborString)expectedValue, expectedExceptionType);
+            Helper.TestRead(hexBuffer, (CborValue)expectedValue, expectedExceptionType);
         }
 
         [TestMethod]
         public void ReadNull()
         {
-            TestRead("F6", CborValue.Null);
+            Helper.TestRead("F6", (CborValue)CborValue.Null);
         }
 
         [DataTestMethod]
         [DataRow("8401020304", "1,2,3,4", null)]
         public void ReadInt32List(string hexBuffer, string expectedValue, Type expectedExceptionType)
         {
-            CborArray array = new CborArray(expectedValue.Split(',').Select(s => (CborValue)int.Parse(s)));
-            TestRead(hexBuffer, array, expectedExceptionType);
+            CborValue array = new CborArray(expectedValue.Split(',').Select(s => (CborValue)int.Parse(s)));
+            Helper.TestRead(hexBuffer, array, expectedExceptionType);
         }
 
         [DataTestMethod]
         [DataRow("84626161626262626363626464", "aa,bb,cc,dd", null)]
         public void ReadStringList(string hexBuffer, string expectedValue, Type expectedExceptionType)
         {
-            CborArray array = new CborArray(expectedValue.Split(',').Select(s => (CborValue)s));
-            TestRead(hexBuffer, array, expectedExceptionType);
+            CborValue array = new CborArray(expectedValue.Split(',').Select(s => (CborValue)s));
+            Helper.TestRead(hexBuffer, array, expectedExceptionType);
         }
 
         [TestMethod]
@@ -116,7 +116,7 @@ namespace Dahomey.Cbor.Tests
         {
             const string hexBuffer =
                 "A666737472696E6763666F6F666E756D626572FB40283D70A3D70A3D64626F6F6CF5646E756C6CF6656172726179820102666F626A656374A162696401";
-            CborValue actual = Read(hexBuffer);
+            CborValue actual = Helper.Read<CborValue>(hexBuffer);
             Assert.IsNotNull(actual);
             Assert.AreEqual(CborValueType.Object, actual.Type);
             Assert.IsInstanceOfType(actual, typeof(CborObject));
@@ -182,7 +182,7 @@ namespace Dahomey.Cbor.Tests
         public void ReadArray()
         {
             string hexBuffer = "8663666F6FFB40283D70A3D70A3DF5F6820102A162696401";
-            CborValue actual = Read(hexBuffer);
+            CborValue actual = Helper.Read<CborValue>(hexBuffer);
             Assert.IsNotNull(actual);
             Assert.AreEqual(CborValueType.Array, actual.Type);
             Assert.IsInstanceOfType(actual, typeof(CborArray));
@@ -235,34 +235,6 @@ namespace Dahomey.Cbor.Tests
             CborObject CborObject = (CborObject)actualObject;
             Assert.AreEqual("id", CborObject.Pairs[0].Name);
             Assert.AreEqual(1, CborObject.Pairs[0].Value.Value<double>());
-        }
-
-        private CborValue Read(string hexBuffer)
-        {
-            Span<byte> buffer = hexBuffer.HexToBytes();
-            CborReader reader = new CborReader(buffer);
-            ICborConverter<CborValue> converter = CborConverter.Lookup<CborValue>();
-            return converter.Read(ref reader);
-        }
-
-        private void TestRead(string hexBuffer, CborValue expectedValue, Type expectedExceptionType = null)
-        {
-            if (expectedExceptionType != null)
-            {
-                try
-                {
-                    Read(hexBuffer);
-                }
-                catch (Exception ex)
-                {
-                    Assert.IsInstanceOfType(ex, expectedExceptionType);
-                }
-            }
-            else
-            {
-                CborValue actualValue = Read(hexBuffer);
-                Assert.AreEqual(expectedValue, actualValue);
-            }
         }
     }
 }
