@@ -1,5 +1,5 @@
 # Dahomey.Cbor
-High-performance CBOR serialization framework for .Net
+High-performance CBOR serialization framework for .Net (C#)
 
 ## Features
 * Serialization/Deserialization from/to Streams, byte buffer
