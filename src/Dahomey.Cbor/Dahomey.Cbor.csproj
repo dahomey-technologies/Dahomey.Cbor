@@ -3,9 +3,13 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>7.3</LangVersion>
-    <PackageReleaseNotes>* fix CborSerializer.Serialize
-* added CborSerializer tests
-* hide internal classes</PackageReleaseNotes>
+    <PackageReleaseNotes>* Refactored ReadArray, ReadMap, WriteArray and WriteMap
+* Added AggressiveInlining on CborReader and CborWriter
+* Renamed CborSerializer to Cbor
+* Renamed CborSerializationSettings to CborOptions
+* Optimized ByteBufferWriter allocations
+* Optimized serialization to Stream
+* Changed serialization/deserialization to/from Stream to async methods</PackageReleaseNotes>
     <Authors>Michaël Catanzariti</Authors>
     <Company>Dahomey Technologies</Company>
     <Description>High-performance CBOR serialization framework for .Net</Description>
@@ -17,6 +21,8 @@
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/29336625?s=200&amp;v=4</PackageIconUrl>
     <Copyright>Copyright © Dahomey Technologies 2019</Copyright>
     <Version>1.0.1</Version>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <FileVersion>1.0.2.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
