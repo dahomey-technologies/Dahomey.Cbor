@@ -20,7 +20,7 @@
     <RepositoryType>Git</RepositoryType>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/29336625?s=200&amp;v=4</PackageIconUrl>
     <Copyright>Copyright © Dahomey Technologies 2019</Copyright>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <AssemblyVersion>1.0.2.0</AssemblyVersion>
     <FileVersion>1.0.2.0</FileVersion>
   </PropertyGroup>
