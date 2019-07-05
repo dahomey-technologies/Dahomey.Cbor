@@ -20,10 +20,10 @@ namespace Dahomey.Cbor
         Unix = 1,
     }
 
-    public class CborSerializationSettings
+    public class CborOptions
     {
         private static readonly IDiscriminatorConvention defaultDiscriminatorConvention = new DefaultDiscriminatorConvention();
-        public static CborSerializationSettings Default => new CborSerializationSettings();
+        public static CborOptions Default => new CborOptions();
 
         public UnhandledNameMode UnhandledNameMode { get; set; }
         public ValueFormat EnumFormat { get; set; }

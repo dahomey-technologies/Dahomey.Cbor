@@ -1,6 +1,4 @@
 ﻿using Dahomey.Cbor.ObjectModel;
-using Dahomey.Cbor.Serialization;
-using Dahomey.Cbor.Serialization.Converters;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;

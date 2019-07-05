@@ -130,7 +130,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     Type keyType = type.GetGenericArguments()[0];
                     Type valueType = type.GetGenericArguments()[1];
-                    return (ICborConverter)Activator.CreateInstance(typeof(DictionaryConverter<,>).MakeGenericType(keyType, valueType));
+                    return (ICborConverter)Activator.CreateInstance(typeof(DictionaryConverter<,,>).MakeGenericType(type, keyType, valueType));
                 }
                 if (type.GetInterfaces()
                     .Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(ICollection<>)))

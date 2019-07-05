@@ -1,9 +1,25 @@
-﻿using System;
+﻿using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class ArrayConverter<TI> : ICborConverter<TI[]>
+    public class ArrayConverter<TI> : 
+        ICborConverter<TI[]>, 
+        ICborArrayReader<ArrayConverter<TI>.ReaderContext>,
+        ICborArrayWriter<ArrayConverter<TI>.WriterContext>
     {
+        public struct ReaderContext
+        {
+            public TI[] array;
+            public List<TI> list;
+            public int index;
+        }
+
+        public struct WriterContext
+        {
+            public TI[] array;
+            public int index;
+        }
+
         private static readonly ICborConverter<TI> _itemConverter = CborConverter.Lookup<TI>();
 
         public TI[] Read(ref CborReader reader)
@@ -13,23 +29,62 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return null;
             }
 
-            reader.ReadBeginArray();
+            ReaderContext context = new ReaderContext();
+            reader.ReadArray(this, ref context);
 
-            int size = reader.ReadSize();
-            TI[] array = new TI[size];
-
-            for (int i = 0; i < size; i++)
+            if (context.array != null)
             {
-                TI item = _itemConverter.Read(ref reader);
-                array[i] = item;
+                return context.array;
             }
-
-            return array;
+            else
+            {
+                return context.list.ToArray();
+            }
         }
 
         public void Write(ref CborWriter writer, TI[] value)
         {
-            writer.WriteArray(value, _itemConverter);
+            WriterContext context = new WriterContext
+            {
+                array = value
+            };
+            writer.WriteArray(this, ref context);
+        }
+
+        public void ReadBeginArray(int size, ref ReaderContext context)
+        {
+            if (size != -1)
+            {
+                context.array = new TI[size];
+            }
+            else
+            {
+                context.list = new List<TI>();
+            }
+        }
+
+        public void ReadArrayItem(ref CborReader reader, ref ReaderContext context)
+        {
+            TI item = _itemConverter.Read(ref reader);
+
+            if (context.array != null)
+            {
+                context.array[context.index++] = item;
+            }
+            else
+            {
+                context.list.Add(item);
+            }
+        }
+
+        public int GetArraySize(ref WriterContext context)
+        {
+            return context.array.Length;
+        }
+
+        public void WriteArrayItem(ref CborWriter writer, ref WriterContext context)
+        {
+            _itemConverter.Write(ref writer, context.array[context.index++]);
         }
     }
 }

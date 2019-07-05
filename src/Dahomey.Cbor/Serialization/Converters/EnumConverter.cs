@@ -60,7 +60,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void Write(ref CborWriter writer, T value)
         {
-            if (writer.Settings.EnumFormat == ValueFormat.WriteToString)
+            if (writer.Options.EnumFormat == ValueFormat.WriteToString)
             {
                 WriteString(ref writer, value);
             }

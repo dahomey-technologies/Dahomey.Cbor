@@ -4,13 +4,31 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public class CborValueConverter : 
         ICborConverter<CborValue>,
-        ICborMapReader<CborObject, object>,
-        ICborMapWriter<CborValueConverter.MapWriterContext>
+        ICborMapReader<CborValueConverter.MapReaderContext>,
+        ICborMapWriter<CborValueConverter.MapWriterContext>,
+        ICborArrayReader<CborValueConverter.ArrayReaderContext>,
+        ICborArrayWriter<CborValueConverter.ArrayWriterContext>
     {
+        public struct MapReaderContext
+        {
+            public CborObject obj;
+        }
+
         public struct MapWriterContext
         {
             public CborObject obj;
-            public int pairIndex;
+            public int index;
+        }
+
+        public struct ArrayReaderContext
+        {
+            public CborArray array;
+        }
+
+        public struct ArrayWriterContext
+        {
+            public CborArray array;
+            public int index;
         }
 
         public CborValue Read(ref CborReader reader)
@@ -40,11 +58,24 @@ namespace Dahomey.Cbor.Serialization.Converters
                     return reader.ReadString();
 
                 case CborDataItemType.Array:
-                    return reader.ReadArray<CborArray, CborValue>(this);
+                    if (reader.ReadNull())
+                    {
+                        return null;
+                    }
+
+                    ArrayReaderContext arrayContext = new ArrayReaderContext();
+                    reader.ReadArray(this, ref arrayContext);
+                    return arrayContext.array;
 
                 case CborDataItemType.Map:
-                    object context = null;
-                    return reader.ReadMap(this, ref context);
+                    if (reader.ReadNull())
+                    {
+                        return null;
+                    }
+
+                    MapReaderContext mapContext = new MapReaderContext();
+                    reader.ReadMap(this, ref mapContext);
+                    return mapContext.obj;
 
                 default:
                     throw reader.BuildException("Unexpected data item type");
@@ -56,15 +87,19 @@ namespace Dahomey.Cbor.Serialization.Converters
             switch (value.Type)
             {
                 case CborValueType.Object:
-                    MapWriterContext context = new MapWriterContext
+                    MapWriterContext mapWriterContext = new MapWriterContext
                     {
                         obj = (CborObject)value
                     };
-                    writer.WriteMap(this, ref context);
+                    writer.WriteMap(this, ref mapWriterContext);
                     break;
 
                 case CborValueType.Array:
-                    writer.WriteArray((CborArray)value, this);
+                    ArrayWriterContext arrayWriterContext = new ArrayWriterContext
+                    {
+                        array = (CborArray)value
+                    };
+                    writer.WriteArray(this, ref arrayWriterContext);
                     break;
 
                 case CborValueType.Positive:
@@ -97,30 +132,53 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        void ICborMapReader<CborObject, object>.ReadMapEntry(ref CborReader reader, ref CborObject obj, ref object context)
+        void ICborMapReader<MapReaderContext>.ReadBeginMap(int size, ref MapReaderContext context)
         {
-            if (obj == null)
-            {
-                obj = new CborObject();
-            }
-
-            string key = reader.ReadString();
-            CborValue value = Read(ref reader);
-            obj.Pairs.Add(new CborPair(key, value));
+            context.obj = new CborObject();
         }
 
-        int ICborMapWriter<MapWriterContext>.GetSize(ref MapWriterContext context)
+        void ICborMapReader<MapReaderContext>.ReadMapItem(ref CborReader reader, ref MapReaderContext context)
+        {
+            string key = reader.ReadString();
+            CborValue value = Read(ref reader);
+            context.obj.Pairs.Add(new CborPair(key, value));
+        }
+
+        int ICborMapWriter<MapWriterContext>.GetMapSize(ref MapWriterContext context)
         {
             return context.obj.Pairs.Count;
         }
 
-        bool ICborMapWriter<MapWriterContext>.WriteMapEntry(ref CborWriter writer, ref MapWriterContext context)
+        void ICborMapWriter<MapWriterContext>.WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
         {
-            CborPair pair = context.obj.Pairs[context.pairIndex++];
+            CborPair pair = context.obj.Pairs[context.index++];
             writer.WriteString(pair.Name);
             Write(ref writer, pair.Value);
+        }
 
-            return context.pairIndex < context.obj.Pairs.Count;
+        void ICborArrayReader<ArrayReaderContext>.ReadBeginArray(int size, ref ArrayReaderContext context)
+        {
+            context.array = new CborArray();
+
+            if (size != -1)
+            {
+                context.array.Capacity = size;
+            }
+        }
+
+        void ICborArrayReader<ArrayReaderContext>.ReadArrayItem(ref CborReader reader, ref ArrayReaderContext context)
+        {
+            context.array.Add(Read(ref reader));
+        }
+
+        int ICborArrayWriter<ArrayWriterContext>.GetArraySize(ref ArrayWriterContext context)
+        {
+            return context.array.Count;
+        }
+
+        void ICborArrayWriter<ArrayWriterContext>.WriteArrayItem(ref CborWriter writer, ref ArrayWriterContext context)
+        {
+            Write(ref writer, context.array[context.index++]);
         }
     }
 }

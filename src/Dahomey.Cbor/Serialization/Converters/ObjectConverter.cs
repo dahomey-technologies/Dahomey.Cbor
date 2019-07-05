@@ -27,12 +27,13 @@ namespace Dahomey.Cbor.Serialization.Converters
     public class ObjectConverter<T> :
         ICborConverter<T>,
         IObjectConverter<T>,
-        ICborMapReader<T, ObjectConverter<T>.MapReaderContext>,
+        ICborMapReader<ObjectConverter<T>.MapReaderContext>,
         ICborMapWriter<ObjectConverter<T>.MapWriterContext>
         where T : class, new()
     {
         public struct MapReaderContext
         {
+            public T obj;
             public IObjectConverter<T> converter;
         }
 
@@ -124,8 +125,14 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public T Read(ref CborReader reader)
         {
+            if (reader.ReadNull())
+            {
+                return null;
+            }
+
             MapReaderContext context = new MapReaderContext();
-            return reader.ReadMap(this, ref context);
+            reader.ReadMap(this, ref context);
+            return context.obj;
         }
 
         public void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName)
@@ -170,61 +177,64 @@ namespace Dahomey.Cbor.Serialization.Converters
             writer.WriteMap(this, ref context);
         }
 
-        public void ReadMapEntry(ref CborReader reader, ref T obj, ref MapReaderContext context)
+        public void ReadBeginMap(int size, ref MapReaderContext context)
+        {
+        }
+
+        public void ReadMapItem(ref CborReader reader, ref MapReaderContext context)
         {
             // name
             ReadOnlySpan<byte> memberName = reader.ReadRawString();
 
-            if (obj == null)
+            if (context.obj == null)
             {
-                IDiscriminatorConvention discriminatorConvention = reader.Settings.DiscriminatorConvention;
+                IDiscriminatorConvention discriminatorConvention = reader.Options.DiscriminatorConvention;
 
                 if (memberName.SequenceEqual(discriminatorConvention.MemberName))
                 {
                     // discriminator value
                     Type actualType = discriminatorConvention.ReadDiscriminator(ref reader);
                     context.converter = (IObjectConverter<T>)CborConverter.Lookup(actualType);
-                    obj = context.converter.CreateInstance();
+                    context.obj = context.converter.CreateInstance();
                 }
                 else
                 {
                     context.converter = this;
-                    obj = context.converter.CreateInstance();
-                    context.converter.ReadValue(ref reader, obj, memberName);
+                    context.obj = context.converter.CreateInstance();
+                    context.converter.ReadValue(ref reader, context.obj, memberName);
 
                 }
             }
             else
             {
-                context.converter.ReadValue(ref reader, obj, memberName);
+                context.converter.ReadValue(ref reader, context.obj, memberName);
             }
         }
 
-        public int GetSize(ref MapWriterContext context)
+        public int GetMapSize(ref MapWriterContext context)
         {
             return context.state == MapWriterContext.State.Discriminator
                 ? context.objectConverter.MemberConvertersForWrite.Count + 1
                 : context.objectConverter.MemberConvertersForWrite.Count;
         }
 
-        public bool WriteMapEntry(ref CborWriter writer, ref MapWriterContext context)
+        public void WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
         {
             if (context.state == MapWriterContext.State.Discriminator)
             {
-                writer.Settings.DiscriminatorConvention.WriteDiscriminator<T>(ref writer, context.obj.GetType());
+                writer.Options.DiscriminatorConvention.WriteDiscriminator<T>(ref writer, context.obj.GetType());
                 context.state = MapWriterContext.State.Properties;
-                return true;
+                return;
             }
 
             IMemberConverter memberConverter = context.objectConverter.MemberConvertersForWrite[context.memberIndex++];
             writer.WriteString(memberConverter.MemberName);
             memberConverter.Write(ref writer, context.obj);
-            return context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count;
         }
 
         private void HandleUnknownName(ref CborReader reader, Type type, ReadOnlySpan<byte> rawName)
         {
-            if (reader.Settings.UnhandledNameMode == UnhandledNameMode.ThrowException)
+            if (reader.Options.UnhandledNameMode == UnhandledNameMode.ThrowException)
             {
                 throw reader.BuildException("Unhandled name [{Encoding.ASCII.GetString(rawName)}] in class [{type.Name}] while deserializing.");
             }

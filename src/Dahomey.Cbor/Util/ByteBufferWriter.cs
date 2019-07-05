@@ -1,26 +1,39 @@
 ﻿using System;
 using System.Buffers;
 using System.Diagnostics;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace Dahomey.Cbor.Util
 {
-    public class ByteBufferWriter : IBufferWriter<byte>
+    public class ByteBufferWriter : IBufferWriter<byte>, IDisposable
     {
         private readonly byte[] _emptyBuffer = new byte[0];
 
         private byte[] _buffer;
-        private int _index;
+        private int _size;
 
         private const int DefaultInitialBufferSize = 256;
 
         public int Capacity => _buffer.Length;
-        public int FreeCapacity => _buffer.Length - _index;
-        public ReadOnlySpan<byte> WrittenSpan => _buffer.AsSpan(0, _index);
+        public int FreeCapacity => _buffer.Length - _size;
+        public ReadOnlySpan<byte> WrittenSpan => _buffer.AsSpan(0, _size);
 
         public ByteBufferWriter()
         {
             _buffer = _emptyBuffer;
-            _index = 0;
+            _size = 0;
+        }
+
+        public void Dispose()
+        {
+            if (!ReferenceEquals(_buffer, _emptyBuffer))
+            {
+                ArrayPool<byte>.Shared.Return(_buffer);
+            }
+
+            _buffer = null;
+            _size = 0;
         }
 
         public void Advance(int count)
@@ -28,24 +41,24 @@ namespace Dahomey.Cbor.Util
             if (count < 0)
                 throw new ArgumentException(nameof(count));
 
-            if (_index > _buffer.Length - count)
+            if (_size > _buffer.Length - count)
                 throw new InvalidOperationException();
 
-            _index += count;
+            _size += count;
         }
 
         public Memory<byte> GetMemory(int sizeHint = 0)
         {
             CheckAndResizeBuffer(sizeHint);
-            Debug.Assert(_buffer.Length > _index);
-            return _buffer.AsMemory(_index);
+            Debug.Assert(_buffer.Length > _size);
+            return _buffer.AsMemory(_size);
         }
 
         public Span<byte> GetSpan(int sizeHint = 0)
         {
             CheckAndResizeBuffer(sizeHint);
-            Debug.Assert(_buffer.Length > _index);
-            return _buffer.AsSpan(_index);
+            Debug.Assert(_buffer.Length > _size);
+            return _buffer.AsSpan(_size);
         }
 
         private void CheckAndResizeBuffer(int sizeHint)
@@ -69,10 +82,22 @@ namespace Dahomey.Cbor.Util
 
                 int newSize = checked(_buffer.Length + growBy);
 
-                Array.Resize(ref _buffer, newSize);
+                byte[] backup = _buffer;
+                _buffer = ArrayPool<byte>.Shared.Rent(newSize);
+
+                if (!ReferenceEquals(backup, _emptyBuffer))
+                {
+                    backup.AsSpan().CopyTo(_buffer);
+                    ArrayPool<byte>.Shared.Return(backup);
+                }
             }
 
             Debug.Assert(FreeCapacity > 0 && FreeCapacity >= sizeHint);
+        }
+
+        public Task CopyToAsync(Stream stream)
+        {
+            return stream.WriteAsync(_buffer, 0, _size);
         }
     }
 }

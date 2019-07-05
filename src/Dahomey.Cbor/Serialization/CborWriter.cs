@@ -3,6 +3,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -10,72 +11,89 @@ namespace Dahomey.Cbor.Serialization
 {
     public interface ICborMapWriter<TC>
     {
-        int GetSize(ref TC context);
-        bool WriteMapEntry(ref CborWriter writer, ref TC context);
+        int GetMapSize(ref TC context);
+        void WriteMapItem(ref CborWriter writer, ref TC context);
+    }
+
+    public interface ICborArrayWriter<TC>
+    {
+        int GetArraySize(ref TC context);
+        void WriteArrayItem (ref CborWriter writer, ref TC context);
     }
 
     public ref struct CborWriter
     {
         private IBufferWriter<byte> _bufferWriter;
 
-        public CborSerializationSettings Settings { get; }
+        public CborOptions Options { get; }
 
-        public CborWriter(IBufferWriter<byte> bufferWriter, CborSerializationSettings settings = null)
+        public CborWriter(IBufferWriter<byte> bufferWriter, CborOptions options = null)
         {
             _bufferWriter = bufferWriter;
-            Settings = settings ?? CborSerializationSettings.Default;
+            Options = options ?? CborOptions.Default;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteNull()
         {
             WritePrimitive(CborPrimitive.Null);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteBoolean(bool value)
         {
             WritePrimitive(value ? CborPrimitive.True : CborPrimitive.False);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteSByte(sbyte value)
         {
             WriteSigned(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteByte(byte value)
         {
             WriteUnsigned(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteInt16(short value)
         {
             WriteSigned(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteUInt16(ushort value)
         {
             WriteUnsigned(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteInt32(int value)
         {
             WriteSigned(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteUInt32(uint value)
         {
             WriteSigned(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteInt64(long value)
         {
             WriteSigned(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteUInt64(ulong value)
         {
             WriteUnsigned(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteSingle(float value)
         {
             WritePrimitive(CborPrimitive.SingleFloat);
@@ -99,6 +117,7 @@ namespace Dahomey.Cbor.Serialization
             _bufferWriter.Advance(4);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteDouble(double value)
         {
             WritePrimitive(CborPrimitive.DoubleFloat);
@@ -122,6 +141,7 @@ namespace Dahomey.Cbor.Serialization
             _bufferWriter.Advance(8);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteString(string value)
         {
             if (value == null)
@@ -143,6 +163,7 @@ namespace Dahomey.Cbor.Serialization
             _bufferWriter.Advance(byteCount);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteString(ReadOnlySpan<byte> value)
         {
             if (value == null)
@@ -155,36 +176,38 @@ namespace Dahomey.Cbor.Serialization
             _bufferWriter.Write(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteByteString(ReadOnlySpan<byte> value)
         {
             WriteInteger(CborMajorType.ByteString, (ulong)value.Length);
             _bufferWriter.Write(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteMap<TC>(ICborMapWriter<TC> mapWriter, ref TC context)
         {
-            int size = mapWriter.GetSize(ref context);
+            int size = mapWriter.GetMapSize(ref context);
             WriteInteger(CborMajorType.Map, (ulong)size);
 
-            while (mapWriter.WriteMapEntry(ref this, ref context));
+            for (int i = 0; i < size; i++)
+            {
+                mapWriter.WriteMapItem(ref this, ref context);
+            }
         }
 
-        public void WriteArray<T>(ICollection<T> collection, ICborValueWriter<T> itemWriter)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void WriteArray<TC>(ICborArrayWriter<TC> arrayWriter, ref TC context)
         {
-            if (collection == null)
-            {
-                WriteNull();
-                return;
-            }
+            int size = arrayWriter.GetArraySize(ref context);
+            WriteInteger(CborMajorType.Array, (ulong)size);
 
-            WriteInteger(CborMajorType.Array, (ulong)collection.Count);
-
-            foreach (T item in collection)
+            for (int i = 0; i < size; i++)
             {
-                itemWriter.Write(ref this, item);
+                arrayWriter.WriteArrayItem(ref this, ref context);
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void WriteSigned(long value)
         {
             if (value >= 0)
@@ -196,11 +219,13 @@ namespace Dahomey.Cbor.Serialization
             WriteInteger(CborMajorType.NegativeInteger, (ulong)(-1 - value));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void WriteUnsigned(ulong value)
         {
             WriteInteger(CborMajorType.PositiveInteger, value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void WriteInteger(CborMajorType majorType, ulong value)
         {
             if (value <= 23)
@@ -235,17 +260,20 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void WritePrimitive(CborPrimitive primitive)
         {
             WriteHeader(CborMajorType.Primitive, (byte)primitive);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void WriteHeader(CborMajorType majorType, byte additionalValue)
         {
             byte header = (byte)(((byte)majorType) << 5 | (additionalValue & 0x1f));
             WriteRawByte(header);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void WriteRawByte(byte b)
         {
             Span<byte> buffer = _bufferWriter.GetSpan(1);

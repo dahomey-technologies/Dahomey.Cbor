@@ -1,7 +1,4 @@
 ﻿using Dahomey.Cbor.ObjectModel;
-using Dahomey.Cbor.Serialization;
-using Dahomey.Cbor.Serialization.Converters;
-using Dahomey.Cbor.Util;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
@@ -187,7 +184,7 @@ namespace Dahomey.Cbor.Tests
         {
             DateTime dateTime = DateTime.ParseExact(value,
                 "yyyy-MM-dd'T'HH:mm:ss.FFFK", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-            Helper.TestWrite(dateTime, hexBuffer, null, new CborSerializationSettings { DateTimeFormat = dateTimeFormat });
+            Helper.TestWrite(dateTime, hexBuffer, null, new CborOptions { DateTimeFormat = dateTimeFormat });
         }
 
         [DataTestMethod]
@@ -201,7 +198,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("04", (EnumTest)4, null, ValueFormat.WriteToString)]
         public void WriteEnum(string hexBuffer, EnumTest value, Type expectedExceptionType, ValueFormat enumFormat)
         {
-            Helper.TestWrite(value, hexBuffer, expectedExceptionType, new CborSerializationSettings { EnumFormat = enumFormat });
+            Helper.TestWrite(value, hexBuffer, expectedExceptionType, new CborOptions { EnumFormat = enumFormat });
         }
 
         [DataTestMethod]
@@ -250,7 +247,7 @@ namespace Dahomey.Cbor.Tests
             };
 
             const string hexBuffer = "AE67426F6F6C65616EF56553427974650D64427974650C65496E7431360E6655496E7431360F65496E743332106655496E7433321165496E743634126655496E7436341366537472696E6766737472696E676653696E676C65FA41A1AE1466446F75626C65FB40363AE147AE147B684461746554696D6574323031342D30322D32315431393A30303A30305A64456E756D6656616C756531";
-            Helper.TestWrite(obj, hexBuffer, null, new CborSerializationSettings { EnumFormat = ValueFormat.WriteToString });
+            Helper.TestWrite(obj, hexBuffer, null, new CborOptions { EnumFormat = ValueFormat.WriteToString });
         }
 
         [TestMethod]
@@ -275,7 +272,7 @@ namespace Dahomey.Cbor.Tests
             };
 
             const string hexBuffer = "AE67426F6F6C65616EF56553427974650D64427974650C65496E7431360E6655496E7431360F65496E743332106655496E7433321165496E743634126655496E7436341366537472696E6766737472696E676653696E676C65FA41A1AE1466446F75626C65FB40363AE147AE147B684461746554696D6574323031342D30322D32315431393A30303A30305A64456E756D6656616C756531";
-            Helper.TestWrite(obj, hexBuffer, null, new CborSerializationSettings { EnumFormat = ValueFormat.WriteToString });
+            Helper.TestWrite(obj, hexBuffer, null, new CborOptions { EnumFormat = ValueFormat.WriteToString });
         }
 
         [TestMethod]
@@ -385,7 +382,7 @@ namespace Dahomey.Cbor.Tests
             };
 
             Helper.TestWrite(obj, hexBuffer, null, 
-                new CborSerializationSettings { EnumFormat = ValueFormat.WriteToString });
+                new CborOptions { EnumFormat = ValueFormat.WriteToString });
         }
 
         [TestMethod]

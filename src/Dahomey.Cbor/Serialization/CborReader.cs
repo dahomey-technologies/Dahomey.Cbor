@@ -1,8 +1,7 @@
-﻿using Dahomey.Cbor.Serialization.Converters;
-using Dahomey.Cbor.Util;
+﻿using Dahomey.Cbor.Util;
 using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -23,9 +22,16 @@ namespace Dahomey.Cbor.Serialization
         Break
     }
 
-    public interface ICborMapReader<T, TC>
+    public interface ICborMapReader<TC>
     {
-        void ReadMapEntry(ref CborReader reader, ref T obj, ref TC context);
+        void ReadBeginMap(int size, ref TC context);
+        void ReadMapItem(ref CborReader reader, ref TC context);
+    }
+
+    public interface ICborArrayReader<TC>
+    {
+        void ReadBeginArray(int size, ref TC context);
+        void ReadArrayItem(ref CborReader reader, ref TC context);
     }
 
     public ref struct CborReader
@@ -58,17 +64,18 @@ namespace Dahomey.Cbor.Serialization
         private State _state;
         private Header _header;
 
-        public CborSerializationSettings Settings { get; }
+        public CborOptions Options { get; }
 
-        public CborReader(ReadOnlySpan<byte> buffer, CborSerializationSettings settings = null)
+        public CborReader(ReadOnlySpan<byte> buffer, CborOptions options = null)
         {
             _buffer = buffer;
-            Settings = settings ?? CborSerializationSettings.Default;
+            Options = options ?? CborOptions.Default;
             _currentPos = 0;
             _state = State.Start;
             _header = new Header();
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public CborDataItemType GetCurrentDataItemType()
         {
             Header header = GetHeader();
@@ -127,21 +134,25 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReadBeginArray()
         {
             Expect(CborMajorType.Array);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReadBeginMap()
         {
             Expect(CborMajorType.Map);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool ReadNull()
         {
             return Accept(CborPrimitive.Null);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool ReadBoolean()
         {
             if (Accept(CborPrimitive.True))
@@ -153,46 +164,55 @@ namespace Dahomey.Cbor.Serialization
             return false;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ulong ReadUInt64()
         {
             return ReadUnsigned(ulong.MaxValue);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long ReadInt64()
         {
             return ReadSigned(long.MaxValue);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint ReadUInt32()
         {
             return (uint)ReadUnsigned(uint.MaxValue);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadInt32()
         {
             return (int)ReadSigned(int.MaxValue);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ushort ReadUInt16()
         {
             return (ushort)ReadUnsigned(ushort.MaxValue);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public short ReadInt16()
         {
             return (short)ReadSigned(short.MaxValue);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public byte ReadByte()
         {
             return (byte)ReadUnsigned(byte.MaxValue);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public sbyte ReadSByte()
         {
             return (sbyte)ReadSigned(sbyte.MaxValue);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public string ReadString()
         {
             if (ReadNull())
@@ -204,6 +224,7 @@ namespace Dahomey.Cbor.Serialization
             return Encoding.UTF8.GetString(ReadSizeAndBytes());
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ReadOnlySpan<byte> ReadRawString()
         {
             if (ReadNull())
@@ -215,12 +236,14 @@ namespace Dahomey.Cbor.Serialization
             return ReadSizeAndBytes();
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ReadOnlySpan<byte> ReadByteString()
         {
             Expect(CborMajorType.ByteString);
             return ReadSizeAndBytes();
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public float ReadSingle()
         {
             Expect(CborMajorType.Primitive);
@@ -239,6 +262,7 @@ namespace Dahomey.Cbor.Serialization
             return (float)InternalReadDouble();
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public double ReadDouble()
         {
             Expect(CborMajorType.Primitive);
@@ -257,73 +281,51 @@ namespace Dahomey.Cbor.Serialization
             return InternalReadSingle();
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadSize()
         {
             if (GetHeader().AdditionalValue == INDEFINITE_LENGTH)
             {
+                _state = State.Data;
                 return -1;
             }
 
             return (int)ReadInteger(int.MaxValue);
         }
 
-        public T ReadMap<T, TC>(ICborMapReader<T, TC> mapReader, ref TC context) where T : new()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ReadMap<TC>(ICborMapReader<TC> mapReader, ref TC context)
         {
-            if (GetCurrentDataItemType() == CborDataItemType.Null)
-            {
-                ReadNull();
-                return default;
-            }
-
             ReadBeginMap();
 
             int size = ReadSize();
 
-            if (size == 0 || GetCurrentDataItemType() == CborDataItemType.Break)
+            mapReader.ReadBeginMap(size, ref context);
+
+            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
             {
-                return new T();
-            }
-
-            T obj = default;
-
-            while (size > 0 || size == -1 && (GetCurrentDataItemType() != CborDataItemType.Break))
-            {
-                mapReader.ReadMapEntry(ref this, ref obj, ref context);
-
+                mapReader.ReadMapItem(ref this, ref context);
                 size--;
             }
-
-            return obj;
         }
 
-        public TC ReadArray<TC, TI>(ICborValueReader<TI> itemReader)
-            where TC : class, ICollection<TI>, new()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ReadArray<TC>(ICborArrayReader<TC> arrayReader, ref TC context)
         {
-            if (ReadNull())
-            {
-                return null;
-            }
-
             ReadBeginArray();
 
             int size = ReadSize();
-            TC collection = new TC();
 
-            if (collection is List<TI> list)
-            {
-                list.Capacity = size;
-            }
+            arrayReader.ReadBeginArray(size, ref context);
 
-            while (size > 0 || size == -1 && (GetCurrentDataItemType() != CborDataItemType.Break))
+            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
             {
-                TI item = itemReader.Read(ref this);
-                collection.Add(item);
+                arrayReader.ReadArrayItem(ref this, ref context);
                 size--;
             }
-
-            return collection;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ulong ReadUnsigned(ulong maxValue)
         {
             Header header = GetHeader();
@@ -338,6 +340,7 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private long ReadSigned(long maxValue)
         {
             Header header = GetHeader();
@@ -355,6 +358,7 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ulong ReadInteger(ulong maxValue = ulong.MaxValue)
         {
             Header header = GetHeader();
@@ -403,6 +407,7 @@ namespace Dahomey.Cbor.Serialization
             return value;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private double InternalReadHalfFloat()
         {
             ReadOnlySpan<byte> bytes = ReadBytes(2);
@@ -426,6 +431,7 @@ namespace Dahomey.Cbor.Serialization
             return (half & 0x8000) != 0 ? -val : val;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float InternalReadSingle()
         {
             ReadOnlySpan<byte> bytes = ReadBytes(4);
@@ -444,6 +450,7 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private double InternalReadDouble()
         {
             ReadOnlySpan<byte> bytes = ReadBytes(8);
@@ -462,12 +469,20 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ReadOnlySpan<byte> ReadSizeAndBytes()
         {
             int size = ReadSize();
+
+            if (size == -1)
+            {
+                throw new NotSupportedException();
+            }
+
             return ReadBytes(size);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Header GetHeader()
         {
             if (_state == State.Header)
@@ -491,6 +506,7 @@ namespace Dahomey.Cbor.Serialization
             return _header;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ReadOnlySpan<byte> ReadBytes(int length)
         {
             ExpectLength(length);
@@ -499,6 +515,7 @@ namespace Dahomey.Cbor.Serialization
             return slice;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private CborMajorType GetCurrentMajorType()
         {
             ExpectLength(1);
@@ -513,6 +530,7 @@ namespace Dahomey.Cbor.Serialization
             return majorType;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void SkipSemanticTag()
         {
             if (Accept(CborMajorType.SemanticTag))
@@ -521,6 +539,7 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SkipDataItem()
         {
             Header header = GetHeader();
@@ -577,22 +596,24 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void SkipArray()
         {
             int size = ReadSize();
 
-            while (size > 0 || size == -1 && (GetCurrentDataItemType() != CborDataItemType.Break))
+            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
             {
                 SkipDataItem();
                 size--;
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void SkipMap()
         {
             int size = ReadSize();
 
-            while (size > 0 || size == -1 && (GetCurrentDataItemType() != CborDataItemType.Break))
+            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
             {
                 SkipDataItem();
                 SkipDataItem();
@@ -600,6 +621,7 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool Accept(CborPrimitive primitive)
         {
             if (Accept(CborMajorType.Primitive) && _header.Primitive == primitive)
@@ -611,6 +633,7 @@ namespace Dahomey.Cbor.Serialization
             return false;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Expect(CborPrimitive primitive)
         {
             if (!Accept(primitive))
@@ -619,11 +642,13 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool Accept(CborMajorType majorType)
         {
             return GetHeader().MajorType == majorType;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Expect(CborMajorType majorType)
         {
             if (!Accept(majorType))
@@ -632,6 +657,7 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ExpectLength(int length)
         {
             if (_buffer.Length < length)
@@ -640,6 +666,7 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Advance(int length = 1)
         {
             if (_state == State.Header)
@@ -650,6 +677,7 @@ namespace Dahomey.Cbor.Serialization
             _currentPos += length;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public CborException BuildException(string message)
         {
             return new CborException($"[{_currentPos}] {message}");

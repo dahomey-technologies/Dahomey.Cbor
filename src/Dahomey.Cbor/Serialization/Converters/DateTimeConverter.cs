@@ -147,7 +147,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void Write(ref CborWriter writer, DateTime value)
         {
-            switch (writer.Settings.DateTimeFormat)
+            switch (writer.Options.DateTimeFormat)
             {
                 case DateTimeFormat.ISO8601:
                     writer.WriteString(value.ToString("yyyy-MM-dd'T'HH:mm:ss.FFFK"));

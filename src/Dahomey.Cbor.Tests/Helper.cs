@@ -44,22 +44,24 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
-        public static string Write<T>(T value, CborSerializationSettings settings = null)
+        public static string Write<T>(T value, CborOptions options = null)
         {
-            ByteBufferWriter bufferWriter = new ByteBufferWriter();
-            CborWriter writer = new CborWriter(bufferWriter, settings);
-            ICborConverter<T> converter = CborConverter.Lookup<T>();
-            converter.Write(ref writer, value);
-            return BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", "");
+            using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
+            {
+                CborWriter writer = new CborWriter(bufferWriter, options);
+                ICborConverter<T> converter = CborConverter.Lookup<T>();
+                converter.Write(ref writer, value);
+                return BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", "");
+            }
         }
 
-        public static void TestWrite<T>(T value, string hexBuffer, Type expectedExceptionType = null, CborSerializationSettings settings = null)
+        public static void TestWrite<T>(T value, string hexBuffer, Type expectedExceptionType = null, CborOptions options = null)
         {
             if (expectedExceptionType != null)
             {
                 try
                 {
-                    Write(value, settings);
+                    Write(value, options);
                 }
                 catch (Exception ex)
                 {
@@ -68,7 +70,7 @@ namespace Dahomey.Cbor.Tests
             }
             else
             {
-                Assert.AreEqual(hexBuffer, Write(value, settings));
+                Assert.AreEqual(hexBuffer, Write(value, options));
             }
         }
     }

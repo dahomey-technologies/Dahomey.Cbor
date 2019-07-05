@@ -2,6 +2,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -28,29 +29,29 @@ namespace Dahomey.Cbor.Tests
             Enum = EnumTest.Value1
         };
 
-        private readonly static CborSerializationSettings Settings = new CborSerializationSettings
+        private readonly static CborOptions Options = new CborOptions
         {
             EnumFormat = ValueFormat.WriteToString
         };
 
         [TestMethod]
-        public void DeserializeFromMemoryStream()
+        public async Task DeserializeFromMemoryStream()
         {
             MemoryStream stream = new MemoryStream(SimpleObjectHexBuffer.HexToBytes());
-            SimpleObject obj = CborSerializer.Deserialize<SimpleObject>(stream);
+            SimpleObject obj = await Cbor.DeserializeAsync<SimpleObject>(stream);
             TestSimpleObject(obj);
         }
 
         [TestMethod]
-        public void SerializeToMemoryStream()
+        public async Task SerializeToMemoryStream()
         {
             MemoryStream stream = new MemoryStream();
-            CborSerializer.Serialize(SimpleObject, stream, Settings);
+            await Cbor.SerializeAsync(SimpleObject, stream, Options);
             TestBuffer(stream.ToArray());
         }
 
         [TestMethod]
-        public void DeserializeFromFileStream()
+        public async Task DeserializeFromFileStream()
         {
             string tempFileName = Path.GetTempFileName();
             File.WriteAllBytes(tempFileName, SimpleObjectHexBuffer.HexToBytes());
@@ -59,7 +60,7 @@ namespace Dahomey.Cbor.Tests
             {
                 using (FileStream stream = File.OpenRead(tempFileName))
                 {
-                    SimpleObject obj = CborSerializer.Deserialize<SimpleObject>(stream);
+                    SimpleObject obj = await Cbor.DeserializeAsync<SimpleObject>(stream);
                     TestSimpleObject(obj);
                 }
             }
@@ -70,7 +71,7 @@ namespace Dahomey.Cbor.Tests
         }
 
         [TestMethod]
-        public void SerializeToFileStream()
+        public async Task SerializeToFileStream()
         {
             string tempFileName = Path.GetTempFileName();
 
@@ -78,7 +79,7 @@ namespace Dahomey.Cbor.Tests
             {
                 using (FileStream stream = File.OpenWrite(tempFileName))
                 {
-                    CborSerializer.Serialize(SimpleObject, stream, Settings);
+                    await Cbor.SerializeAsync(SimpleObject, stream, Options);
                 }
 
                 byte[] actualBuffer = File.ReadAllBytes(tempFileName);
@@ -94,16 +95,18 @@ namespace Dahomey.Cbor.Tests
         public void DeserializeFromSpan()
         {
             Span<byte> buffer = SimpleObjectHexBuffer.HexToBytes();
-            SimpleObject obj = CborSerializer.Deserialize<SimpleObject>(buffer);
+            SimpleObject obj = Cbor.Deserialize<SimpleObject>(buffer);
             TestSimpleObject(obj);
         }
 
         [TestMethod]
         public void SerializerToBufferWriter()
         {
-            ByteBufferWriter bufferWriter = new ByteBufferWriter();
-            CborSerializer.Serialize(SimpleObject, bufferWriter, Settings);
-            TestBuffer(bufferWriter.WrittenSpan.ToArray());
+            using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
+            {
+                Cbor.Serialize(SimpleObject, bufferWriter, Options);
+                TestBuffer(bufferWriter.WrittenSpan.ToArray());
+            }
         }
 
         private void TestBuffer(byte[] actualBuffer)

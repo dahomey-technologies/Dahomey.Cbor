@@ -1,9 +1,6 @@
 using Dahomey.Cbor.ObjectModel;
-using Dahomey.Cbor.Serialization;
-using Dahomey.Cbor.Serialization.Converters;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -173,6 +170,7 @@ namespace Dahomey.Cbor.Tests
 
         [DataTestMethod]
         [DataRow("63666F6F", "foo", null)]
+        [DataRow("7F6166616F616FFF", "foo", typeof(NotSupportedException))]
         [DataRow("F6", null, null)]
         [DataRow("60", "", null)]
         public void ReadString(string hexBuffer, string expectedValue, Type expectedExceptionType)
@@ -207,10 +205,22 @@ namespace Dahomey.Cbor.Tests
 
         [DataTestMethod]
         [DataRow("8401020304", "1,2,3,4", null)]
+        [DataRow("9F01020304FF", "1,2,3,4", null)]
         public void ReadInt32List(string hexBuffer, string expectedValue, Type expectedExceptionType)
         {
             List<int> expectedList = expectedValue.Split(',').Select(int.Parse).ToList();
             Helper.TestRead(hexBuffer, expectedList, expectedExceptionType);
+        }
+
+        [DataTestMethod]
+        [DataRow("A201010202", "1:1,2:2", null)]
+        [DataRow("BF01010202FF", "1:1,2:2", null)]
+        public void ReadInt32Dictionary(string hexBuffer, string expectedValue, Type expectedExceptionType)
+        {
+            Dictionary<int, int> expectedDict = expectedValue
+                .Split(',').Select(s => s.Split(':').Select(int.Parse).ToArray())
+                .ToDictionary(i => i[0], i => i[1]);
+            Helper.TestRead(hexBuffer, expectedDict, expectedExceptionType);
         }
 
         [DataTestMethod]

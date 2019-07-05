@@ -12,8 +12,12 @@ namespace Dahomey.Cbor.ObjectModel
         public List<CborValue> Values { get; private set; }
 
         public int Count => Values.Count;
-
         public bool IsReadOnly => ((ICollection<CborValue>)Values).IsReadOnly;
+        public int Capacity
+        {
+            get => Values.Capacity;
+            set => Values.Capacity = value;
+        }
 
         public CborArray()
         {

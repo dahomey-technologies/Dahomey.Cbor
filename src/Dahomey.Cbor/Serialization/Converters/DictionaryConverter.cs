@@ -1,31 +1,42 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class DictionaryConverter<TK, TV> : 
-        ICborConverter<Dictionary<TK, TV>>, 
-        ICborMapReader<Dictionary<TK, TV>, object>,
-        ICborMapWriter<DictionaryConverter<TK, TV>.MapWriterContext>
+    public class DictionaryConverter<TC, TK, TV> : 
+        ICborConverter<TC>, 
+        ICborMapReader<DictionaryConverter<TC, TK, TV>.ReaderContext>,
+        ICborMapWriter<DictionaryConverter<TC, TK, TV>.WriterContext>
+        where TC : class, IDictionary<TK, TV>, new()
     {
-        public struct MapWriterContext
+        public struct ReaderContext
         {
-            public IDictionary<TK, TV> dict;
+            public TC dict;
+        }
+
+        public struct WriterContext
+        {
+            public TC dict;
             public IEnumerator<KeyValuePair<TK, TV>> enumerator;
         }
 
         private static readonly ICborConverter<TK> _keyConverter = CborConverter.Lookup<TK>();
         private static readonly ICborConverter<TV> _valueConverter = CborConverter.Lookup<TV>();
 
-        public Dictionary<TK, TV> Read(ref CborReader reader)
+        public TC Read(ref CborReader reader)
         {
-            object context = null;
-            return reader.ReadMap(this, ref context);
+            if (reader.ReadNull())
+            {
+                return null;
+            }
+
+            ReaderContext context = new ReaderContext();
+            reader.ReadMap(this, ref context);
+            return context.dict;
         }
 
-        public void Write(ref CborWriter writer, Dictionary<TK, TV> value)
+        public void Write(ref CborWriter writer, TC value)
         {
-            MapWriterContext context = new MapWriterContext
+            WriterContext context = new WriterContext
             {
                 dict = value,
                 enumerator = value.GetEnumerator()
@@ -33,34 +44,31 @@ namespace Dahomey.Cbor.Serialization.Converters
             writer.WriteMap(this, ref context);
         }
 
-        void ICborMapReader<Dictionary<TK, TV>, object>.ReadMapEntry(ref CborReader reader, ref Dictionary<TK, TV> obj, ref object context)
+        public void ReadBeginMap(int size, ref ReaderContext context)
         {
-            if (obj == null)
-            {
-                obj = new Dictionary<TK, TV>();
-            }
+            context.dict = new TC();
+        }
 
+        public void ReadMapItem(ref CborReader reader, ref ReaderContext context)
+        {
             TK key = _keyConverter.Read(ref reader);
             TV value = _valueConverter.Read(ref reader);
 
-            obj.Add(key, value);
+            context.dict.Add(key, value);
         }
 
-        public int GetSize(ref MapWriterContext context)
+        public int GetMapSize(ref WriterContext context)
         {
             return context.dict.Count;
         }
 
-        public bool WriteMapEntry(ref CborWriter writer, ref MapWriterContext context)
+        public void WriteMapItem(ref CborWriter writer, ref WriterContext context)
         {
-            if (!context.enumerator.MoveNext())
+            if (context.enumerator.MoveNext())
             {
-                return false;
+                _keyConverter.Write(ref writer, context.enumerator.Current.Key);
+                _valueConverter.Write(ref writer, context.enumerator.Current.Value);
             }
-
-            _keyConverter.Write(ref writer, context.enumerator.Current.Key);
-            _valueConverter.Write(ref writer, context.enumerator.Current.Value);
-            return true;
         }
     }
 }
