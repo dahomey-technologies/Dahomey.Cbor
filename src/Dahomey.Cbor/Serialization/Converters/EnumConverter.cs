@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class EnumConverter<T> : ICborConverter<T> where T : struct
+    public class EnumConverter<T> : CborConverterBase<T> where T : struct
     {
         private static readonly Func<int, int> intIdentity = x => x;
         private static readonly Func<int, T> intToEnum = (Func<int, T>)Delegate.CreateDelegate(typeof(Func<int, T>), null, intIdentity.Method);
@@ -32,7 +32,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public T Read(ref CborReader reader)
+        public override T Read(ref CborReader reader)
         {
             if (reader.GetCurrentDataItemType() == CborDataItemType.Unsigned)
             {
@@ -58,7 +58,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             return intToEnum((int)reader.ReadInt64());
         }
 
-        public void Write(ref CborWriter writer, T value)
+        public override void Write(ref CborWriter writer, T value)
         {
             if (writer.Options.EnumFormat == ValueFormat.WriteToString)
             {

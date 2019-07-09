@@ -2,8 +2,8 @@
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class CborValueConverter : 
-        ICborConverter<CborValue>,
+    public class CborValueConverter :
+        CborConverterBase<CborValue>,
         ICborMapReader<CborValueConverter.MapReaderContext>,
         ICborMapWriter<CborValueConverter.MapWriterContext>,
         ICborArrayReader<CborValueConverter.ArrayReaderContext>,
@@ -31,7 +31,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             public int index;
         }
 
-        public CborValue Read(ref CborReader reader)
+        public override CborValue Read(ref CborReader reader)
         {
             switch (reader.GetCurrentDataItemType())
             {
@@ -82,7 +82,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public void Write(ref CborWriter writer, CborValue value)
+        public override void Write(ref CborWriter writer, CborValue value)
         {
             switch (value.Type)
             {

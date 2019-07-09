@@ -1,13 +1,13 @@
 ﻿namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class StringConverter : ICborConverter<string>
+    public class StringConverter : CborConverterBase<string>
     {
-        public string Read(ref CborReader reader)
+        public override string Read(ref CborReader reader)
         {
             return reader.ReadString();
         }
 
-        public void Write(ref CborWriter writer, string value)
+        public override void Write(ref CborWriter writer, string value)
         {
             writer.WriteString(value);
         }

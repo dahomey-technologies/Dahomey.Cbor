@@ -1,13 +1,13 @@
 ﻿namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class BooleanConverter : ICborConverter<bool>
+    public class BooleanConverter : CborConverterBase<bool>
     {
-        public bool Read(ref CborReader reader)
+        public override bool Read(ref CborReader reader)
         {
             return reader.ReadBoolean();
         }
 
-        public void Write(ref CborWriter writer, bool value)
+        public override void Write(ref CborWriter writer, bool value)
         {
             writer.WriteBoolean(value);
         }
