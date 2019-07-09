@@ -3,13 +3,8 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>7.3</LangVersion>
-    <PackageReleaseNotes>* Refactored ReadArray, ReadMap, WriteArray and WriteMap
-* Added AggressiveInlining on CborReader and CborWriter
-* Renamed CborSerializer to Cbor
-* Renamed CborSerializationSettings to CborOptions
-* Optimized ByteBufferWriter allocations
-* Optimized serialization to Stream
-* Changed serialization/deserialization to/from Stream to async methods</PackageReleaseNotes>
+    <Version>1.0.3</Version>
+    <PackageReleaseNotes>cf. https://github.com/dahomey-technologies/Dahomey.Cbor/releases/tag/$(Version)</PackageReleaseNotes>
     <Authors>Michaël Catanzariti</Authors>
     <Company>Dahomey Technologies</Company>
     <Description>High-performance CBOR serialization framework for .Net</Description>
@@ -20,16 +15,12 @@
     <RepositoryType>Git</RepositoryType>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/29336625?s=200&amp;v=4</PackageIconUrl>
     <Copyright>Copyright © Dahomey Technologies 2019</Copyright>
-    <Version>1.0.2</Version>
-    <AssemblyVersion>1.0.2.0</AssemblyVersion>
-    <FileVersion>1.0.2.0</FileVersion>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <FileVersion>1.0.3.0</FileVersion>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+  <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 

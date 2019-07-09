@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp2.2</TargetFramework>
+    <Version>1.0.3</Version>
     <Authors>Michaël Catanzariti</Authors>
     <Description>ASP.NET Core MVC features that use Daohmye.Cbor. Includes input and output formatters for CBOR</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -11,6 +12,11 @@
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/29336625?s=200&amp;v=4</PackageIconUrl>
     <RepositoryUrl>https://github.com/dahomey-technologies/Dahomey.Cbor.git</RepositoryUrl>
     <PackageTags>aspnetcore;aspnetcoremvc;cbor</PackageTags>
+    <RepositoryType>Git</RepositoryType>
+    <PackageReleaseNotes>cf. https://github.com/dahomey-technologies/Dahomey.Cbor/releases/tag/$(Version)</PackageReleaseNotes>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <FileVersion>1.0.3.0</FileVersion>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,7 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Dahomey.Cbor\Dahomey.Cbor.csproj" />
+      <PackageReference Include="Dahomey.Cbor" Version="$(Version)" />
   </ItemGroup>
 
 </Project>
