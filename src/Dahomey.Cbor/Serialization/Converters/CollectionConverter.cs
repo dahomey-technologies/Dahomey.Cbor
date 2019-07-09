@@ -2,8 +2,8 @@
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class CollectionConverter<TC, TI> : 
-        ICborConverter<TC>,
+    public class CollectionConverter<TC, TI> :
+        CborConverterBase<TC>,
         ICborArrayReader<CollectionConverter<TC, TI>.ReaderContext>,
         ICborArrayWriter<CollectionConverter<TC, TI>.WriterContext>
         where TC : class, ICollection<TI>, new()
@@ -21,7 +21,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private static readonly ICborConverter<TI> _itemConverter = CborConverter.Lookup<TI>();
 
-        public TC Read(ref CborReader reader)
+        public override TC Read(ref CborReader reader)
         {
             if (reader.ReadNull())
             {
@@ -34,7 +34,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             return context.collection;
         }
 
-        public void Write(ref CborWriter writer, TC value)
+        public override void Write(ref CborWriter writer, TC value)
         {
             WriterContext context = new WriterContext
             {

@@ -2,8 +2,8 @@
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class DictionaryConverter<TC, TK, TV> : 
-        ICborConverter<TC>, 
+    public class DictionaryConverter<TC, TK, TV> :
+        CborConverterBase<TC>, 
         ICborMapReader<DictionaryConverter<TC, TK, TV>.ReaderContext>,
         ICborMapWriter<DictionaryConverter<TC, TK, TV>.WriterContext>
         where TC : class, IDictionary<TK, TV>, new()
@@ -22,7 +22,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private static readonly ICborConverter<TK> _keyConverter = CborConverter.Lookup<TK>();
         private static readonly ICborConverter<TV> _valueConverter = CborConverter.Lookup<TV>();
 
-        public TC Read(ref CborReader reader)
+        public override TC Read(ref CborReader reader)
         {
             if (reader.ReadNull())
             {
@@ -34,7 +34,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             return context.dict;
         }
 
-        public void Write(ref CborWriter writer, TC value)
+        public override void Write(ref CborWriter writer, TC value)
         {
             WriterContext context = new WriterContext
             {

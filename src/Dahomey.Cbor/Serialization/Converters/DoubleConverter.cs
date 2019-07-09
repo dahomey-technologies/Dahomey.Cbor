@@ -1,13 +1,13 @@
 ﻿namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class DoubleConverter : ICborConverter<double>
+    public class DoubleConverter : CborConverterBase<double>
     {
-        public double Read(ref CborReader reader)
+        public override double Read(ref CborReader reader)
         {
             return reader.ReadDouble();
         }
 
-        public void Write(ref CborWriter writer, double value)
+        public override void Write(ref CborWriter writer, double value)
         {
             writer.WriteDouble(value);
         }

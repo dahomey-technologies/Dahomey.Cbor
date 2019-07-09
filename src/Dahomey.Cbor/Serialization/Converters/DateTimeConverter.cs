@@ -4,9 +4,9 @@ using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class DateTimeConverter : ICborConverter<DateTime>
+    public class DateTimeConverter : CborConverterBase<DateTime>
     {
-        public DateTime Read(ref CborReader reader)
+        public override DateTime Read(ref CborReader reader)
         {
             switch(reader.GetCurrentDataItemType())
             {
@@ -145,7 +145,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             return true;
         }
 
-        public void Write(ref CborWriter writer, DateTime value)
+        public override void Write(ref CborWriter writer, DateTime value)
         {
             switch (writer.Options.DateTimeFormat)
             {

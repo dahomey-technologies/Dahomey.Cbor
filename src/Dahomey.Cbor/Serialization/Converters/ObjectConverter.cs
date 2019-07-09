@@ -25,7 +25,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     }
 
     public class ObjectConverter<T> :
-        ICborConverter<T>,
+        CborConverterBase<T>,
         IObjectConverter<T>,
         ICborMapReader<ObjectConverter<T>.MapReaderContext>,
         ICborMapWriter<ObjectConverter<T>.MapWriterContext>
@@ -123,7 +123,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             return new T();
         }
 
-        public T Read(ref CborReader reader)
+        public override T Read(ref CborReader reader)
         {
             if (reader.ReadNull())
             {
@@ -150,7 +150,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public void Write(ref CborWriter writer, T value)
+        public override void Write(ref CborWriter writer, T value)
         {
             if (value == null)
             {

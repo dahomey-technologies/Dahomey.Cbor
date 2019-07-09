@@ -1,13 +1,13 @@
 ﻿namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class SingleConverter : ICborConverter<float>
+    public class SingleConverter : CborConverterBase<float>
     {
-        public float Read(ref CborReader reader)
+        public override float Read(ref CborReader reader)
         {
             return reader.ReadSingle();
         }
 
-        public void Write(ref CborWriter writer, float value)
+        public override void Write(ref CborWriter writer, float value)
         {
             writer.WriteSingle(value);
         }
