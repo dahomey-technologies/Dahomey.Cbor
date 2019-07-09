@@ -1,5 +1,4 @@
-﻿using Dahomey.Cbor.AspNetCore;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -11,7 +10,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace Dahomey.Cbor.Tests
+namespace Dahomey.Cbor.AspNetCore.Tests
 {
     [TestClass]
     public class CborInputFormatterTests

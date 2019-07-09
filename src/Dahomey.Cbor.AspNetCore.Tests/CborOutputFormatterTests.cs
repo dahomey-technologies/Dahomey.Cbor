@@ -1,5 +1,4 @@
-﻿using Dahomey.Cbor.AspNetCore;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
@@ -9,7 +8,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace Dahomey.Cbor.Tests
+namespace Dahomey.Cbor.AspNetCore.Tests
 {
     [TestClass]
     public class CborOuputFormatterTests

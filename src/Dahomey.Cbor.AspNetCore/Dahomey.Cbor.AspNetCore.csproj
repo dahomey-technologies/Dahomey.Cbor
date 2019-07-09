@@ -4,7 +4,7 @@
     <TargetFramework>netcoreapp2.2</TargetFramework>
     <Version>1.0.3</Version>
     <Authors>Michaël Catanzariti</Authors>
-    <Description>ASP.NET Core MVC features that use Daohmye.Cbor. Includes input and output formatters for CBOR</Description>
+    <Description>ASP.NET Core MVC features that use Dahomey.Cbor. Includes input and output formatters for CBOR</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Company>Dahomey Technologies</Company>
     <Copyright>Copyright © Dahomey Technologies 2019</Copyright>
@@ -25,7 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-      <PackageReference Include="Dahomey.Cbor" Version="$(Version)" />
+      <PackageReference Include="Dahomey.Cbor" Version="1.0.3" />
   </ItemGroup>
 
 </Project>
