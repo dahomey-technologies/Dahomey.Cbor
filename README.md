@@ -18,12 +18,16 @@ https://www.nuget.org/packages/Dahomey.Cbor/
 
 `Install-Package Dahomey.Cbor`
 
+https://www.nuget.org/packages/Dahomey.Cbor.AspNetCore/
+
+`Install-Package Dahomey.Cbor.AspNetCore`
+
 ### Compilation from source
   1. `dotnet restore`
   2. `dotnet pack -c Release`
   
 ## Asp.Net Core 2.2 Support
-You can enable Dahomey.Cbor as a CBOR formatter in ASP.NET Core 2.2 by using the Nuget package Dahomey.Cbor.AspNetCore. To enable it, add the extension method ``AddDahomeyCbor()`` to the ``AddMvc()`` call in ``ConfigureServices``
+You can enable Dahomey.Cbor as a CBOR formatter in ASP.NET Core 2.2 by using the Nuget package [Dahomey.Cbor.AspNetCore](https://www.nuget.org/packages/Dahomey.Cbor.AspNetCore/). To enable it, add the extension method ``AddDahomeyCbor()`` to the ``AddMvc()`` call in ``ConfigureServices``
 
 ```csharp
 // This method gets called by the runtime. Use this method to add services to the container.
