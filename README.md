@@ -53,7 +53,7 @@ Any C# class can be serialized to CBOR buffer Stream:
 ```csharp
 CustomObject customObject = new CustomObject
 {
-...
+  ...
 };
 
 await Cbor.SerializeAsync(customObject, stream);
