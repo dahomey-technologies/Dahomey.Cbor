@@ -34,6 +34,11 @@ namespace Dahomey.Cbor.ObjectModel
             Values = new List<CborValue>(values.Select(v => v ?? CborValue.Null));
         }
 
+        public static implicit operator CborArray(CborValue[] values)
+        {
+            return new CborArray(values);
+        }
+
         public CborValue this[int index]
         {
             get { return Values[index]; }
@@ -55,7 +60,7 @@ namespace Dahomey.Cbor.ObjectModel
 
                 separator = true;
 
-                sb.Append(value);
+                sb.Append(value ?? Null);
             }
 
             sb.Append("]");
@@ -65,7 +70,7 @@ namespace Dahomey.Cbor.ObjectModel
 
         public void Add(CborValue item)
         {
-            Values.Add(item);
+            Values.Add(item ?? Null);
         }
 
         public void Clear()
@@ -75,7 +80,7 @@ namespace Dahomey.Cbor.ObjectModel
 
         public bool Contains(CborValue item)
         {
-            return Values.Contains(item);
+            return Values.Contains(item ?? Null);
         }
 
         public void CopyTo(CborValue[] array, int arrayIndex)

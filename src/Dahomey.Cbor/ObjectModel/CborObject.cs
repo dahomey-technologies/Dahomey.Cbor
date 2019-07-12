@@ -25,6 +25,11 @@ namespace Dahomey.Cbor.ObjectModel
             Pairs = pairs.Select(kvp => new CborPair(kvp.Key, kvp.Value)).ToList();
         }
 
+        public static implicit operator CborObject(Dictionary<string, CborValue> pairs)
+        {
+            return new CborObject(pairs);
+        }
+
         public CborValue this[string name]
         {
             get { return Pairs.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault(); }

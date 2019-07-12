@@ -98,7 +98,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("8401020304", "1,2,3,4", null)]
         public void WriteInt32List(string hexBuffer, string value, Type expectedExceptionType)
         {
-            CborValue array = new CborArray(value.Split(',').Select(s => (CborValue)int.Parse(s)));
+            CborArray array = new CborArray(value.Split(',').Select(s => (CborValue)int.Parse(s)));
             Helper.TestWrite(array, hexBuffer, expectedExceptionType);
         }
 
@@ -106,7 +106,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("84626161626262626363626464", "aa,bb,cc,dd", null)]
         public void WriteStringList(string hexBuffer, string value, Type expectedExceptionType)
         {
-            CborValue array = new CborArray(value.Split(',').Select(s => (CborValue)s));
+            CborArray array = new CborArray(value.Split(',').Select(s => (CborValue)s));
             Helper.TestWrite(array, hexBuffer, expectedExceptionType);
         }
 
@@ -115,7 +115,7 @@ namespace Dahomey.Cbor.Tests
         {
             const string hexBuffer =
                 "A666737472696E6763666F6F666E756D626572FB40283D70A3D70A3D64626F6F6CF5646E756C6CF6656172726179820102666F626A656374A162696401";
-            CborValue obj = new Dictionary<string, CborValue>
+            CborObject obj = new Dictionary<string, CborValue>
             {
                 {"string", "foo"},
                 {"number", 12.12},
@@ -131,7 +131,7 @@ namespace Dahomey.Cbor.Tests
         public void WriteArray()
         {
             string hexBuffer = "8663666F6FFB40283D70A3D70A3DF5F6820102A162696401";
-            CborValue array = new CborValue[]
+            CborArray array = new CborValue[]
             {
                 "foo",
                 12.12,

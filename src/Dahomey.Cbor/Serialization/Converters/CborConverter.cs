@@ -36,7 +36,6 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
     }
 
-
     public static class CborConverter
     {
         private static readonly ConcurrentDictionary<Type, ICborConverter> converters = new ConcurrentDictionary<Type, ICborConverter>();
@@ -125,7 +124,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 return (ICborConverter)Activator.CreateInstance(typeof(EnumConverter<>).MakeGenericType(type));
             }
-            if (type == typeof(CborValue))
+            if (typeof(CborValue).IsAssignableFrom(type))
             {
                 return new CborValueConverter();
             }

@@ -97,7 +97,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("8401020304", "1,2,3,4", null)]
         public void ReadInt32List(string hexBuffer, string expectedValue, Type expectedExceptionType)
         {
-            CborValue array = new CborArray(expectedValue.Split(',').Select(s => (CborValue)int.Parse(s)));
+            CborArray array = new CborArray(expectedValue.Split(',').Select(s => (CborValue)int.Parse(s)));
             Helper.TestRead(hexBuffer, array, expectedExceptionType);
         }
 
@@ -105,7 +105,7 @@ namespace Dahomey.Cbor.Tests
         [DataRow("84626161626262626363626464", "aa,bb,cc,dd", null)]
         public void ReadStringList(string hexBuffer, string expectedValue, Type expectedExceptionType)
         {
-            CborValue array = new CborArray(expectedValue.Split(',').Select(s => (CborValue)s));
+            CborArray array = new CborArray(expectedValue.Split(',').Select(s => (CborValue)s));
             Helper.TestRead(hexBuffer, array, expectedExceptionType);
         }
 
@@ -114,13 +114,10 @@ namespace Dahomey.Cbor.Tests
         {
             const string hexBuffer =
                 "A666737472696E6763666F6F666E756D626572FB40283D70A3D70A3D64626F6F6CF5646E756C6CF6656172726179820102666F626A656374A162696401";
-            CborValue actual = Helper.Read<CborValue>(hexBuffer);
-            Assert.IsNotNull(actual);
-            Assert.AreEqual(CborValueType.Object, actual.Type);
-            Assert.IsInstanceOfType(actual, typeof(CborObject));
+            CborObject actualObject = Helper.Read<CborObject>(hexBuffer);
+            Assert.IsNotNull(actualObject);
 
             // pairs
-            CborObject actualObject = (CborObject)actual;
             Assert.AreEqual(6, actualObject.Pairs.Count);
 
             // string
@@ -180,13 +177,10 @@ namespace Dahomey.Cbor.Tests
         public void ReadArray()
         {
             string hexBuffer = "8663666F6FFB40283D70A3D70A3DF5F6820102A162696401";
-            CborValue actual = Helper.Read<CborValue>(hexBuffer);
-            Assert.IsNotNull(actual);
-            Assert.AreEqual(CborValueType.Array, actual.Type);
-            Assert.IsInstanceOfType(actual, typeof(CborArray));
+            CborArray actualArray = Helper.Read<CborArray>(hexBuffer);
+            Assert.IsNotNull(actualArray);
 
             // values
-            CborArray actualArray = (CborArray)actual;
             Assert.AreEqual(6, actualArray.Values.Count);
 
             // string
