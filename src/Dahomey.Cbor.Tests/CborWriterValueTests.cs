@@ -115,14 +115,14 @@ namespace Dahomey.Cbor.Tests
         {
             const string hexBuffer =
                 "A666737472696E6763666F6F666E756D626572FB40283D70A3D70A3D64626F6F6CF5646E756C6CF6656172726179820102666F626A656374A162696401";
-            CborObject obj = new Dictionary<string, CborValue>
+            CborObject obj = new CborObject
             {
-                {"string", "foo"},
-                {"number", 12.12},
-                {"bool", true},
-                {"null", null},
-                {"array", new CborValue[] {1, 2}},
-                {"object", new CborPair("id", 1)},
+                ["string"] = "foo",
+                ["number"] = 12.12,
+                ["bool"] = true,
+                ["null"] = null,
+                ["array"] = new CborArray {1, 2},
+                ["object"] = new CborObject { [ "id" ] = 1 },
             };
             Helper.TestWrite(obj, hexBuffer);
         }
@@ -131,14 +131,14 @@ namespace Dahomey.Cbor.Tests
         public void WriteArray()
         {
             string hexBuffer = "8663666F6FFB40283D70A3D70A3DF5F6820102A162696401";
-            CborArray array = new CborValue[]
+            CborArray array = new CborArray
             {
                 "foo",
                 12.12,
                 true,
                 null,
-                new CborValue[] {1, 2},
-                new CborPair("id", 1)
+                new CborArray {1, 2},
+                new CborObject { { "id", 1 } }
             };
             Helper.TestWrite(array, hexBuffer);
         }

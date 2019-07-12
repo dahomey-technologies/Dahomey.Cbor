@@ -1,4 +1,7 @@
-﻿using System;
+﻿using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Serialization.Converters;
+using Dahomey.Cbor.Util;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,19 +12,19 @@ namespace Dahomey.Cbor.ObjectModel
     public class CborArray : CborValue, ICollection<CborValue>, IComparable<CborArray>, IEquatable<CborArray>
     {
         public override CborValueType Type { get { return CborValueType.Array; } }
-        public List<CborValue> Values { get; private set; }
+        private readonly List<CborValue> _values;
 
-        public int Count => Values.Count;
-        public bool IsReadOnly => ((ICollection<CborValue>)Values).IsReadOnly;
+        public int Count => _values.Count;
+        public bool IsReadOnly => false;
         public int Capacity
         {
-            get => Values.Capacity;
-            set => Values.Capacity = value;
+            get => _values.Capacity;
+            set => _values.Capacity = value;
         }
 
         public CborArray()
         {
-            Values = new List<CborValue>();
+            _values = new List<CborValue>();
         }
 
         public CborArray(params CborValue[] values)
@@ -31,7 +34,7 @@ namespace Dahomey.Cbor.ObjectModel
 
         public CborArray(IEnumerable<CborValue> values)
         {
-            Values = new List<CborValue>(values.Select(v => v ?? CborValue.Null));
+            _values = new List<CborValue>(values.Select(v => v ?? CborValue.Null));
         }
 
         public static implicit operator CborArray(CborValue[] values)
@@ -41,8 +44,8 @@ namespace Dahomey.Cbor.ObjectModel
 
         public CborValue this[int index]
         {
-            get { return Values[index]; }
-            set { Values[index] = value; }
+            get { return _values[index]; }
+            set { _values[index] = value; }
         }
 
         public override string ToString()
@@ -51,7 +54,7 @@ namespace Dahomey.Cbor.ObjectModel
 
             bool separator = false;
 
-            foreach (CborValue value in Values)
+            foreach (CborValue value in _values)
             {
                 if (separator)
                 {
@@ -70,37 +73,37 @@ namespace Dahomey.Cbor.ObjectModel
 
         public void Add(CborValue item)
         {
-            Values.Add(item ?? Null);
+            _values.Add(item ?? Null);
         }
 
         public void Clear()
         {
-            Values.Clear();
+            _values.Clear();
         }
 
         public bool Contains(CborValue item)
         {
-            return Values.Contains(item ?? Null);
+            return _values.Contains(item ?? Null);
         }
 
         public void CopyTo(CborValue[] array, int arrayIndex)
         {
-            Values.CopyTo(array, arrayIndex);
+            _values.CopyTo(array, arrayIndex);
         }
 
         public bool Remove(CborValue item)
         {
-            return Values.Remove(item);
+            return _values.Remove(item);
         }
 
         public IEnumerator<CborValue> GetEnumerator()
         {
-            return Values.GetEnumerator();
+            return _values.GetEnumerator();
         }
 
         IEnumerator IEnumerable.GetEnumerator()
         {
-            return Values.GetEnumerator();
+            return _values.GetEnumerator();
         }
 
         public override int CompareTo(CborValue other)
@@ -146,7 +149,7 @@ namespace Dahomey.Cbor.ObjectModel
 
         public bool Equals(CborArray other)
         {
-            return Values.SequenceEqual(other.Values);
+            return _values.SequenceEqual(other._values);
         }
 
         public override bool Equals(object obj)
@@ -164,12 +167,40 @@ namespace Dahomey.Cbor.ObjectModel
             int hash = 17;
             hash = 37 * hash + Type.GetHashCode();
 
-            foreach (CborValue value in Values)
+            foreach (CborValue value in _values)
             {
                 hash = 37 * hash + value.GetHashCode();
             }
 
             return hash;
+        }
+
+        public static CborArray FromCollection<T>(T collection) where T : ICollection
+        {
+            using (ByteBufferWriter buffer = new ByteBufferWriter())
+            {
+                ICborConverter listConverter = CborConverter.Lookup<T>();
+                CborWriter writer = new CborWriter(buffer);
+                listConverter.Write(ref writer, collection);
+
+                ICborConverter<CborArray> cborArrayConverter = CborConverter.Lookup<CborArray>();
+                CborReader reader = new CborReader(buffer.WrittenSpan);
+                return cborArrayConverter.Read(ref reader);
+            }
+        }
+
+        public T ToCollection<T>() where T : ICollection
+        {
+            using (ByteBufferWriter buffer = new ByteBufferWriter())
+            {
+                ICborConverter<CborArray> cborArrayConverter = CborConverter.Lookup<CborArray>();
+                CborWriter writer = new CborWriter(buffer);
+                cborArrayConverter.Write(ref writer, this);
+
+                ICborConverter<T> objectConverter = CborConverter.Lookup<T>();
+                CborReader reader = new CborReader(buffer.WrittenSpan);
+                return objectConverter.Read(ref reader);
+            }
         }
     }
 }

@@ -118,59 +118,48 @@ namespace Dahomey.Cbor.Tests
             Assert.IsNotNull(actualObject);
 
             // pairs
-            Assert.AreEqual(6, actualObject.Pairs.Count);
+            Assert.AreEqual(6, actualObject.Count);
 
             // string
-            CborPair actualStringPair = actualObject.Pairs[0];
-            Assert.IsNotNull(actualStringPair);
-            Assert.AreEqual("string", actualStringPair.Name);
-            Assert.AreEqual(CborValueType.String, actualStringPair.Value.Type);
-            Assert.IsInstanceOfType(actualStringPair.Value, typeof(CborString));
-            Assert.AreEqual("foo", actualStringPair.Value.Value<string>());
+            Assert.IsTrue(actualObject.TryGetValue("string", out CborValue value));
+            Assert.AreEqual(CborValueType.String, value.Type);
+            Assert.IsInstanceOfType(value, typeof(CborString));
+            Assert.AreEqual("foo", value.Value<string>());
 
             // number
-            CborPair actualNumberPair = actualObject.Pairs[1];
-            Assert.IsNotNull(actualNumberPair);
-            Assert.AreEqual("number", actualNumberPair.Name);
-            Assert.AreEqual(CborValueType.Double, actualNumberPair.Value.Type);
-            Assert.IsInstanceOfType(actualNumberPair.Value, typeof(CborDouble));
-            Assert.AreEqual(12.12, actualNumberPair.Value.Value<double>(), 3);
+            Assert.IsTrue(actualObject.TryGetValue("number", out value));
+            Assert.AreEqual(CborValueType.Double, value.Type);
+            Assert.IsInstanceOfType(value, typeof(CborDouble));
+            Assert.AreEqual(12.12, value.Value<double>(), 3);
 
             // bool
-            CborPair actualBoolPair = actualObject.Pairs[2];
-            Assert.IsNotNull(actualBoolPair);
-            Assert.AreEqual("bool", actualBoolPair.Name);
-            Assert.AreEqual(CborValueType.Boolean, actualBoolPair.Value.Type);
-            Assert.IsInstanceOfType(actualBoolPair.Value, typeof(CborBoolean));
-            Assert.IsTrue(actualBoolPair.Value.Value<bool>());
+            Assert.IsTrue(actualObject.TryGetValue("bool", out value));
+            Assert.AreEqual(CborValueType.Boolean, value.Type);
+            Assert.IsInstanceOfType(value, typeof(CborBoolean));
+            Assert.IsTrue(value.Value<bool>());
 
             // null
-            CborPair actualNullPair = actualObject.Pairs[3];
-            Assert.IsNotNull(actualNullPair);
-            Assert.AreEqual("null", actualNullPair.Name);
-            Assert.AreEqual(CborValueType.Null, actualNullPair.Value.Type);
-            Assert.IsInstanceOfType(actualNullPair.Value, typeof(CborNull));
+            Assert.IsTrue(actualObject.TryGetValue("null", out value));
+            Assert.AreEqual(CborValueType.Null, value.Type);
+            Assert.IsInstanceOfType(value, typeof(CborNull));
 
             // array
-            CborPair actualArrayPair = actualObject.Pairs[4];
-            Assert.IsNotNull(actualArrayPair);
-            Assert.AreEqual("array", actualArrayPair.Name);
-            Assert.AreEqual(CborValueType.Array, actualArrayPair.Value.Type);
-            Assert.IsInstanceOfType(actualArrayPair.Value, typeof(CborArray));
-            CborArray CborArray = (CborArray)actualArrayPair.Value;
-            Assert.AreEqual(2, CborArray.Values.Count);
-            Assert.AreEqual(1, CborArray.Values[0].Value<double>());
-            Assert.AreEqual(2, CborArray.Values[1].Value<double>());
+            Assert.IsTrue(actualObject.TryGetValue("array", out value));
+            Assert.AreEqual(CborValueType.Array, value.Type);
+            Assert.IsInstanceOfType(value, typeof(CborArray));
+            CborArray CborArray = (CborArray)value;
+            Assert.AreEqual(2, CborArray.Count);
+            Assert.AreEqual(1, CborArray[0].Value<double>());
+            Assert.AreEqual(2, CborArray[1].Value<double>());
 
             // object
-            CborPair actualObjectPair = actualObject.Pairs[5];
-            Assert.IsNotNull(actualObjectPair);
-            Assert.AreEqual("object", actualObjectPair.Name);
-            Assert.AreEqual(CborValueType.Object, actualObjectPair.Value.Type);
-            Assert.IsInstanceOfType(actualObjectPair.Value, typeof(CborObject));
-            CborObject CborObject = (CborObject)actualObjectPair.Value;
-            Assert.AreEqual("id", CborObject.Pairs[0].Name);
-            Assert.AreEqual(1, CborObject.Pairs[0].Value.Value<double>());
+            Assert.IsTrue(actualObject.TryGetValue("object", out value));
+            Assert.AreEqual(CborValueType.Object, value.Type);
+            Assert.IsInstanceOfType(value, typeof(CborObject));
+            CborObject cborObject = (CborObject)value;
+            Assert.IsTrue(cborObject.TryGetValue("id", out value));
+            Assert.AreEqual(CborValueType.Positive, value.Type);
+            Assert.AreEqual(1, value.Value<int>());
         }
 
         [TestMethod]
@@ -181,52 +170,53 @@ namespace Dahomey.Cbor.Tests
             Assert.IsNotNull(actualArray);
 
             // values
-            Assert.AreEqual(6, actualArray.Values.Count);
+            Assert.AreEqual(6, actualArray.Count);
 
             // string
-            CborValue actualString = actualArray.Values[0];
+            CborValue actualString = actualArray[0];
             Assert.IsNotNull(actualString);
             Assert.AreEqual(CborValueType.String, actualString.Type);
             Assert.IsInstanceOfType(actualString, typeof(CborString));
             Assert.AreEqual("foo", actualString.Value<string>());
 
             // number
-            CborValue actualNumber = actualArray.Values[1];
+            CborValue actualNumber = actualArray[1];
             Assert.IsNotNull(actualNumber);
             Assert.AreEqual(CborValueType.Double, actualNumber.Type);
             Assert.IsInstanceOfType(actualNumber, typeof(CborDouble));
             Assert.AreEqual(12.12, actualNumber.Value<double>(), 3);
 
             // bool
-            CborValue actualBool = actualArray.Values[2];
+            CborValue actualBool = actualArray[2];
             Assert.IsNotNull(actualBool);
             Assert.AreEqual(CborValueType.Boolean, actualBool.Type);
             Assert.IsInstanceOfType(actualBool, typeof(CborBoolean));
             Assert.IsTrue(actualBool.Value<bool>());
 
             // null
-            CborValue actualNull = actualArray.Values[3];
+            CborValue actualNull = actualArray[3];
             Assert.IsNotNull(actualNull);
             Assert.AreEqual(CborValueType.Null, actualNull.Type);
 
             // array
-            CborValue actualArrayValue = actualArray.Values[4];
+            CborValue actualArrayValue = actualArray[4];
             Assert.IsNotNull(actualArrayValue);
             Assert.AreEqual(CborValueType.Array, actualArrayValue.Type);
             Assert.IsInstanceOfType(actualArrayValue, typeof(CborArray));
             CborArray CborArray = (CborArray)actualArrayValue;
-            Assert.AreEqual(2, CborArray.Values.Count);
-            Assert.AreEqual(1, CborArray.Values[0].Value<double>());
-            Assert.AreEqual(2, CborArray.Values[1].Value<double>());
+            Assert.AreEqual(2, CborArray.Count);
+            Assert.AreEqual(1, CborArray[0].Value<double>());
+            Assert.AreEqual(2, CborArray[1].Value<double>());
 
             // object
-            CborValue actualObject = actualArray.Values[5];
+            CborValue actualObject = actualArray[5];
             Assert.IsNotNull(actualObject);
             Assert.AreEqual(CborValueType.Object, actualObject.Type);
             Assert.IsInstanceOfType(actualObject, typeof(CborObject));
-            CborObject CborObject = (CborObject)actualObject;
-            Assert.AreEqual("id", CborObject.Pairs[0].Name);
-            Assert.AreEqual(1, CborObject.Pairs[0].Value.Value<double>());
+            CborObject cborObject = (CborObject)actualObject;
+            Assert.IsTrue(cborObject.TryGetValue("id", out CborValue value));
+            Assert.AreEqual(CborValueType.Positive, value.Type);
+            Assert.AreEqual(1, value.Value<int>());
         }
     }
 }

@@ -1,28 +1,37 @@
-﻿using System;
+﻿using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Serialization.Converters;
+using Dahomey.Cbor.Util;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using CborPair = System.Collections.Generic.KeyValuePair<string, Dahomey.Cbor.ObjectModel.CborValue>;
 
 namespace Dahomey.Cbor.ObjectModel
 {
-    public class CborObject : CborValue, IComparable<CborObject>, IEquatable<CborObject>
+    public class CborObject : 
+        CborValue, 
+        IComparable<CborObject>, 
+        IEquatable<CborObject>,
+        IDictionary<string, CborValue>
     {
-        public override CborValueType Type { get { return CborValueType.Object; } }
-        public List<CborPair> Pairs { get; private set; }
+        private readonly Dictionary<string, CborValue> _pairs;
+
+        public override CborValueType Type => CborValueType.Object;
+        public ICollection<string> Keys => _pairs.Keys;
+        public ICollection<CborValue> Values => _pairs.Values;
+        public int Count => _pairs.Count;
+        public bool IsReadOnly => false;
 
         public CborObject()
         {
-            Pairs = new List<CborPair>();
+            _pairs = new Dictionary<string, CborValue>();
         }
 
-        public CborObject(params CborPair[] pairs)
+        public CborObject(IDictionary<string, CborValue> pairs)
         {
-            Pairs = new List<CborPair>(pairs);
-        }
-
-        public CborObject(Dictionary<string, CborValue> pairs)
-        {
-            Pairs = pairs.Select(kvp => new CborPair(kvp.Key, kvp.Value)).ToList();
+            _pairs = new Dictionary<string, CborValue>(pairs);
         }
 
         public static implicit operator CborObject(Dictionary<string, CborValue> pairs)
@@ -32,18 +41,8 @@ namespace Dahomey.Cbor.ObjectModel
 
         public CborValue this[string name]
         {
-            get { return Pairs.Where(p => p.Name == name).Select(p => p.Value).FirstOrDefault(); }
-            set
-            {
-                CborPair pair = Pairs.Find(p => p.Name == name);
-                if (pair == null)
-                {
-                    pair = new CborPair {Name = name};
-                    Pairs.Add(pair);
-                }
-
-                pair.Value = value;
-            }
+            get => _pairs[name];
+            set => _pairs[name] = value ?? Null;
         }
 
         public override string ToString()
@@ -52,7 +51,7 @@ namespace Dahomey.Cbor.ObjectModel
 
             bool separator = false;
 
-            foreach (CborPair pair in Pairs)
+            foreach (CborPair pair in _pairs)
             {
                 if (separator)
                 {
@@ -61,7 +60,7 @@ namespace Dahomey.Cbor.ObjectModel
 
                 separator = true;
 
-                sb.Append(pair);
+                sb.AppendFormat("\"{0}\":{1}", pair.Key, pair.Value);
             }
 
             sb.Append("}");
@@ -91,20 +90,22 @@ namespace Dahomey.Cbor.ObjectModel
                 return 1;
             }
 
-            using (var enumerator = Pairs.GetEnumerator())
-            using (var otherEnumerator = other.Pairs.GetEnumerator())
+            using (var enumerator = _pairs.GetEnumerator())
+            using (var otherEnumerator = other._pairs.GetEnumerator())
             {
                 while (true)
                 {
-                    var hasNext = enumerator.MoveNext();
-                    var otherHasNext = otherEnumerator.MoveNext();
+                    bool hasNext = enumerator.MoveNext();
+                    bool otherHasNext = otherEnumerator.MoveNext();
                     if (!hasNext && !otherHasNext) { return 0; }
                     if (!hasNext) { return -1; }
                     if (!otherHasNext) { return 1; }
 
-                    var value = enumerator.Current;
-                    var otherValue = otherEnumerator.Current;
-                    var result = value.CompareTo(otherValue);
+                    CborPair pair = enumerator.Current;
+                    CborPair otherPair = otherEnumerator.Current;
+                    int result = pair.Key.CompareTo(otherPair.Key);
+                    if (result != 0) { return result; }
+                    result = pair.Value.CompareTo(otherPair.Value);
                     if (result != 0) { return result; }
                 }
             }
@@ -112,7 +113,7 @@ namespace Dahomey.Cbor.ObjectModel
 
         public bool Equals(CborObject other)
         {
-            return other != null && Pairs.SequenceEqual(other.Pairs);
+            return other != null && _pairs.SequenceEqual(other._pairs);
         }
 
         public override bool Equals(object obj)
@@ -122,7 +123,7 @@ namespace Dahomey.Cbor.ObjectModel
                 return false;
             }
 
-            return Pairs.SequenceEqual(value.Pairs);
+            return Equals(value);
         }
 
         public override int GetHashCode()
@@ -130,12 +131,97 @@ namespace Dahomey.Cbor.ObjectModel
             int hash = 17;
             hash = 37 * hash + Type.GetHashCode();
 
-            foreach(CborPair pair in Pairs)
+            foreach(CborPair pair in _pairs)
             {
-                hash = 37 * hash + pair.GetHashCode();
+                hash = 37 * hash + pair.Key.GetHashCode();
+                hash = 37 * hash + pair.Value.GetHashCode();
             }
 
             return hash;
+        }
+
+        public void Add(string key, CborValue value)
+        {
+            _pairs.Add(key, value ?? Null);
+        }
+
+        public bool ContainsKey(string key)
+        {
+            return _pairs.ContainsKey(key);
+        }
+
+        public bool Remove(string key)
+        {
+            return _pairs.Remove(key);
+        }
+
+        public bool TryGetValue(string key, out CborValue value)
+        {
+            return _pairs.TryGetValue(key, out value);
+        }
+
+        public void Add(CborPair pair)
+        {
+            ((ICollection<CborPair>)_pairs)
+                .Add(pair.Value != null ? pair : new CborPair(pair.Key, Null));
+        }
+
+        public void Clear()
+        {
+            _pairs.Clear();
+        }
+
+        public bool Contains(CborPair pair)
+        {
+            return ((ICollection<CborPair>)_pairs).Contains(pair);
+        }
+
+        public void CopyTo(CborPair[] array, int arrayIndex)
+        {
+            ((ICollection<CborPair>)_pairs).CopyTo(array, arrayIndex);
+        }
+
+        public bool Remove(CborPair pair)
+        {
+            return ((ICollection<CborPair>)_pairs).Remove(pair);
+        }
+
+        public IEnumerator<CborPair> GetEnumerator()
+        {
+            return _pairs.GetEnumerator();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return ((IEnumerable)_pairs).GetEnumerator();
+        }
+
+        public static CborObject FromObject<T>(T obj)
+        {
+            using (ByteBufferWriter buffer = new ByteBufferWriter())
+            {
+                ICborConverter<T> objectConverter = CborConverter.Lookup<T>();
+                CborWriter writer = new CborWriter(buffer);
+                objectConverter.Write(ref writer, obj);
+
+                ICborConverter<CborObject> cborObjectConverter = CborConverter.Lookup<CborObject>();
+                CborReader reader = new CborReader(buffer.WrittenSpan);
+                return cborObjectConverter.Read(ref reader);
+            }
+        }
+
+        public T ToObject<T>()
+        {
+            using (ByteBufferWriter buffer = new ByteBufferWriter())
+            {
+                ICborConverter<CborObject> cborObjectConverter = CborConverter.Lookup<CborObject>();
+                CborWriter writer = new CborWriter(buffer);
+                cborObjectConverter.Write(ref writer, this);
+
+                ICborConverter<T> objectConverter = CborConverter.Lookup<T>();
+                CborReader reader = new CborReader(buffer.WrittenSpan);
+                return objectConverter.Read(ref reader);
+            }
         }
     }
 }

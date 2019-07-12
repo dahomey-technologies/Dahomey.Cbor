@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.ObjectModel;
+using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -19,7 +20,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         public struct MapWriterContext
         {
             public CborObject obj;
-            public int index;
+            public IEnumerator<KeyValuePair<string, CborValue>> enumerator;
         }
 
         public struct ArrayReaderContext
@@ -121,19 +122,22 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             string key = reader.ReadString();
             CborValue value = Read(ref reader);
-            context.obj.Pairs.Add(new CborPair(key, value));
+            context.obj.Add(key, value);
         }
 
         int ICborMapWriter<MapWriterContext>.GetMapSize(ref MapWriterContext context)
         {
-            return context.obj.Pairs.Count;
+            return context.obj.Count;
         }
 
         void ICborMapWriter<MapWriterContext>.WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
         {
-            CborPair pair = context.obj.Pairs[context.index++];
-            writer.WriteString(pair.Name);
-            Write(ref writer, pair.Value);
+            if (context.enumerator.MoveNext())
+            {
+                KeyValuePair<string, CborValue> pair = context.enumerator.Current;
+                writer.WriteString(pair.Key);
+                Write(ref writer, pair.Value);
+            }
         }
 
         void ICborArrayReader<ArrayReaderContext>.ReadBeginArray(int size, ref ArrayReaderContext context)
@@ -177,7 +181,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             MapWriterContext mapWriterContext = new MapWriterContext
             {
-                obj = value
+                obj = value,
+                enumerator = value.GetEnumerator()
             };
             writer.WriteMap(this, ref mapWriterContext);
         }

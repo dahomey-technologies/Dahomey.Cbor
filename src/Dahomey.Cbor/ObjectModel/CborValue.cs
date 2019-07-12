@@ -75,7 +75,7 @@ namespace Dahomey.Cbor.ObjectModel
 
         public static implicit operator CborValue(ulong value)
         {
-            return (CborPositive)(ulong)value;
+            return (CborPositive)value;
         }
 
         public static implicit operator CborValue(bool value)
@@ -89,16 +89,6 @@ namespace Dahomey.Cbor.ObjectModel
         public static implicit operator CborValue(CborValue[] values)
         {
             return new CborArray(values);
-        }
-
-        public static implicit operator CborValue(CborPair[] pairs)
-        {
-            return new CborObject(pairs);
-        }
-
-        public static implicit operator CborValue(CborPair pair)
-        {
-            return new CborObject(pair);
         }
 
         public static implicit operator CborValue(Dictionary<string, CborValue> pairs)
