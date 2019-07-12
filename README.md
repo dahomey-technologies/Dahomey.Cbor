@@ -62,14 +62,14 @@ await Cbor.SerializeAsync(customObject, stream);
 As for deserialization a more generic solution consists in using ``CborObject`` object:
 
 ```csharp
-CborObject cborObject = new Dictionary<string, CborValue>
+CborObject obj = new CborObject
 {
-    {"string", "foo"},
-    {"number", 12.12},
-    {"bool", true},
-    {"null", null},
-    {"array", new CborValue[] {1, 2}},
-    {"object", new CborPair("id", 1)},
+    ["string"] = "foo",
+    ["number"] = 12.12,
+    ["bool"] = true,
+    ["null"] = null,
+    ["array"] = new CborArray {1, 2},
+    ["object"] = new CborObject { [ "id" ] = 1 },
 };
 
 await Cbor.SerializeAsync(cborObject, stream);
