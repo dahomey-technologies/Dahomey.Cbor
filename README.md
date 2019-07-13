@@ -75,8 +75,8 @@ CborObject obj = new CborObject
 await Cbor.SerializeAsync(cborObject, stream);
 
 ```  
-## Asp.Net Core 2.2 Support
-You can enable Dahomey.Cbor as a CBOR formatter in ASP.NET Core 2.2 by using the Nuget package [Dahomey.Cbor.AspNetCore](https://www.nuget.org/packages/Dahomey.Cbor.AspNetCore/). To enable it, add the extension method ``AddDahomeyCbor()`` to the ``AddMvc()`` call in ``ConfigureServices``
+## Asp.Net Core Support
+You can enable Dahomey.Cbor as a CBOR formatter in ASP.NET Core 2.1 or 2.2 by using the Nuget package [Dahomey.Cbor.AspNetCore](https://www.nuget.org/packages/Dahomey.Cbor.AspNetCore/). To enable it, add the extension method ``AddDahomeyCbor()`` to the ``AddMvc()`` call in ``ConfigureServices``
 
 ```csharp
 // This method gets called by the runtime. Use this method to add services to the container.
