@@ -120,6 +120,10 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 return new DateTimeConverter();
             }
+            if (type == typeof(ReadOnlyMemory<byte>))
+            {
+                return new ReadOnlyMemoryConverter();
+            }
             if (type.IsEnum)
             {
                 return (ICborConverter)Activator.CreateInstance(typeof(EnumConverter<>).MakeGenericType(type));

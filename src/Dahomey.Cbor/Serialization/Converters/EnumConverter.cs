@@ -34,12 +34,18 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override T Read(ref CborReader reader)
         {
-            if (reader.GetCurrentDataItemType() == CborDataItemType.Unsigned)
+            switch(reader.GetCurrentDataItemType())
             {
-                return ReadInt32(ref reader);
-            }
+                case CborDataItemType.Unsigned:
+                case CborDataItemType.Signed:
+                    return ReadInt32(ref reader);
 
-            return ReadString(ref reader);
+                case CborDataItemType.String:
+                    return ReadString(ref reader);
+
+                default:
+                    throw new NotSupportedException();
+            }
         }
 
         public T ReadString(ref CborReader reader)

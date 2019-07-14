@@ -6,7 +6,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using CborPair = System.Collections.Generic.KeyValuePair<string, Dahomey.Cbor.ObjectModel.CborValue>;
+using CborPair = System.Collections.Generic.KeyValuePair<Dahomey.Cbor.ObjectModel.CborValue, Dahomey.Cbor.ObjectModel.CborValue>;
 
 namespace Dahomey.Cbor.ObjectModel
 {
@@ -14,32 +14,32 @@ namespace Dahomey.Cbor.ObjectModel
         CborValue, 
         IComparable<CborObject>, 
         IEquatable<CborObject>,
-        IDictionary<string, CborValue>
+        IDictionary<CborValue, CborValue>
     {
-        private readonly Dictionary<string, CborValue> _pairs;
+        private readonly Dictionary<CborValue, CborValue> _pairs;
 
         public override CborValueType Type => CborValueType.Object;
-        public ICollection<string> Keys => _pairs.Keys;
+        public ICollection<CborValue> Keys => _pairs.Keys;
         public ICollection<CborValue> Values => _pairs.Values;
         public int Count => _pairs.Count;
         public bool IsReadOnly => false;
 
         public CborObject()
         {
-            _pairs = new Dictionary<string, CborValue>();
+            _pairs = new Dictionary<CborValue, CborValue>();
         }
 
-        public CborObject(IDictionary<string, CborValue> pairs)
+        public CborObject(IDictionary<CborValue, CborValue> pairs)
         {
-            _pairs = new Dictionary<string, CborValue>(pairs);
+            _pairs = new Dictionary<CborValue, CborValue>(pairs);
         }
 
-        public static implicit operator CborObject(Dictionary<string, CborValue> pairs)
+        public static implicit operator CborObject(Dictionary<CborValue, CborValue> pairs)
         {
             return new CborObject(pairs);
         }
 
-        public CborValue this[string name]
+        public CborValue this[CborValue name]
         {
             get => _pairs[name];
             set => _pairs[name] = value ?? Null;
@@ -140,22 +140,22 @@ namespace Dahomey.Cbor.ObjectModel
             return hash;
         }
 
-        public void Add(string key, CborValue value)
+        public void Add(CborValue key, CborValue value)
         {
             _pairs.Add(key, value ?? Null);
         }
 
-        public bool ContainsKey(string key)
+        public bool ContainsKey(CborValue key)
         {
             return _pairs.ContainsKey(key);
         }
 
-        public bool Remove(string key)
+        public bool Remove(CborValue key)
         {
             return _pairs.Remove(key);
         }
 
-        public bool TryGetValue(string key, out CborValue value)
+        public bool TryGetValue(CborValue key, out CborValue value)
         {
             return _pairs.TryGetValue(key, out value);
         }

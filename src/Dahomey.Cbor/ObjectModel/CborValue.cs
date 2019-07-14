@@ -91,9 +91,19 @@ namespace Dahomey.Cbor.ObjectModel
             return new CborArray(values);
         }
 
-        public static implicit operator CborValue(Dictionary<string, CborValue> pairs)
+        public static implicit operator CborValue(Dictionary<CborValue, CborValue> pairs)
         {
             return pairs == null ? (CborValue)Null : new CborObject(pairs);
+        }
+
+        public static implicit operator CborValue(ReadOnlyMemory<byte> value)
+        {
+            return new CborByteString(value);
+        }
+
+        public static implicit operator CborValue(ReadOnlySpan<byte> value)
+        {
+            return new CborByteString(value.ToArray());
         }
 
         public bool Equals(CborValue other)

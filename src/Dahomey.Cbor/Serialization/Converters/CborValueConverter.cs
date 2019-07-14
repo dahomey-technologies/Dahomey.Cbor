@@ -20,7 +20,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         public struct MapWriterContext
         {
             public CborObject obj;
-            public IEnumerator<KeyValuePair<string, CborValue>> enumerator;
+            public IEnumerator<KeyValuePair<CborValue, CborValue>> enumerator;
         }
 
         public struct ArrayReaderContext
@@ -65,6 +65,9 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 case CborDataItemType.Map:
                     return ((ICborConverter<CborObject>)this).Read(ref reader);
+
+                case CborDataItemType.ByteString:
+                    return reader.ReadByteString();
 
                 default:
                     throw reader.BuildException("Unexpected data item type");
@@ -120,7 +123,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         void ICborMapReader<MapReaderContext>.ReadMapItem(ref CborReader reader, ref MapReaderContext context)
         {
-            string key = reader.ReadString();
+            CborValue key = Read(ref reader);
             CborValue value = Read(ref reader);
             context.obj.Add(key, value);
         }
@@ -134,8 +137,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (context.enumerator.MoveNext())
             {
-                KeyValuePair<string, CborValue> pair = context.enumerator.Current;
-                writer.WriteString(pair.Key);
+                KeyValuePair<CborValue, CborValue> pair = context.enumerator.Current;
+                Write(ref writer, pair.Key);
                 Write(ref writer, pair.Value);
             }
         }

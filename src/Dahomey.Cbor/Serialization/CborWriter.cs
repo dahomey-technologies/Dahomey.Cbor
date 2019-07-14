@@ -33,6 +33,11 @@ namespace Dahomey.Cbor.Serialization
             Options = options ?? CborOptions.Default;
         }
 
+        public void WriteSemanticTag(ulong semanticTag)
+        {
+            WriteInteger(CborMajorType.SemanticTag, semanticTag);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteNull()
         {
@@ -183,11 +188,16 @@ namespace Dahomey.Cbor.Serialization
             _bufferWriter.Write(value);
         }
 
+        public void WriteBeginMap(int size)
+        {
+            WriteInteger(CborMajorType.Map, (ulong)size);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteMap<TC>(ICborMapWriter<TC> mapWriter, ref TC context)
         {
             int size = mapWriter.GetMapSize(ref context);
-            WriteInteger(CborMajorType.Map, (ulong)size);
+            WriteBeginMap(size);
 
             for (int i = 0; i < size; i++)
             {
@@ -195,11 +205,16 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        public void WriteBeginArray(int size)
+        {
+            WriteInteger(CborMajorType.Array, (ulong)size);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteArray<TC>(ICborArrayWriter<TC> arrayWriter, ref TC context)
         {
             int size = arrayWriter.GetArraySize(ref context);
-            WriteInteger(CborMajorType.Array, (ulong)size);
+            WriteBeginArray(size);
 
             for (int i = 0; i < size; i++)
             {

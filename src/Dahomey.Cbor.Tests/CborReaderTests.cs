@@ -1,4 +1,5 @@
 using Dahomey.Cbor.ObjectModel;
+using Dahomey.Cbor.Serialization;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
@@ -499,7 +500,6 @@ namespace Dahomey.Cbor.Tests
             Assert.AreEqual(Guid.Parse("67EBF45D-016C-4B48-8AE6-1E389127B717"), obj.Guid);
         }
 
-        [DataTestMethod]
         [DataRow("A261610168496E7456616C756501")]
         [DataRow("A268496E7456616C756501616101")]
         [DataRow("A26161810C68496E7456616C756501")]
@@ -519,6 +519,20 @@ namespace Dahomey.Cbor.Tests
             IntObject obj = Helper.Read<IntObject>(hexBuffer);
             Assert.IsNotNull(obj);
             Assert.AreEqual(1, obj.IntValue);
+        }
+
+        [DataTestMethod]
+        [DataRow("1A5D2A3DDB", ulong.MaxValue)]
+        [DataRow("C01A5D2A3DDB", 0ul)]
+        [DataRow("D8641A5D2A3DDB", 100ul)]
+        public void ReadSemanticTag(string hexBuffer, ulong expectedTag)
+        {
+            ReadOnlySpan<byte> buffer = hexBuffer.HexToBytes();
+            CborReader reader = new CborReader(buffer);
+            bool hasTag = reader.TryReadSemanticTag(out ulong actualTag);
+
+            Assert.AreEqual(expectedTag != ulong.MaxValue, hasTag);
+            Assert.AreEqual(expectedTag != ulong.MaxValue ? expectedTag : 0, actualTag);
         }
     }
 }

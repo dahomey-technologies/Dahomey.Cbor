@@ -1,4 +1,6 @@
 ﻿using Dahomey.Cbor.ObjectModel;
+using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Util;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
@@ -469,6 +471,26 @@ namespace Dahomey.Cbor.Tests
                 Guid = Guid.Parse("67EBF45D-016C-4B48-8AE6-1E389127B717")
             };
             Helper.TestWrite(obj, hexBuffer);
+        }
+
+        [DataTestMethod]
+        [DataRow("1A5D2A3DDB", ulong.MaxValue)]
+        [DataRow("C01A5D2A3DDB", 0ul)]
+        [DataRow("D8641A5D2A3DDB", 100ul)]
+        public void WriteSemanticTag(string hexBuffer, ulong semanticTag)
+        {
+            using (ByteBufferWriter buffer = new ByteBufferWriter())
+            {
+                CborWriter writer = new CborWriter(buffer);
+
+                if (semanticTag != ulong.MaxValue)
+                {
+                    writer.WriteSemanticTag(semanticTag);
+                }
+                writer.WriteUInt32(1563049435);
+
+                Assert.AreEqual(hexBuffer, BitConverter.ToString(buffer.WrittenSpan.ToArray()).Replace("-", ""));
+            }
         }
     }
 }

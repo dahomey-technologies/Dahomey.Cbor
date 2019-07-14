@@ -16,7 +16,7 @@ namespace Dahomey.Cbor.Serialization
         Single,
         Double,
         String,
-        ByteArray,
+        ByteString,
         Array,
         Map,
         Break
@@ -76,8 +76,23 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryReadSemanticTag(out ulong semanticTag)
+        {
+            if (Accept(CborMajorType.SemanticTag))
+            {
+                semanticTag = ReadInteger();
+                _state = State.Data;
+                return true;
+            }
+
+            semanticTag = 0;
+            return false;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public CborDataItemType GetCurrentDataItemType()
         {
+            SkipSemanticTag();
             Header header = GetHeader();
 
             switch (header.MajorType)
@@ -89,7 +104,7 @@ namespace Dahomey.Cbor.Serialization
                     return CborDataItemType.Signed;
 
                 case CborMajorType.ByteString:
-                    return CborDataItemType.ByteArray;
+                    return CborDataItemType.ByteString;
 
                 case CborMajorType.TextString:
                     return CborDataItemType.String;
@@ -137,24 +152,28 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReadBeginArray()
         {
+            SkipSemanticTag();
             Expect(CborMajorType.Array);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReadBeginMap()
         {
+            SkipSemanticTag();
             Expect(CborMajorType.Map);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool ReadNull()
         {
+            SkipSemanticTag();
             return Accept(CborPrimitive.Null);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool ReadBoolean()
         {
+            SkipSemanticTag();
             if (Accept(CborPrimitive.True))
             {
                 return true;
@@ -167,48 +186,56 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ulong ReadUInt64()
         {
+            SkipSemanticTag();
             return ReadUnsigned(ulong.MaxValue);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long ReadInt64()
         {
+            SkipSemanticTag();
             return ReadSigned(long.MaxValue);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public uint ReadUInt32()
         {
+            SkipSemanticTag();
             return (uint)ReadUnsigned(uint.MaxValue);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadInt32()
         {
+            SkipSemanticTag();
             return (int)ReadSigned(int.MaxValue);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ushort ReadUInt16()
         {
+            SkipSemanticTag();
             return (ushort)ReadUnsigned(ushort.MaxValue);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public short ReadInt16()
         {
+            SkipSemanticTag();
             return (short)ReadSigned(short.MaxValue);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public byte ReadByte()
         {
+            SkipSemanticTag();
             return (byte)ReadUnsigned(byte.MaxValue);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public sbyte ReadSByte()
         {
+            SkipSemanticTag();
             return (sbyte)ReadSigned(sbyte.MaxValue);
         }
 
@@ -239,6 +266,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ReadOnlySpan<byte> ReadByteString()
         {
+            SkipSemanticTag();
             Expect(CborMajorType.ByteString);
             return ReadSizeAndBytes();
         }
@@ -246,6 +274,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public float ReadSingle()
         {
+            SkipSemanticTag();
             Expect(CborMajorType.Primitive);
 
             if (Accept(CborPrimitive.SingleFloat))
@@ -265,6 +294,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public double ReadDouble()
         {
+            SkipSemanticTag();
             Expect(CborMajorType.Primitive);
 
             if (Accept(CborPrimitive.DoubleFloat))
@@ -535,7 +565,9 @@ namespace Dahomey.Cbor.Serialization
         {
             if (Accept(CborMajorType.SemanticTag))
             {
+                ReadInteger();
                 _state = State.Data;
+                return;
             }
         }
 

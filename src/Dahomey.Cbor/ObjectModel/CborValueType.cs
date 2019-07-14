@@ -11,6 +11,7 @@
         Double,
         String,
         Boolean,
-        Null
+        Null,
+        ByteString
     }
 }
