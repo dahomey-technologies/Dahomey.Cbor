@@ -53,7 +53,7 @@ Any C# class can be serialized to CBOR buffer Stream:
 ```csharp
 CustomObject customObject = new CustomObject
 {
-...
+  ...
 };
 
 await Cbor.SerializeAsync(customObject, stream);
@@ -62,21 +62,21 @@ await Cbor.SerializeAsync(customObject, stream);
 As for deserialization a more generic solution consists in using ``CborObject`` object:
 
 ```csharp
-CborObject cborObject = new Dictionary<string, CborValue>
+CborObject obj = new CborObject
 {
-    {"string", "foo"},
-    {"number", 12.12},
-    {"bool", true},
-    {"null", null},
-    {"array", new CborValue[] {1, 2}},
-    {"object", new CborPair("id", 1)},
+    ["string"] = "foo",
+    ["number"] = 12.12,
+    ["bool"] = true,
+    ["null"] = null,
+    ["array"] = new CborArray {1, 2},
+    ["object"] = new CborObject { [ "id" ] = 1 },
 };
 
 await Cbor.SerializeAsync(cborObject, stream);
 
 ```  
-## Asp.Net Core 2.2 Support
-You can enable Dahomey.Cbor as a CBOR formatter in ASP.NET Core 2.2 by using the Nuget package [Dahomey.Cbor.AspNetCore](https://www.nuget.org/packages/Dahomey.Cbor.AspNetCore/). To enable it, add the extension method ``AddDahomeyCbor()`` to the ``AddMvc()`` call in ``ConfigureServices``
+## Asp.Net Core Support
+You can enable Dahomey.Cbor as a CBOR formatter in ASP.NET Core 2.1 or 2.2 by using the Nuget package [Dahomey.Cbor.AspNetCore](https://www.nuget.org/packages/Dahomey.Cbor.AspNetCore/). To enable it, add the extension method ``AddDahomeyCbor()`` to the ``AddMvc()`` call in ``ConfigureServices``
 
 ```csharp
 // This method gets called by the runtime. Use this method to add services to the container.
