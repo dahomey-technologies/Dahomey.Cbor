@@ -9,7 +9,7 @@ High-performance CBOR serialization framework for .Net (C#)
 * Extensible Naming conventions
 * Custom converters for not supported types
 * [.Net standard 2.0](https://github.com/dotnet/standard/blob/master/docs/versions/netstandard2.0.md) support
-* Asp.net core 2.2 CBOR formatters
+* Asp.net core 2.1 and 2.2 CBOR formatters
 
 
 ## Installation
