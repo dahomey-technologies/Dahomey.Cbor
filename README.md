@@ -82,7 +82,8 @@ You can enable Dahomey.Cbor as a CBOR formatter in ASP.NET Core 2.1 or 2.2 by us
 // This method gets called by the runtime. Use this method to add services to the container.
 public void ConfigureServices(IServiceCollection services)
 {
-    services.AddMvc().AddDahomeyCbor().SetCompatibilityVersion(CompatibilityVersion.Version_2_2);
+    services.AddMvc()
+      .AddDahomeyCbor();
 }
 ```
 If an incoming HTTP request holds the following headers:
