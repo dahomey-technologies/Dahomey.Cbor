@@ -74,7 +74,42 @@ CborObject obj = new CborObject
 
 await Cbor.SerializeAsync(cborObject, stream);
 
-```  
+```
+
+### Custom converters
+
+If you need to write a customer converter for a specific class, you can inherit a custom converter class for CborConverterBase.
+An example can be found here:
+https://github.com/dahomey-technologies/Dahomey.Cbor/blob/master/src/Dahomey.Cbor.Tests/GuidConverter.cs
+
+Then you can register you custom converter in 3 ways.
+
+1. Either you decorate your class with the CborConverterAttribute:
+```csharp
+[CborConverter(typeof(CustomObjectConverter))]
+class CustomObject
+{
+}
+```
+
+2. Or you can register your custom converter manually:
+```csharp
+CborConverter.Register(typeof(CustomObject), new CustomObjectConverter());
+```
+
+3. The last option is to decorate a property or a field with the CborConverterAttribute in a class referencing your custom class:
+```csharp
+class CustomObject2
+{
+    [CborConverter(typeof(CustomObjectConverter))]
+    public CustomObject CustomObject { get; set; }
+}
+
+The last two options are useful when you write a custom cbor converter for a class you can't decorate with the CborConverterAttribute because you don't own it like the above example with System.Guid.
+
+CborConverters are use in the heart of the library for standard types and auto discovered custom classes by reflection.
+It means you will benefit of the same features and performance.
+  
 ## Asp.Net Core Support
 You can enable Dahomey.Cbor as a CBOR formatter in ASP.NET Core 2.1 or 2.2 by using the Nuget package [Dahomey.Cbor.AspNetCore](https://www.nuget.org/packages/Dahomey.Cbor.AspNetCore/). To enable it, add the extension method ``AddDahomeyCbor()`` to the ``AddMvc()`` call in ``ConfigureServices``
 
