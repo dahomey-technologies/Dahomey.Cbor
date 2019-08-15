@@ -104,6 +104,7 @@ class CustomObject2
     [CborConverter(typeof(CustomObjectConverter))]
     public CustomObject CustomObject { get; set; }
 }
+```
 
 The last two options are useful when you write a custom cbor converter for a class you can't decorate with the CborConverterAttribute because you don't own it like the above example with System.Guid.
 
