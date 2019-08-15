@@ -78,7 +78,7 @@ await Cbor.SerializeAsync(cborObject, stream);
 
 ### Custom converters
 
-If you need to write a customer converter for a specific class, you can inherit a custom converter class for CborConverterBase.
+If you need to write a customer converter for a specific class, you can inherit a custom converter class for CborConverterBase<T>.
 An example can be found here:
 https://github.com/dahomey-technologies/Dahomey.Cbor/blob/master/src/Dahomey.Cbor.Tests/GuidConverter.cs
 
