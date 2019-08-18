@@ -87,7 +87,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (propertyInfo.IsDefined(typeof(CborIgnoreAttribute)))
                 {
-                    return;
+                    continue;
                 }
 
                 Type propertyType = propertyInfo.PropertyType;
