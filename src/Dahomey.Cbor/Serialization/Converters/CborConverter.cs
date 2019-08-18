@@ -3,6 +3,7 @@ using Dahomey.Cbor.ObjectModel;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 
@@ -139,6 +140,14 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             if (type.IsGenericType)
             {
+                if (type.GetGenericTypeDefinition() == typeof(ImmutableDictionary<,>)
+                    || type.GetGenericTypeDefinition() == typeof(ImmutableSortedDictionary<,>))
+                {
+                    Type keyType = type.GetGenericArguments()[0];
+                    Type valueType = type.GetGenericArguments()[1];
+                    return (ICborConverter)Activator.CreateInstance(typeof(ImmutableDictionaryConverter<,,>).MakeGenericType(type, keyType, valueType));
+                }
+
                 if (type.GetInterfaces()
                     .Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IDictionary<,>)))
                 {
@@ -146,6 +155,16 @@ namespace Dahomey.Cbor.Serialization.Converters
                     Type valueType = type.GetGenericArguments()[1];
                     return (ICborConverter)Activator.CreateInstance(typeof(DictionaryConverter<,,>).MakeGenericType(type, keyType, valueType));
                 }
+
+                if (type.GetGenericTypeDefinition() == typeof(ImmutableArray<>)
+                    || type.GetGenericTypeDefinition() == typeof(ImmutableList<>)
+                    || type.GetGenericTypeDefinition() == typeof(ImmutableSortedSet<>)
+                    || type.GetGenericTypeDefinition() == typeof(ImmutableHashSet<>))
+                {
+                    Type itemType = type.GetGenericArguments()[0];
+                    return (ICborConverter)Activator.CreateInstance(typeof(ImmutableCollectionConverter<,>).MakeGenericType(type, itemType));
+                }
+
                 if (type.GetInterfaces()
                     .Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(ICollection<>)))
                 {
