@@ -1,6 +1,8 @@
 # Dahomey.Cbor
 High-performance CBOR serialization framework for .Net (C#)
 
+![Nuget (with prereleases)](https://img.shields.io/nuget/vpre/Dahomey.Cbor)
+
 ## Features
 * Serialization/Deserialization from/to Streams, byte buffer
 * Object Model
