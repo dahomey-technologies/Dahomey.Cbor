@@ -1,8 +1,0 @@
-language: csharp
-mono: none
-dotnet: 2.2.401
-script:
- - dotnet build -c Release src/Dahomey.Cbor
- - dotnet test -c Release src/Dahomey.Cbor.Tests 
- - dotnet build -c Release src/Dahomey.Cbor.AspNetCore
- - dotnet test -c Release src/Dahomey.Cbor.AspNetCore.Tests 
