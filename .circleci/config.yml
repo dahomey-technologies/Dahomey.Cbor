@@ -1,20 +1,36 @@
 version: 2
 jobs:
-  build:
+  build_core:
     docker:
       - image: mcr.microsoft.com/dotnet/core/sdk:2.2
     steps:
       - checkout
       - run: dotnet build -c Release src/Dahomey.Cbor
-  test:
+  test_core:
     docker:
       - image: mcr.microsoft.com/dotnet/core/sdk:2.2
     steps:
       - checkout
       - run: dotnet test -c Release src/Dahomey.Cbor.Tests 
+  build_aspnet:
+    docker:
+      - image: mcr.microsoft.com/dotnet/core/sdk:2.2
+    steps:
+      - checkout
+      - run: dotnet build -c Release src/Dahomey.Cbor.AspNetCore
+  test_aspnet:
+    docker:
+      - image: mcr.microsoft.com/dotnet/core/sdk:2.2
+    steps:
+      - checkout
+      - run: dotnet test -c Release src/Dahomey.Cbor.AspNetCore.Tests 
+
+
 workflows:
   version: 2
-  build_and_test:
+  build_and_test_core:
     jobs:
-      - build
-      - test
+      - build_core
+      - test_core
+      - build_aspnet
+      - test_aspnet
