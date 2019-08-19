@@ -55,10 +55,14 @@ workflows:
       - deploy_core:
           context: deployment
           filters:
+            branches:
+              ignore: /.*/
             tags:
               only: /[0-9]\.[0-9]\.[0-9]/
       - deploy_aspnet:
           context: deployment
           filters:
+            branches:
+              ignore: /.*/
             tags:
               only: /[0-9]\.[0-9]\.[0-9]/
