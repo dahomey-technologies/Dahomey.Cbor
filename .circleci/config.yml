@@ -6,31 +6,59 @@ jobs:
     steps:
       - checkout
       - run: dotnet build -c Release src/Dahomey.Cbor
+      
   test_core:
     docker:
       - image: mcr.microsoft.com/dotnet/core/sdk:2.2
     steps:
       - checkout
-      - run: dotnet test -c Release src/Dahomey.Cbor.Tests 
+      - run: dotnet test -c Release src/Dahomey.Cbor.Tests
+      
   build_aspnet:
     docker:
       - image: mcr.microsoft.com/dotnet/core/sdk:2.2
     steps:
       - checkout
       - run: dotnet build -c Release src/Dahomey.Cbor.AspNetCore
+      
   test_aspnet:
     docker:
       - image: mcr.microsoft.com/dotnet/core/sdk:2.2
     steps:
       - checkout
-      - run: dotnet test -c Release src/Dahomey.Cbor.AspNetCore.Tests 
+      - run: dotnet test -c Release src/Dahomey.Cbor.AspNetCore.Tests
+      
+  deploy_core:
+    docker:
+      - image: mcr.microsoft.com/dotnet/core/sdk:2.2
+    steps:
+      - checkout
+      - run: dotnet build -c Release src/Dahomey.Cbor
+      - run: dotnet nuget push src/Dahomey.Cbor/bin/Release/Dahomey.Cbor.${CIRCLE_TAG}.nupkg -k ${NUGET_API_KEY} -s https://api.nuget.org/v3/index.json
 
+  deploy_aspnet:
+    docker:
+      - image: mcr.microsoft.com/dotnet/core/sdk:2.2
+    steps:
+      - checkout
+      - run: dotnet build -c Release src/Dahomey.Cbor.AspNetCore
+      - run: dotnet nuget push src/Dahomey.Cbor.AspNetCore/bin/Release/Dahomey.Cbor.AspNetCore.${CIRCLE_TAG}.nupkg -k ${NUGET_API_KEY} -s https://api.nuget.org/v3/index.json
 
 workflows:
   version: 2
-  build_and_test_core:
+  build-test-deploy:
     jobs:
       - build_core
       - test_core
       - build_aspnet
       - test_aspnet
+      - deploy_core:
+          context: deployment
+          filters:
+            tags:
+              only: /[0-9]\.[0-9]\.[0-9]/
+      - deploy_aspnet:
+          context: deployment
+          filters:
+            tags:
+              only: /[0-9]\.[0-9]\.[0-9]/
