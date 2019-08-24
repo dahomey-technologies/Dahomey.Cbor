@@ -7,6 +7,10 @@ namespace Dahomey.Cbor.Attributes
     {
         public string PropertyName { get; set; }
 
+        public CborPropertyAttribute()
+        {
+        }
+
         public CborPropertyAttribute(string propertyName)
         {
             PropertyName = propertyName;

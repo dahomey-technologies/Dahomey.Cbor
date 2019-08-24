@@ -175,29 +175,35 @@ namespace Dahomey.Cbor.ObjectModel
             return hash;
         }
 
-        public static CborArray FromCollection<T>(T collection) where T : ICollection
+        public static CborArray FromCollection<T>(T collection, CborOptions options = null)
+            where T : ICollection
         {
+            options = options ?? CborOptions.Default;
+
             using (ByteBufferWriter buffer = new ByteBufferWriter())
             {
-                ICborConverter listConverter = CborConverter.Lookup<T>();
+                ICborConverter listConverter = options.Registry.ConverterRegistry.Lookup<T>();
                 CborWriter writer = new CborWriter(buffer);
                 listConverter.Write(ref writer, collection);
 
-                ICborConverter<CborArray> cborArrayConverter = CborConverter.Lookup<CborArray>();
+                ICborConverter<CborArray> cborArrayConverter = options.Registry.ConverterRegistry.Lookup<CborArray>();
                 CborReader reader = new CborReader(buffer.WrittenSpan);
                 return cborArrayConverter.Read(ref reader);
             }
         }
 
-        public T ToCollection<T>() where T : ICollection
+        public T ToCollection<T>(CborOptions options = null) 
+            where T : ICollection
         {
+            options = options ?? CborOptions.Default;
+
             using (ByteBufferWriter buffer = new ByteBufferWriter())
             {
-                ICborConverter<CborArray> cborArrayConverter = CborConverter.Lookup<CborArray>();
+                ICborConverter<CborArray> cborArrayConverter = options.Registry.ConverterRegistry.Lookup<CborArray>();
                 CborWriter writer = new CborWriter(buffer);
                 cborArrayConverter.Write(ref writer, this);
 
-                ICborConverter<T> objectConverter = CborConverter.Lookup<T>();
+                ICborConverter<T> objectConverter = options.Registry.ConverterRegistry.Lookup<T>();
                 CborReader reader = new CborReader(buffer.WrittenSpan);
                 return objectConverter.Read(ref reader);
             }

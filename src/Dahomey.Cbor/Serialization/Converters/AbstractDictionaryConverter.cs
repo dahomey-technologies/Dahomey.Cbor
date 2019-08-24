@@ -19,11 +19,17 @@ namespace Dahomey.Cbor.Serialization.Converters
             public IEnumerator<KeyValuePair<TK, TV>> enumerator;
         }
 
-        private static readonly ICborConverter<TK> _keyConverter = CborConverter.Lookup<TK>();
-        private static readonly ICborConverter<TV> _valueConverter = CborConverter.Lookup<TV>();
+        private readonly ICborConverter<TK> _keyConverter;
+        private readonly ICborConverter<TV> _valueConverter;
 
         protected abstract IDictionary<TK, TV> InstantiateTempCollection();
         protected abstract TC InstantiateCollection(IDictionary<TK, TV> tempCollection);
+
+        public AbstractDictionaryConverter(SerializationRegistry registry)
+        {
+            _keyConverter = registry.ConverterRegistry.Lookup<TK>();
+            _valueConverter = registry.ConverterRegistry.Lookup<TV>();
+        }
 
         public override TC Read(ref CborReader reader)
         {

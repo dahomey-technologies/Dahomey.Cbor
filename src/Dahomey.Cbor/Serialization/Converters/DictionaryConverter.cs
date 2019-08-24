@@ -6,6 +6,11 @@ namespace Dahomey.Cbor.Serialization.Converters
         AbstractDictionaryConverter<TC, TK, TV>
         where TC : class, IDictionary<TK, TV>, new()
     {
+        public DictionaryConverter(SerializationRegistry registry)
+            : base(registry)
+        {
+        }
+
         protected override TC InstantiateCollection(IDictionary<TK, TV> tempCollection)
         {
             return (TC)tempCollection;

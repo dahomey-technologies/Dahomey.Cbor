@@ -6,6 +6,11 @@ namespace Dahomey.Cbor.Serialization.Converters
         AbstractCollectionConverter<TC, TI>
         where TC : class, ICollection<TI>, new()
     {
+        public CollectionConverter(SerializationRegistry registry)
+            : base(registry)
+        {
+        }
+
         protected override TC InstantiateCollection(ICollection<TI> tempCollection)
         {
             return (TC)tempCollection;

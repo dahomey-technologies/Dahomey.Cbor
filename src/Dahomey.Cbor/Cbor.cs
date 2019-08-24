@@ -55,8 +55,9 @@ namespace Dahomey.Cbor
             ReadOnlySpan<byte> buffer, 
             CborOptions options = null)
         {
+            options = options ?? CborOptions.Default;
             CborReader reader = new CborReader(buffer, options);
-            ICborConverter<T> converter = CborConverter.Lookup<T>();
+            ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             return converter.Read(ref reader);
         }
 
@@ -76,8 +77,9 @@ namespace Dahomey.Cbor
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Serialize<T>(T input, in IBufferWriter<byte> buffer, CborOptions options = null)
         {
+            options = options ?? CborOptions.Default;
             CborWriter writer = new CborWriter(buffer, options);
-            ICborConverter<T> converter = CborConverter.Lookup<T>();
+            ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             converter.Write(ref writer, input);
         }
 

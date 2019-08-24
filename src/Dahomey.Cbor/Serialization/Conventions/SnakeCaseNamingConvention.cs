@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Conventions
 {
     public class SnakeCaseNamingConvention : INamingConvention
     {
-        public unsafe ReadOnlyMemory<byte> GetPropertyName(string name)
+        public string GetPropertyName(string name)
         {
             byte[] buffer = new byte[name.Length * 2];
             int dstIndex = 0;
@@ -32,7 +33,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
                 }
             }
 
-            return new Memory<byte>(buffer, 0, dstIndex);
+            return Encoding.UTF8.GetString(buffer, 0, dstIndex);
         }
     }
 }

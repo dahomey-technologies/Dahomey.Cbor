@@ -17,8 +17,8 @@ namespace Dahomey.Cbor.Tests
         [DataRow("", "")]
         public void CamelCase(string srcName, string expectedName)
         {
-            ReadOnlyMemory<byte> actualBytes = new CamelCaseNamingConvention().GetPropertyName(srcName);
-            Assert.AreEqual(expectedName, Encoding.ASCII.GetString(actualBytes.Span));
+            string actualName = new CamelCaseNamingConvention().GetPropertyName(srcName);
+            Assert.AreEqual(expectedName, actualName);
         }
 
         [DataTestMethod]
@@ -31,8 +31,8 @@ namespace Dahomey.Cbor.Tests
         [DataRow("", "")]
         public void SnakeCase(string srcName, string expectedName)
         {
-            ReadOnlyMemory<byte> actualBytes = new SnakeCaseNamingConvention().GetPropertyName(srcName);
-            Assert.AreEqual(expectedName, Encoding.ASCII.GetString(actualBytes.Span));
+            string actualName = new SnakeCaseNamingConvention().GetPropertyName(srcName);
+            Assert.AreEqual(expectedName, actualName);
         }
     }
 }

@@ -20,7 +20,12 @@ namespace Dahomey.Cbor.Serialization.Converters
             public int index;
         }
 
-        private static readonly ICborConverter<TI> _itemConverter = CborConverter.Lookup<TI>();
+        private readonly ICborConverter<TI> _itemConverter;
+
+        public ArrayConverter(SerializationRegistry registry)
+        {
+            _itemConverter = registry.ConverterRegistry.Lookup<TI>();
+        }
 
         public override TI[] Read(ref CborReader reader)
         {

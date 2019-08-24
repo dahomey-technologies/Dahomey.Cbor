@@ -1,5 +1,6 @@
 ﻿using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization.Conventions;
+using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
@@ -10,10 +11,6 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public interface IObjectConverter
     {
-        Type Type { get; }
-        ReadOnlyMemory<byte> ClassName { get; }
-        ReadOnlyMemory<byte> Discriminator { get; }
-        INamingConvention NamingConvention { get; }
         void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName);
         List<IMemberConverter> MemberConvertersForWrite { get; }
     }
@@ -53,68 +50,33 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private readonly ByteBufferDictionary<IMemberConverter> _memberConvertersForRead = new ByteBufferDictionary<IMemberConverter>();
         private readonly List<IMemberConverter> _memberConvertersForWrite;
+        private readonly SerializationRegistry _registry;
+        private readonly IObjectMapping _objectMapping;
 
-        public Type Type { get; } = typeof(T);
-        public ReadOnlyMemory<byte> ClassName { get; private set; }
-        public ReadOnlyMemory<byte> Discriminator { get; private set; }
-        public INamingConvention NamingConvention { get; private set; }
         public List<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
 
-
-        public ObjectConverter()
+        public ObjectConverter(SerializationRegistry registry)
         {
-            Type type = typeof(T);
+            _registry = registry;
+            _objectMapping = registry.ObjectMappingRegistry.Lookup<T>();
 
-            ClassName = Encoding.ASCII.GetBytes(string.Format("{0}, {1}", type.FullName, type.Assembly.GetName().Name));
-            CborDiscriminatorAttribute discriminatorAttribute = type.GetCustomAttribute<CborDiscriminatorAttribute>();
+            _memberConvertersForWrite = new List<IMemberConverter>();
 
-            Discriminator = discriminatorAttribute != null ?
-                Encoding.ASCII.GetBytes(discriminatorAttribute.Discriminator) :
-                ClassName;
-
-            Type namingConventionType = type.GetCustomAttribute<CborNamingConventionAttribute>()?.NamingConventionType;
-            if (namingConventionType != null)
+            foreach(IMemberMapping memberMapping in _objectMapping.MemberMappings)
             {
-                NamingConvention = (INamingConvention)Activator.CreateInstance(namingConventionType);
-            }
+                IMemberConverter memberConverter = (IMemberConverter)Activator.CreateInstance(
+                    typeof(MemberConverter<,>).MakeGenericType(typeof(T), memberMapping.MemberType),
+                    _registry.ConverterRegistry, memberMapping);
 
-            PropertyInfo[] properties = type.GetProperties();
-            FieldInfo[] fields = type.GetFields();
-
-            _memberConvertersForWrite = new List<IMemberConverter>(properties.Length + fields.Length);
-
-            foreach (PropertyInfo propertyInfo in properties)
-            {
-                if (propertyInfo.IsDefined(typeof(CborIgnoreAttribute)))
+                if (memberMapping.CanBeDeserialized)
                 {
-                    continue;
+                    _memberConvertersForRead.Add(memberConverter.MemberName, memberConverter);
                 }
 
-                Type propertyType = propertyInfo.PropertyType;
-
-                IMemberConverter propertyConverter = (IMemberConverter)Activator.CreateInstance(
-                                    typeof(PropertyConverter<,>).MakeGenericType(typeof(T), propertyType),
-                                    propertyInfo, this);
-
-                _memberConvertersForRead.Add(propertyConverter.MemberName, propertyConverter);
-                _memberConvertersForWrite.Add(propertyConverter);
-            }
-
-            foreach (FieldInfo fieldInfo in fields)
-            {
-                if (fieldInfo.IsDefined(typeof(CborIgnoreAttribute)))
+                if (memberMapping.CanBeSerialized)
                 {
-                    return;
+                    _memberConvertersForWrite.Add(memberConverter);
                 }
-
-                Type fieldType = fieldInfo.FieldType;
-
-                IMemberConverter propertyConverter = (IMemberConverter)Activator.CreateInstance(
-                                    typeof(FieldConverter<,>).MakeGenericType(typeof(T), fieldType),
-                                    fieldInfo, this);
-
-                _memberConvertersForRead.Add(propertyConverter.MemberName, propertyConverter);
-                _memberConvertersForWrite.Add(propertyConverter);
             }
         }
 
@@ -166,7 +128,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             if (value.GetType() != typeof(T))
             {
                 context.state = MapWriterContext.State.Discriminator;
-                context.objectConverter = (IObjectConverter)CborConverter.Lookup(value.GetType());
+                context.objectConverter = (IObjectConverter)_registry.ConverterRegistry.Lookup(value.GetType());
             }
             else
             {
@@ -194,7 +156,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     // discriminator value
                     Type actualType = discriminatorConvention.ReadDiscriminator(ref reader);
-                    context.converter = (IObjectConverter<T>)CborConverter.Lookup(actualType);
+                    context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
                     context.obj = context.converter.CreateInstance();
                 }
                 else
@@ -202,7 +164,6 @@ namespace Dahomey.Cbor.Serialization.Converters
                     context.converter = this;
                     context.obj = context.converter.CreateInstance();
                     context.converter.ReadValue(ref reader, context.obj, memberName);
-
                 }
             }
             else
