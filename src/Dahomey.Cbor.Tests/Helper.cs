@@ -4,6 +4,9 @@ using Dahomey.Cbor.Util;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -72,6 +75,112 @@ namespace Dahomey.Cbor.Tests
             {
                 Assert.AreEqual(hexBuffer, Write(value, options));
             }
+        }
+
+        delegate T CborReaderFunctor<T>(CborReader reader);
+
+        public static T Read<T>(string methodName, string hexBuffer)
+        {
+            Span<byte> buffer = hexBuffer.HexToBytes();
+            CborReader reader = new CborReader(buffer, null);
+            MethodInfo method = typeof(CborReader).GetMethod(methodName, new Type[0] { });
+            return CreateMethodFunctor<CborReaderFunctor<T>>(method)(reader);
+        }
+
+        public static void TestRead<T>(string methodName, string hexBuffer, T expectedValue, Type expectedExceptionType = null)
+        {
+            if (expectedExceptionType != null)
+            {
+                try
+                {
+                    Read<T>(methodName, hexBuffer);
+                }
+                catch (Exception ex)
+                {
+                    Assert.IsInstanceOfType(ex, expectedExceptionType);
+                }
+            }
+            else
+            {
+                T actualValue = Read<T>(methodName, hexBuffer);
+                if (actualValue is ICollection actualCollection)
+                {
+                    CollectionAssert.AreEqual((ICollection)expectedValue, actualCollection);
+                }
+                else
+                {
+                    Assert.AreEqual(expectedValue, actualValue);
+                }
+            }
+        }
+
+        delegate void CborWriterFunctor<T>(CborWriter writer, T value);
+
+        public static string Write<T>(string methodName, T value, CborOptions options = null)
+        {
+            using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
+            {
+                CborWriter writer = new CborWriter(bufferWriter, options);
+                MethodInfo method = typeof(CborWriter).GetMethod(methodName, new[] { typeof(T) });
+                CreateMethodFunctor<CborWriterFunctor<T>>(method)(writer, value);
+                return BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", "");
+            }
+        }
+
+        public static void TestWrite<T>(string methodName, T value, string hexBuffer, Type expectedExceptionType = null, CborOptions options = null)
+        {
+            if (expectedExceptionType != null)
+            {
+                try
+                {
+                    Write(methodName, value, options);
+                }
+                catch (Exception ex)
+                {
+                    Assert.IsInstanceOfType(ex, expectedExceptionType);
+                }
+            }
+            else
+            {
+                Assert.AreEqual(hexBuffer, Write(methodName, value, options));
+            }
+        }
+
+        private static TDelegate CreateMethodFunctor<TDelegate>(MethodInfo method) where TDelegate : Delegate
+        {
+            MethodInfo invokeMethod = typeof(TDelegate).GetMethod("Invoke");
+            if (invokeMethod == null)
+            {
+                throw new InvalidOperationException($"{typeof(TDelegate)} signature could not be determined.");
+            }
+
+            ParameterInfo[] delegateParameters = invokeMethod.GetParameters();
+            if (delegateParameters.Length < 1)
+            {
+                throw new InvalidOperationException("Delegate must have at least one parameter.");
+            }
+
+            Type paramType = delegateParameters[0].ParameterType;
+
+            ParameterExpression objParam = Expression.Parameter(paramType, "obj");
+            ParameterExpression[] argParams = delegateParameters
+                .Skip(1)
+                .Select((p, i) => Expression.Parameter(p.ParameterType, $"arg{i - 1}"))
+                .ToArray();
+
+            MethodCallExpression methodCallExpr = Expression.Call(objParam, method, argParams);
+        
+            Expression returnExpr = methodCallExpr;
+            if (invokeMethod.ReturnType != methodCallExpr.Type)
+            {
+                returnExpr = Expression.ConvertChecked(methodCallExpr, invokeMethod.ReturnType);
+            }
+
+            Expression<TDelegate> lambda = Expression.Lambda<TDelegate>(
+                returnExpr, 
+                new[] { objParam }.Concat(argParams));
+
+            return lambda.Compile();
         }
     }
 }
