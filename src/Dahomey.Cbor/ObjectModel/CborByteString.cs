@@ -75,7 +75,7 @@ namespace Dahomey.Cbor.ObjectModel
 
         public override string ToString()
         {
-            return BitConverter.ToString(_value.Span.ToArray()).Replace("-", "");
+            return $"h'{BitConverter.ToString(_value.Span.ToArray()).Replace("-", "")}'";
         }
     }
 }
