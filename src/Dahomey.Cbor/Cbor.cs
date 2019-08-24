@@ -1,4 +1,5 @@
-﻿using Dahomey.Cbor.Serialization;
+﻿using Dahomey.Cbor.ObjectModel;
+using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Util;
 using System;
@@ -81,6 +82,19 @@ namespace Dahomey.Cbor
             CborWriter writer = new CborWriter(buffer, options);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             converter.Write(ref writer, input);
+        }
+
+        /// <summary>
+        /// Converts a CBOR binary buffer to a Json string for debugging purposes
+        /// </summary>
+        /// <param name="buffer"></param>
+        /// <param name="options"></param>
+        /// <returns></returns>
+        public static string ToJson(
+            ReadOnlySpan<byte> buffer,
+            CborOptions options = null)
+        {
+            return Deserialize<CborValue>(buffer, options).ToString();
         }
 
         private static async ValueTask<(byte[], int)> ReadStreamFullAsync(Stream stream, CancellationToken cancellationToken = default)
