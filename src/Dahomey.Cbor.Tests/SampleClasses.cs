@@ -10,7 +10,7 @@ namespace Dahomey.Cbor.Tests
     {
         static SampleClasses()
         {
-            DefaultDiscriminatorConvention.RegisterAssembly(typeof(SampleClasses).Assembly);
+            CborOptions.Default.Registry.DefaultDiscriminatorConvention.RegisterAssembly(typeof(SampleClasses).Assembly);
         }
 
         /// <summary>

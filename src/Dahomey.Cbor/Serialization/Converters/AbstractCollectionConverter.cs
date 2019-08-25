@@ -19,7 +19,12 @@ namespace Dahomey.Cbor.Serialization.Converters
             public IEnumerator<TI> enumerator;
         }
 
-        private static readonly ICborConverter<TI> _itemConverter = CborConverter.Lookup<TI>();
+        private readonly ICborConverter<TI> _itemConverter;
+
+        public AbstractCollectionConverter(SerializationRegistry registry)
+        {
+            _itemConverter = registry.ConverterRegistry.Lookup<TI>();
+        }
 
         protected abstract ICollection<TI> InstantiateTempCollection();
         protected abstract TC InstantiateCollection(ICollection<TI> tempCollection);

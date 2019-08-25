@@ -12,21 +12,22 @@ namespace Dahomey.Cbor.Tests
 {
     public static class Helper
     {
-        public static T Read<T>(string hexBuffer)
+        public static T Read<T>(string hexBuffer, CborOptions options = null)
         {
+            options = options ?? CborOptions.Default;
             Span<byte> buffer = hexBuffer.HexToBytes();
-            CborReader reader = new CborReader(buffer, null);
-            ICborConverter<T> converter = CborConverter.Lookup<T>();
+            CborReader reader = new CborReader(buffer, options);
+            ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             return converter.Read(ref reader);
         }
 
-        public static void TestRead<T>(string hexBuffer, T expectedValue, Type expectedExceptionType = null)
+        public static void TestRead<T>(string hexBuffer, T expectedValue, Type expectedExceptionType = null, CborOptions options = null)
         {
             if (expectedExceptionType != null)
             {
                 try
                 {
-                    Read<T>(hexBuffer);
+                    Read<T>(hexBuffer, options);
                 }
                 catch (Exception ex)
                 {
@@ -35,7 +36,7 @@ namespace Dahomey.Cbor.Tests
             }
             else
             {
-                T actualValue = Read<T>(hexBuffer);
+                T actualValue = Read<T>(hexBuffer, options);
                 if (actualValue is ICollection actualCollection)
                 {
                     CollectionAssert.AreEqual((ICollection)expectedValue, actualCollection);
@@ -49,10 +50,12 @@ namespace Dahomey.Cbor.Tests
 
         public static string Write<T>(T value, CborOptions options = null)
         {
+            options = options ?? CborOptions.Default;
+
             using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
             {
                 CborWriter writer = new CborWriter(bufferWriter, options);
-                ICborConverter<T> converter = CborConverter.Lookup<T>();
+                ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
                 converter.Write(ref writer, value);
                 return BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", "");
             }

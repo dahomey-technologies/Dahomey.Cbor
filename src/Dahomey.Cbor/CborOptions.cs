@@ -1,4 +1,5 @@
-﻿using Dahomey.Cbor.Serialization.Conventions;
+﻿using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Serialization.Conventions;
 
 namespace Dahomey.Cbor
 {
@@ -22,13 +23,18 @@ namespace Dahomey.Cbor
 
     public class CborOptions
     {
-        private static readonly IDiscriminatorConvention defaultDiscriminatorConvention = new DefaultDiscriminatorConvention();
-        public static CborOptions Default => new CborOptions();
+        public static CborOptions Default { get; } = new CborOptions();
 
+        public SerializationRegistry Registry { get; } = new SerializationRegistry();
         public UnhandledNameMode UnhandledNameMode { get; set; }
         public ValueFormat EnumFormat { get; set; }
         public DateTimeFormat DateTimeFormat { get; set; }
         public bool IsIndented { get; set; }
-        public IDiscriminatorConvention DiscriminatorConvention { get; set; } = defaultDiscriminatorConvention;
+        public IDiscriminatorConvention DiscriminatorConvention { get; set; }
+
+        public CborOptions()
+        {
+            DiscriminatorConvention = Registry.DefaultDiscriminatorConvention;
+        }
     }
 }

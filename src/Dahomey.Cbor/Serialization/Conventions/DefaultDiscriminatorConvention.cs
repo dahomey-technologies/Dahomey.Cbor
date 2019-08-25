@@ -1,5 +1,4 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
@@ -11,9 +10,9 @@ namespace Dahomey.Cbor.Serialization.Conventions
 {
     public class DefaultDiscriminatorConvention : IDiscriminatorConvention
     {
-        private static readonly ReadOnlyMemory<byte> _memberName = Encoding.ASCII.GetBytes("_t");
-        private static readonly ByteBufferDictionary<Type> _typesByDiscriminator = new ByteBufferDictionary<Type>();
-        private static readonly Dictionary<Type, ReadOnlyMemory<byte>> _discriminatorsByType = new Dictionary<Type, ReadOnlyMemory<byte>>();
+        private readonly ReadOnlyMemory<byte> _memberName = Encoding.ASCII.GetBytes("_t");
+        private readonly ByteBufferDictionary<Type> _typesByDiscriminator = new ByteBufferDictionary<Type>();
+        private readonly Dictionary<Type, ReadOnlyMemory<byte>> _discriminatorsByType = new Dictionary<Type, ReadOnlyMemory<byte>>();
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
 
@@ -35,19 +34,24 @@ namespace Dahomey.Cbor.Serialization.Conventions
                 throw new CborException($"Unknown discriminator for type: {actualType}");
             }
 
-            writer.WriteString(_memberName.Span);
+            writer.WriteString(MemberName);
             writer.WriteString(discriminator.Span);
         }
 
-        public static void RegisterAssembly(Assembly assembly)
+        public void RegisterAssembly(Assembly assembly)
         {
             foreach (Type type in assembly.GetTypes()
                 .Where(t => Attribute.IsDefined(t, typeof(CborDiscriminatorAttribute))))
             {
                 string discriminator = type.GetCustomAttribute<CborDiscriminatorAttribute>().Discriminator;
-                _typesByDiscriminator.Add(discriminator.AsBinarySpan(), type);
-                _discriminatorsByType.Add(type, discriminator.AsBinaryMemory());
+                RegisterType(type, discriminator.AsBinaryMemory());
             }
+        }
+
+        public void RegisterType(Type type, ReadOnlyMemory<byte> discriminator)
+        {
+            _typesByDiscriminator.Add(discriminator.Span, type);
+            _discriminatorsByType[type] = discriminator;
         }
     }
 }

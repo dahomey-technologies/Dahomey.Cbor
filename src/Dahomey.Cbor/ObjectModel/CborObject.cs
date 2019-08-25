@@ -60,7 +60,7 @@ namespace Dahomey.Cbor.ObjectModel
 
                 separator = true;
 
-                sb.AppendFormat("\"{0}\":{1}", pair.Key, pair.Value);
+                sb.AppendFormat("{0}:{1}", pair.Key, pair.Value);
             }
 
             sb.Append("}");
@@ -196,29 +196,33 @@ namespace Dahomey.Cbor.ObjectModel
             return ((IEnumerable)_pairs).GetEnumerator();
         }
 
-        public static CborObject FromObject<T>(T obj)
+        public static CborObject FromObject<T>(T obj, CborOptions options = null)
         {
+            options = options ?? CborOptions.Default;
+
             using (ByteBufferWriter buffer = new ByteBufferWriter())
             {
-                ICborConverter<T> objectConverter = CborConverter.Lookup<T>();
+                ICborConverter<T> objectConverter = options.Registry.ConverterRegistry.Lookup<T>();
                 CborWriter writer = new CborWriter(buffer);
                 objectConverter.Write(ref writer, obj);
 
-                ICborConverter<CborObject> cborObjectConverter = CborConverter.Lookup<CborObject>();
+                ICborConverter<CborObject> cborObjectConverter = options.Registry.ConverterRegistry.Lookup<CborObject>();
                 CborReader reader = new CborReader(buffer.WrittenSpan);
                 return cborObjectConverter.Read(ref reader);
             }
         }
 
-        public T ToObject<T>()
+        public T ToObject<T>(CborOptions options = null)
         {
+            options = options ?? CborOptions.Default;
+
             using (ByteBufferWriter buffer = new ByteBufferWriter())
             {
-                ICborConverter<CborObject> cborObjectConverter = CborConverter.Lookup<CborObject>();
+                ICborConverter<CborObject> cborObjectConverter = options.Registry.ConverterRegistry.Lookup<CborObject>();
                 CborWriter writer = new CborWriter(buffer);
                 cborObjectConverter.Write(ref writer, this);
 
-                ICborConverter<T> objectConverter = CborConverter.Lookup<T>();
+                ICborConverter<T> objectConverter = options.Registry.ConverterRegistry.Lookup<T>();
                 CborReader reader = new CborReader(buffer.WrittenSpan);
                 return objectConverter.Read(ref reader);
             }
