@@ -96,7 +96,7 @@ class CustomObject
 
 2. Or you can register your custom converter manually:
 ```csharp
-CborConverter.Register(typeof(CustomObject), new CustomObjectConverter());
+CborOptions.Default.Registry.ConverterRegistry.RegisterConverter(typeof(CustomObject), new CustomObjectConverter());
 ```
 
 3. The last option is to decorate a property or a field with the CborConverterAttribute in a class referencing your custom class:
