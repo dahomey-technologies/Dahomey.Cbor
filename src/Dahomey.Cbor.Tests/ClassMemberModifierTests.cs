@@ -1,5 +1,6 @@
 ﻿using Dahomey.Cbor.Attributes;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Reflection;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -217,6 +218,33 @@ namespace Dahomey.Cbor.Tests
             ObjectWithStaticProperty obj = Helper.Read<ObjectWithStaticProperty>(hexBuffer);
 
             Assert.IsNotNull(obj);
+        }
+
+        private class Tree
+        {
+            public const string Id = "Tree.class";
+            public readonly string Name = "LemonTree";
+            public static int WhatEver = 12;
+        }
+
+        [TestMethod]
+        public void TestWriteByApi()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ObjectMappingRegistry.Register<Tree>(objectMapping =>
+            {
+                objectMapping.AutoMap();
+                objectMapping.MapMember(
+                    typeof(Tree)
+                        .GetField(nameof(Tree.Id), BindingFlags.Public | BindingFlags.Static),
+                    typeof(string));
+                objectMapping.MapMember(tree => tree.Name);
+                objectMapping.MapMember(tree => Tree.WhatEver);
+            });
+
+            Tree obj = new Tree();
+            const string hexBuffer = "A4644E616D65694C656D6F6E547265656249646A547265652E636C617373644E616D65694C656D6F6E547265656857686174457665720C";
+            Helper.TestWrite(obj, hexBuffer, null, options);
         }
     }
 }
