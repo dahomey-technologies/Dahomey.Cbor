@@ -8,12 +8,14 @@ namespace Dahomey.Cbor.Serialization
     {
         public CborConverterRegistry ConverterRegistry { get; }
         public ObjectMappingRegistry ObjectMappingRegistry { get; }
+        public ObjectMappingConventionRegistry ObjectMappingConventionRegistry { get; }
         public DefaultDiscriminatorConvention DefaultDiscriminatorConvention { get; }
 
         public SerializationRegistry()
         {
             ConverterRegistry = new CborConverterRegistry(this);
             ObjectMappingRegistry = new ObjectMappingRegistry(this);
+            ObjectMappingConventionRegistry = new ObjectMappingConventionRegistry();
             DefaultDiscriminatorConvention = new DefaultDiscriminatorConvention();
         }
     }

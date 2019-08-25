@@ -32,56 +32,8 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public ObjectMapping<T> AutoMap()
         {
-            ReadOnlyMemory<byte> typeName = Encoding.ASCII.GetBytes($"{ObjectType.FullName}, {ObjectType.Assembly.GetName().Name}");
-            CborDiscriminatorAttribute discriminatorAttribute = ObjectType.GetCustomAttribute<CborDiscriminatorAttribute>();
-
-            ReadOnlyMemory<byte> discriminator = Encoding.UTF8.GetBytes(discriminatorAttribute != null ?
-                discriminatorAttribute.Discriminator :
-                $"{ObjectType.FullName}, {ObjectType.Assembly.GetName().Name}");
-
-            _registry.DefaultDiscriminatorConvention.RegisterType(ObjectType, discriminator);
-
-            Type namingConventionType = ObjectType.GetCustomAttribute<CborNamingConventionAttribute>()?.NamingConventionType;
-            if (namingConventionType != null)
-            {
-                NamingConvention = (INamingConvention)Activator.CreateInstance(namingConventionType);
-            }
-
-            PropertyInfo[] properties = ObjectType.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            FieldInfo[] fields = ObjectType.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-
-            foreach (PropertyInfo propertyInfo in properties)
-            {
-                if (propertyInfo.IsDefined(typeof(CborIgnoreAttribute)))
-                {
-                    continue;
-                }
-
-                if ((propertyInfo.GetMethod.IsPrivate || propertyInfo.GetMethod.IsStatic) && ! propertyInfo.IsDefined(typeof(CborPropertyAttribute)))
-                {
-                    continue;
-                }
-
-                _memberMappings.Add(new MemberMapping(_registry.ConverterRegistry, this, propertyInfo, propertyInfo.PropertyType));
-            }
-
-            foreach (FieldInfo fieldInfo in fields)
-            {
-                if (fieldInfo.IsDefined(typeof(CborIgnoreAttribute)))
-                {
-                    continue;
-                }
-
-                if ((fieldInfo.IsPrivate || fieldInfo.IsStatic) && !fieldInfo.IsDefined(typeof(CborPropertyAttribute)))
-                {
-                    continue;
-                }
-
-                Type fieldType = fieldInfo.FieldType;
-
-                _memberMappings.Add(new MemberMapping(_registry.ConverterRegistry, this, fieldInfo, fieldInfo.FieldType));
-            }
-
+            IObjectMappingConvention convention = _registry.ObjectMappingConventionRegistry.Lookup<T>();
+            convention.Apply<T>(_registry, this);
             return this;
         }
 
