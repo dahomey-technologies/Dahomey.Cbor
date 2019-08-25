@@ -1,12 +1,10 @@
-﻿using Dahomey.Cbor.Attributes;
-using Dahomey.Cbor.Serialization.Conventions;
+﻿using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
@@ -19,10 +17,13 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     {
         private readonly SerializationRegistry _registry;
         private List<IMemberMapping> _memberMappings = new List<IMemberMapping>();
+        private ICreatorMapping _creatorMapping = null;
 
         public Type ObjectType { get; private set; }
+
         public INamingConvention NamingConvention { get; private set; }
         public IReadOnlyCollection<IMemberMapping> MemberMappings => _memberMappings;
+        public ICreatorMapping CreatorMapping => _creatorMapping;
 
         public ObjectMapping(SerializationRegistry registry)
         {
@@ -82,6 +83,65 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public ObjectMapping<T> ClearMemberMappings()
         {
             _memberMappings.Clear();
+            return this;
+        }
+
+        public ObjectMapping<T> MapCreator(ConstructorInfo constructorInfo)
+        {
+            if (constructorInfo == null)
+            {
+                throw new ArgumentNullException("constructorInfo");
+            }
+
+            _creatorMapping = new CreatorMapping(this, constructorInfo);
+            return this;
+        }
+
+
+        private ObjectMapping<T> MapCreator(MethodInfo method)
+        {
+            if (method == null)
+            {
+                throw new ArgumentNullException("method");
+            }
+
+            _creatorMapping = new CreatorMapping(this, method);
+            return this;
+        }
+
+        public ObjectMapping<T> MapCreator(Delegate creatorFunc)
+        {
+            if (creatorFunc == null)
+            {
+                throw new ArgumentNullException("creatorFunc");
+            }
+
+            _creatorMapping = new CreatorMapping(this, creatorFunc);
+            return this;
+        }
+
+        public ObjectMapping<T> MapCreator(Expression<Func<T, T>> creatorLambda)
+        {
+            if (creatorLambda == null)
+            {
+                throw new ArgumentNullException("creatorLambda");
+            }
+
+            if (creatorLambda.Body is NewExpression newExpression)
+            {
+                return MapCreator(newExpression.Constructor);
+            }
+            else if (creatorLambda.Body is MethodCallExpression methodCallExpression && methodCallExpression.Object == null)
+            {
+                return MapCreator(methodCallExpression.Method);
+            }
+
+            throw new ArgumentException("creatorLambda should be a 'new' or a static 'method call' expression");
+        }
+
+        public ObjectMapping<T> SetCreatorMapping(ICreatorMapping creatorMapping)
+        {
+            _creatorMapping = creatorMapping;
             return this;
         }
 

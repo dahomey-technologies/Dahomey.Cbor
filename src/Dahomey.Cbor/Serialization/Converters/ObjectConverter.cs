@@ -4,19 +4,18 @@ using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
-using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
     public interface IObjectConverter
     {
         void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName);
+        object ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName);
         List<IMemberConverter> MemberConvertersForWrite { get; }
     }
 
     public interface IObjectConverter<out T> : IObjectConverter
-        where T : class, new()
+        where T : class
     {
         T CreateInstance();
     }
@@ -26,12 +25,13 @@ namespace Dahomey.Cbor.Serialization.Converters
         IObjectConverter<T>,
         ICborMapReader<ObjectConverter<T>.MapReaderContext>,
         ICborMapWriter<ObjectConverter<T>.MapWriterContext>
-        where T : class, new()
+        where T : class
     {
         public struct MapReaderContext
         {
             public T obj;
             public IObjectConverter<T> converter;
+            public Dictionary<RawString, object> creatorValues;
         }
 
         public struct MapWriterContext
@@ -52,6 +52,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly List<IMemberConverter> _memberConvertersForWrite;
         private readonly SerializationRegistry _registry;
         private readonly IObjectMapping _objectMapping;
+        private readonly Func<T> _constructor;
 
         public List<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
 
@@ -78,11 +79,16 @@ namespace Dahomey.Cbor.Serialization.Converters
                     _memberConvertersForWrite.Add(memberConverter);
                 }
             }
+
+            if (_objectMapping.CreatorMapping == null)
+            {
+                _constructor = typeof(T).GetConstructor(new Type[0]).CreateDelegate<T>();
+            }
         }
 
         public T CreateInstance()
         {
-            return new T();
+            return _constructor();
         }
 
         public override T Read(ref CborReader reader)
@@ -92,8 +98,29 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return null;
             }
 
-            MapReaderContext context = new MapReaderContext();
+            MapReaderContext context = new MapReaderContext
+            {
+                creatorValues = _objectMapping.CreatorMapping != null ? new Dictionary<RawString, object>() : null
+            };
+
             reader.ReadMap(this, ref context);
+
+            if (context.creatorValues != null)
+            {
+                context.obj = (T)_objectMapping.CreatorMapping.CreateInstance(context.creatorValues);
+
+                foreach (KeyValuePair<RawString, object> value in context.creatorValues)
+                {
+                    if (!_memberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter memberConverter))
+                    {
+                        // should not happen
+                        throw new InvalidOperationException();
+                    }
+
+                    memberConverter.Set(context.obj, value.Value);
+                }
+            }
+
             return context.obj;
         }
 
@@ -109,6 +136,19 @@ namespace Dahomey.Cbor.Serialization.Converters
             else
             {
                 memberConverter.Read(ref reader, value);
+            }
+        }
+
+        public object ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName)
+        {
+            if (!_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter memberConverter))
+            {
+                // should not happen because creator arguments have been validated during initialization
+                throw new InvalidOperationException();
+            }
+            else
+            {
+                return memberConverter.Read(ref reader);
             }
         }
 
@@ -150,20 +190,37 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             if (context.obj == null)
             {
-                IDiscriminatorConvention discriminatorConvention = reader.Options.DiscriminatorConvention;
+                bool shouldReadValue = true;
 
-                if (memberName.SequenceEqual(discriminatorConvention.MemberName))
+                if (context.converter == null)
                 {
-                    // discriminator value
-                    Type actualType = discriminatorConvention.ReadDiscriminator(ref reader);
-                    context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
-                    context.obj = context.converter.CreateInstance();
+                    IDiscriminatorConvention discriminatorConvention = reader.Options.DiscriminatorConvention;
+
+                    if (memberName.SequenceEqual(discriminatorConvention.MemberName))
+                    {
+                        // discriminator value
+                        Type actualType = discriminatorConvention.ReadDiscriminator(ref reader);
+                        context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
+                        shouldReadValue = false;
+                    }
+                    else
+                    {
+                        context.converter = this;
+                    }
                 }
-                else
+
+                if (context.creatorValues == null)
                 {
-                    context.converter = this;
                     context.obj = context.converter.CreateInstance();
-                    context.converter.ReadValue(ref reader, context.obj, memberName);
+                    if (shouldReadValue)
+                    {
+                        context.converter.ReadValue(ref reader, context.obj, memberName);
+                    }
+                }
+                else if (shouldReadValue)
+                {
+                    object value = context.converter.ReadValue(ref reader, memberName);
+                    context.creatorValues.Add(new RawString(memberName), value);
                 }
             }
             else

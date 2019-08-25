@@ -2,6 +2,7 @@
 using Dahomey.Cbor.Serialization.Conventions;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 
@@ -65,6 +66,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
 
             objectMapping.SetMemberMappings(memberMappings);
+
+            ConstructorInfo constructorInfo = type.GetConstructors()
+                .FirstOrDefault(c => c.IsDefined(typeof(CborConstructorAttribute)));
+
+            if (constructorInfo != null)
+            {
+                objectMapping.MapCreator(constructorInfo);
+            }
         }
     }
 }

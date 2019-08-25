@@ -20,6 +20,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public ICborConverter MemberConverter => GetMemberConverter();
         public bool CanBeDeserialized => GetCanBeDeserialized();
         public bool CanBeSerialized => GetCanBeSerialized();
+        public object DefaultValue { get; }
 
         public MemberMapping(CborConverterRegistry converterRegistry,
             IObjectMapping objectMapping, MemberInfo memberInfo, Type memberType)
@@ -28,6 +29,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _converterRegistry = converterRegistry;
             MemberInfo = memberInfo;
             MemberType = memberType;
+            DefaultValue = memberType.IsClass ? null : Activator.CreateInstance(memberType);
         }
 
         public MemberMapping SetMemberName(string memberName)

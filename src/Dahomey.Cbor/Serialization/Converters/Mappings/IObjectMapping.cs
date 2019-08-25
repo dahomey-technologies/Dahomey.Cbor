@@ -9,5 +9,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         Type ObjectType { get; }
         INamingConvention NamingConvention { get; }
         IReadOnlyCollection<IMemberMapping> MemberMappings { get; }
+        ICreatorMapping CreatorMapping { get;  }
     }
 }

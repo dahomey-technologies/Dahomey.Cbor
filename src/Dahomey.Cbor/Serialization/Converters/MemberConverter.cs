@@ -8,13 +8,15 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public interface IMemberConverter
     {
+        ReadOnlySpan<byte> MemberName { get; }
         void Read(ref CborReader reader, object obj);
         void Write(ref CborWriter writer, object obj);
-        ReadOnlySpan<byte> MemberName { get; }
+        object Read(ref CborReader reader);
+        void Set(object obj, object value);
     }
 
     public class MemberConverter<T, TP> : IMemberConverter
-        where T : class, new()
+        where T : class
     {
         private readonly IMemberMapping _memberMapping;
         private readonly Func<T, TP> _memberGetter;
@@ -44,6 +46,16 @@ namespace Dahomey.Cbor.Serialization.Converters
         public void Write(ref CborWriter writer, object obj)
         {
             _memberConverter.Write(ref writer, _memberGetter((T)obj));
+        }
+
+        public object Read(ref CborReader reader)
+        {
+            return _memberConverter.Read(ref reader);
+        }
+
+        public void Set(object obj, object value)
+        {
+            _memberSetter((T)obj, (TP)value);
         }
 
         private Func<T, TP> GenerateGetter(MemberInfo memberInfo)
