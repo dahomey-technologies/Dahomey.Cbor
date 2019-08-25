@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.ObjectModel;
+using System;
 using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Serialization.Converters
@@ -112,6 +113,10 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 case CborValueType.Null:
                     writer.WriteNull();
+                    break;
+
+                case CborValueType.ByteString:
+                    writer.WriteByteString(value.Value<ReadOnlyMemory<byte>>().Span);
                     break;
             }
         }
