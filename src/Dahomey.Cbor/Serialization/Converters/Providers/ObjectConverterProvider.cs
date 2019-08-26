@@ -6,7 +6,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
     {
         public override ICborConverter GetConverter(Type type, SerializationRegistry registry)
         {
-            if (type.IsClass)
+            if (type.IsClass || type.IsInterface)
             {
                 return CreateGenericConverter(registry, typeof(ObjectConverter<>), type);
             }

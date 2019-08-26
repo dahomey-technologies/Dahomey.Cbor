@@ -53,6 +53,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly SerializationRegistry _registry;
         private readonly IObjectMapping _objectMapping;
         private readonly Func<T> _constructor;
+        private readonly bool _isInterfaceOrAbstract;
 
         public List<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
 
@@ -80,7 +81,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
             }
 
-            if (_objectMapping.CreatorMapping == null)
+            _isInterfaceOrAbstract = typeof(T).IsInterface || typeof(T).IsAbstract;
+
+            if (!_isInterfaceOrAbstract && _objectMapping.CreatorMapping == null)
             {
                 _constructor = typeof(T).GetConstructor(new Type[0]).CreateDelegate<T>();
             }
@@ -88,6 +91,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public T CreateInstance()
         {
+            if (_isInterfaceOrAbstract)
+            {
+                throw new CborException("A CreatorMapping should be defined for interfaces or abstract classes");
+            }
+
             return _constructor();
         }
 
@@ -165,7 +173,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 obj = value,
             };
 
-            if (value.GetType() != typeof(T))
+            if (!_isInterfaceOrAbstract && value.GetType() != typeof(T))
             {
                 context.state = MapWriterContext.State.Discriminator;
                 context.objectConverter = (IObjectConverter)_registry.ConverterRegistry.Lookup(value.GetType());

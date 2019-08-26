@@ -126,5 +126,78 @@ namespace Dahomey.Cbor.Tests
         {
             return new ObjectWithConstructor(id, name);
         }
+
+        private interface IFoo
+        {
+            int Id { get; set; }
+        }
+
+        private class Foo : IFoo
+        {
+            public int Id { get; set; }
+        }
+
+        private class ObjectWithInterface
+        {
+            public IFoo Foo { get; set; }
+        }
+
+        [TestMethod]
+        public void Interface()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ObjectMappingRegistry.Register<IFoo>(objectMapping =>
+                objectMapping
+                    .AutoMap()
+                    .MapCreator(o => new Foo())
+            );
+
+            const string hexBuffer = "A163466F6FA16249640C";
+            ObjectWithInterface obj = Helper.Read<ObjectWithInterface>(hexBuffer, options);
+
+            Assert.IsNotNull(obj);
+            Assert.IsNotNull(obj.Foo);
+            Assert.IsInstanceOfType(obj.Foo, typeof(Foo));
+            Assert.AreEqual(12, obj.Foo.Id);
+
+            Helper.TestWrite(obj, hexBuffer, null, options);
+        }
+
+        public abstract class AbstractBar
+        {
+            public int Id { get; set; }
+        }
+
+        public class Bar : AbstractBar
+        {
+        }
+
+        public class ObjectWithAbstractClass
+        {
+            public AbstractBar Bar { get; set; }
+        }
+
+        [TestMethod]
+        public void AbstractClass()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ObjectMappingRegistry.Register<AbstractBar>(objectMapping =>
+                objectMapping
+                    .AutoMap()
+                    .MapCreator(o => new Bar())
+            );
+
+            const string hexBuffer = "A163426172A16249640C";
+            ObjectWithAbstractClass obj = Helper.Read<ObjectWithAbstractClass>(hexBuffer, options);
+
+            Assert.IsNotNull(obj);
+            Assert.IsNotNull(obj.Bar);
+            Assert.IsInstanceOfType(obj.Bar, typeof(Bar));
+            Assert.AreEqual(12, obj.Bar.Id);
+
+            Helper.TestRead(hexBuffer, (ObjectWithAbstractClass)null, typeof(CborException));
+
+            Helper.TestWrite(obj, hexBuffer, null, options);
+        }
     }
 }

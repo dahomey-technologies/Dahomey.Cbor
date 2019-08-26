@@ -29,7 +29,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _converterRegistry = converterRegistry;
             MemberInfo = memberInfo;
             MemberType = memberType;
-            DefaultValue = memberType.IsClass ? null : Activator.CreateInstance(memberType);
+            DefaultValue = (memberType.IsClass || memberType.IsInterface) ? null : Activator.CreateInstance(memberType);
         }
 
         public MemberMapping SetMemberName(string memberName)
