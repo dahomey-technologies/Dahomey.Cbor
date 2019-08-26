@@ -1,6 +1,11 @@
-﻿using Dahomey.Cbor.Serialization.Conventions;
+﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Serialization.Conventions;
+using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Linq;
+using System.Reflection;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -201,6 +206,63 @@ namespace Dahomey.Cbor.Tests
 
             const string hexBuffer = "A3625F7469696E686572697465646E496E6865726974656456616C75650D694261736556616C75650C";
             Helper.TestWrite<BaseObject>(obj, hexBuffer, null, options);
+        }
+
+        public class OptInObjectMappingConventionProvider : IObjectMappingConventionProvider
+        {
+            public IObjectMappingConvention GetConvention(Type type)
+            {
+                // here you could filter which type should be optIn and return null for other types
+                return new OptInObjectMappingConvention();
+            }
+        }
+
+        public class OptInObjectMappingConvention : IObjectMappingConvention
+        {
+            private readonly DefaultObjectMappingConvention _defaultConvention = new DefaultObjectMappingConvention();
+
+            public void Apply<T>(SerializationRegistry registry, ObjectMapping<T> objectMapping) where T : class
+            {
+                _defaultConvention.Apply(registry, objectMapping);
+
+                // restrict to members holding CborPropertyAttribute
+                objectMapping.SetMemberMappings(objectMapping.MemberMappings
+                    .Where(m => m.MemberInfo.IsDefined(typeof(CborPropertyAttribute)))
+                    .ToList());
+            }
+        }
+
+        public class OptInObject1
+        {
+            [CborProperty]
+            public int Id { get; set; }
+
+            public string Name { get; set; }
+        }
+
+        public class OptInObject2
+        {
+            public int Id { get; set; }
+
+            [CborProperty]
+            public string Name { get; set; }
+        }
+
+        [TestMethod]
+        public void OptIn()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ObjectMappingConventionRegistry.RegisterProvider(
+                new OptInObjectMappingConventionProvider()
+            );
+
+            OptInObject1 obj1 = new OptInObject1 { Id = 12, Name = "foo" };
+            const string hexBuffer1 = "A16249640C";
+            Helper.TestWrite(obj1, hexBuffer1, null, options);
+
+            OptInObject2 obj2 = new OptInObject2 { Id = 12, Name = "foo" };
+            const string hexBuffer2 = "A1644E616D6563666F6F";
+            Helper.TestWrite(obj2, hexBuffer2, null, options);
         }
     }
 }
