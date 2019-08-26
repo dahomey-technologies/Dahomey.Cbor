@@ -24,6 +24,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 {
                     Type keyType = type.GetGenericArguments()[0];
                     Type valueType = type.GetGenericArguments()[1];
+
                     return CreateGenericConverter(
                         registry,
                         typeof(ImmutableDictionaryConverter<,,>), type, keyType, valueType);
@@ -39,6 +40,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                         typeof(DictionaryConverter<,,>), type, keyType, valueType);
                 }
 
+                if (type.IsInterface
+                    && type.IsGenericType
+                    && type.GetGenericTypeDefinition() == typeof(IDictionary<,>))
+                {
+                    Type keyType = type.GetGenericArguments()[0];
+                    Type valueType = type.GetGenericArguments()[1];
+                    return CreateGenericConverter(
+                        registry,
+                        typeof(InterfaceDictionaryConverter<,>),
+                        keyType, valueType);
+                }
+
                 if (type.GetGenericTypeDefinition() == typeof(ImmutableArray<>)
                     || type.GetGenericTypeDefinition() == typeof(ImmutableList<>)
                     || type.GetGenericTypeDefinition() == typeof(ImmutableSortedSet<>)
@@ -50,13 +63,35 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                         typeof(ImmutableCollectionConverter<,>), type, itemType);
                 }
 
+                if (type.IsInterface
+                    && type.IsGenericType
+                    && type.GetGenericTypeDefinition() == typeof(ISet<>))
+                {
+                    Type itemType = type.GetGenericArguments()[0];
+                    return CreateGenericConverter(
+                        registry,
+                        typeof(InterfaceCollectionConverter<,,>),
+                        typeof(HashSet<>).MakeGenericType(itemType), type, itemType);
+                }
+
                 if (type.GetInterfaces()
                     .Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(ICollection<>)))
                 {
                     Type itemType = type.GetGenericArguments()[0];
                     return CreateGenericConverter(
-                        registry, 
+                        registry,
                         typeof(CollectionConverter<,>), type, itemType);
+                }
+
+                if (type.IsInterface 
+                    && type.IsGenericType
+                    && type.GetGenericTypeDefinition() == typeof(ICollection<>))
+                {
+                    Type itemType = type.GetGenericArguments()[0];
+                    return CreateGenericConverter(
+                        registry,
+                        typeof(InterfaceCollectionConverter<,,>),
+                        typeof(List<>).MakeGenericType(itemType), type, itemType);
                 }
             }
 
