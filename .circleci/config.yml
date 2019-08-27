@@ -19,7 +19,7 @@ jobs:
       - image: mcr.microsoft.com/dotnet/core/sdk:2.2
     steps:
       - checkout
-      - run: dotnet build -c Release src/Dahomey.Cbor
+      - run: dotnet pack -p:Version=${CIRCLE_TAG} -p:FileVersion=${CIRCLE_TAG} -p:AssemblyVersion=${CIRCLE_TAG} -c Release src/Dahomey.Cbor
       - run: dotnet nuget push src/Dahomey.Cbor/bin/Release/Dahomey.Cbor.${CIRCLE_TAG}.nupkg -k ${NUGET_API_KEY} -s https://api.nuget.org/v3/index.json
 
 workflows:
