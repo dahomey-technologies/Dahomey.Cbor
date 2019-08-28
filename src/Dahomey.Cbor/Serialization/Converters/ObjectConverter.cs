@@ -4,6 +4,7 @@ using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -32,6 +33,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             public T obj;
             public IObjectConverter<T> converter;
             public Dictionary<RawString, object> creatorValues;
+            public Dictionary<RawString, object> regularValues;
         }
 
         public struct MapWriterContext
@@ -74,6 +76,17 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     _memberConvertersForRead.Add(memberConverter.MemberName, memberConverter);
                 }
+                else if (_objectMapping.CreatorMapping != null)
+                {
+                    foreach (RawString creatorMemberName in _objectMapping.CreatorMapping.MemberNames)
+                    {
+                        if (creatorMemberName.Buffer.Span.SequenceEqual(memberConverter.MemberName))
+                        {
+                            _memberConvertersForRead.Add(memberConverter.MemberName, memberConverter);
+                            break;
+                        }
+                    }
+                }
 
                 if (memberMapping.CanBeSerialized)
                 {
@@ -108,7 +121,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             MapReaderContext context = new MapReaderContext
             {
-                creatorValues = _objectMapping.CreatorMapping != null ? new Dictionary<RawString, object>() : null
+                creatorValues = _objectMapping.CreatorMapping != null ? new Dictionary<RawString, object>() : null,
+                regularValues = _objectMapping.CreatorMapping != null ? new Dictionary<RawString, object>() : null
             };
 
             reader.ReadMap(this, ref context);
@@ -117,12 +131,12 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 context.obj = (T)_objectMapping.CreatorMapping.CreateInstance(context.creatorValues);
 
-                foreach (KeyValuePair<RawString, object> value in context.creatorValues)
+                foreach (KeyValuePair<RawString, object> value in context.regularValues)
                 {
                     if (!_memberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter memberConverter))
                     {
                         // should not happen
-                        throw new InvalidOperationException();
+                        throw new CborException("Unexpected error");
                     }
 
                     memberConverter.Set(context.obj, value.Value);
@@ -152,7 +166,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             if (!_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter memberConverter))
             {
                 // should not happen because creator arguments have been validated during initialization
-                throw new InvalidOperationException();
+                throw new CborException("Unexpected error");
             }
             else
             {
@@ -228,7 +242,25 @@ namespace Dahomey.Cbor.Serialization.Converters
                 else if (shouldReadValue)
                 {
                     object value = context.converter.ReadValue(ref reader, memberName);
-                    context.creatorValues.Add(new RawString(memberName), value);
+
+                    bool isCreatorValue = false;
+                    foreach(RawString creatorMemberName in _objectMapping.CreatorMapping.MemberNames)
+                    {
+                        if (creatorMemberName.Buffer.Span.SequenceEqual(memberName))
+                        {
+                            isCreatorValue = true;
+                            break;
+                        }
+                    }
+
+                    if (isCreatorValue)
+                    {
+                        context.creatorValues.Add(new RawString(memberName), value);
+                    }
+                    else
+                    {
+                        context.regularValues.Add(new RawString(memberName), value);
+                    }
                 }
             }
             else

@@ -15,6 +15,19 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private List<RawString> _memberNames = null;
         private List<object> _defaultValues = null;
 
+        public IReadOnlyCollection<RawString> MemberNames
+        {
+            get
+            {
+                if (_memberNames == null)
+                {
+                    Initialize();
+                }
+
+                return _memberNames;
+            }
+        }
+
         public CreatorMapping(IObjectMapping objectMapping, ConstructorInfo constructorInfo)
         {
             _objectMapping = objectMapping;

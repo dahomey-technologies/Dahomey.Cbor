@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.Serialization.Converters.Mappings;
+using Dahomey.Cbor.Util;
 using System;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -15,13 +16,13 @@ namespace Dahomey.Cbor.Serialization.Converters
         void Set(object obj, object value);
     }
 
-    public class MemberConverter<T, TP> : IMemberConverter
+    public class MemberConverter<T, TM> : IMemberConverter
         where T : class
     {
         private readonly IMemberMapping _memberMapping;
-        private readonly Func<T, TP> _memberGetter;
-        private readonly Action<T, TP> _memberSetter;
-        private readonly ICborConverter<TP> _memberConverter;
+        private readonly Func<T, TM> _memberGetter;
+        private readonly Action<T, TM> _memberSetter;
+        private readonly ICborConverter<TM> _memberConverter;
         private ReadOnlyMemory<byte> _memberName;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
@@ -35,7 +36,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             _memberName = Encoding.UTF8.GetBytes(_memberMapping.MemberName);
             _memberGetter = GenerateGetter(memberInfo);
             _memberSetter = GenerateSetter(memberInfo);
-            _memberConverter = (ICborConverter<TP>)_memberMapping.MemberConverter;
+            _memberConverter = (ICborConverter<TM>)_memberMapping.MemberConverter;
         }
 
         public void Read(ref CborReader reader, object obj)
@@ -55,10 +56,10 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void Set(object obj, object value)
         {
-            _memberSetter((T)obj, (TP)value);
+            _memberSetter((T)obj, (TM)value);
         }
 
-        private Func<T, TP> GenerateGetter(MemberInfo memberInfo)
+        private Func<T, TM> GenerateGetter(MemberInfo memberInfo)
         {
             switch(memberInfo)
             {
@@ -71,36 +72,34 @@ namespace Dahomey.Cbor.Serialization.Converters
                         }
 
                         ParameterExpression objParam = Expression.Parameter(typeof(T), "obj");
-                        return Expression.Lambda<Func<T, TP>>(
+                        return Expression.Lambda<Func<T, TM>>(
                             Expression.Property(null, propertyInfo),
                             objParam).Compile();
                     }
 
                     return propertyInfo.CanRead
-                       ? (Func<T, TP>)propertyInfo.GetMethod.CreateDelegate(typeof(Func<T, TP>))
+                       ? propertyInfo.GenerateGetter<T, TM>()
                        : null;
 
                 case FieldInfo fieldInfo:
-                    {
-                        ParameterExpression objParam = Expression.Parameter(typeof(T), "obj");
-                        return Expression.Lambda<Func<T, TP>>(
-                            Expression.Field(fieldInfo.IsStatic ? null : objParam, fieldInfo),
-                            objParam).Compile();
-                    }
+                    return fieldInfo.GenerateGetter<T, TM>();
 
                 default:
                     return null;
             }
         }
 
-        private Action<T, TP> GenerateSetter(MemberInfo memberInfo)
+        private Action<T, TM> GenerateSetter(MemberInfo memberInfo)
         {
             switch (memberInfo)
             {
                 case PropertyInfo propertyInfo:
-                    return (propertyInfo.CanWrite && !propertyInfo.SetMethod.IsStatic)
-                       ? (Action<T, TP>)propertyInfo.SetMethod.CreateDelegate(typeof(Action<T, TP>))
-                       : null;
+                    if (!propertyInfo.CanWrite || propertyInfo.SetMethod.IsStatic)
+                    {
+                        return null;
+                    }
+
+                    return propertyInfo.GenerateSetter<T, TM>();
 
                 case FieldInfo fieldInfo:
                     if (fieldInfo.IsStatic || fieldInfo.IsInitOnly)
@@ -108,16 +107,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                         return null;
                     }
 
-                    ParameterExpression objParam = Expression.Parameter(typeof(T), "obj");
-                    ParameterExpression valueParam = Expression.Parameter(typeof(TP), "value");
-
-                    return Expression.Lambda<Action<T, TP>>(
-                        Expression.Assign(
-                            Expression.Field(
-                                objParam,
-                                fieldInfo),
-                            valueParam),
-                        objParam, valueParam).Compile();
+                    return fieldInfo.GenerateSetter<T, TM>();
 
                 default:
                     return null;
