@@ -16,6 +16,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         
         public void Register(IObjectMapping objectMapping)
         {
+            if (objectMapping is IMappingInitialization mappingInitialization)
+            {
+                mappingInitialization.Initialize();
+            }
+
             _objectMappings.AddOrUpdate(objectMapping.ObjectType, objectMapping,
                 (type, existingObjectMapping) => objectMapping);
         }
@@ -42,6 +47,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             ObjectMapping<T> objectMapping = new ObjectMapping<T>(_registry);
             objectMapping.AutoMap();
+
+            if (objectMapping is IMappingInitialization mappingInitialization)
+            {
+                mappingInitialization.Initialize();
+            }
+
             return objectMapping;
         }
     }

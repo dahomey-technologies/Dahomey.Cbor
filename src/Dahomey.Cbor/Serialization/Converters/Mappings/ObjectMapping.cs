@@ -86,41 +86,44 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return this;
         }
 
-        public ObjectMapping<T> MapCreator(ConstructorInfo constructorInfo)
+        public CreatorMapping MapCreator(ConstructorInfo constructorInfo)
         {
             if (constructorInfo == null)
             {
                 throw new ArgumentNullException("constructorInfo");
             }
 
-            _creatorMapping = new CreatorMapping(this, constructorInfo);
-            return this;
+            CreatorMapping creatorMapping = new CreatorMapping(this, constructorInfo);
+            _creatorMapping = creatorMapping;
+            return creatorMapping;
         }
 
 
-        private ObjectMapping<T> MapCreator(MethodInfo method)
+        private CreatorMapping MapCreator(MethodInfo method)
         {
             if (method == null)
             {
                 throw new ArgumentNullException("method");
             }
 
-            _creatorMapping = new CreatorMapping(this, method);
-            return this;
+            CreatorMapping creatorMapping = new CreatorMapping(this, method);
+            _creatorMapping = creatorMapping;
+            return creatorMapping;
         }
 
-        public ObjectMapping<T> MapCreator(Delegate creatorFunc)
+        public CreatorMapping MapCreator(Delegate creatorFunc)
         {
             if (creatorFunc == null)
             {
                 throw new ArgumentNullException("creatorFunc");
             }
 
-            _creatorMapping = new CreatorMapping(this, creatorFunc);
-            return this;
+            CreatorMapping creatorMapping = new CreatorMapping(this, creatorFunc);
+            _creatorMapping = creatorMapping;
+            return creatorMapping;
         }
 
-        public ObjectMapping<T> MapCreator(Expression<Func<T, T>> creatorLambda)
+        public CreatorMapping MapCreator(Expression<Func<T, T>> creatorLambda)
         {
             if (creatorLambda == null)
             {
@@ -143,6 +146,22 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             _creatorMapping = creatorMapping;
             return this;
+        }
+
+        public void Initialize()
+        {
+            foreach(IMemberMapping mapping in _memberMappings)
+            {
+                if (mapping is IMappingInitialization memberInitialization)
+                {
+                    memberInitialization.Initialize();
+                }
+            }
+
+            if (CreatorMapping != null && CreatorMapping is IMappingInitialization creatorInitialization)
+            {
+                creatorInitialization.Initialize();
+            }
         }
 
         private static (MemberInfo, Type) GetMemberInfoFromLambda<TM>(Expression<Func<T, TM>> memberLambda)

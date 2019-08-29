@@ -3,7 +3,7 @@ using System.Reflection;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
-    public interface IMemberMapping
+    public interface IMemberMapping : IMappingInitialization
     {
         MemberInfo MemberInfo { get; }
         Type MemberType { get; }

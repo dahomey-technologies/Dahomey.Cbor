@@ -72,7 +72,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
             if (constructorInfo != null)
             {
-                objectMapping.MapCreator(constructorInfo);
+                CborConstructorAttribute constructorAttribute = constructorInfo.GetCustomAttribute<CborConstructorAttribute>();
+                CreatorMapping creatorMapping = objectMapping.MapCreator(constructorInfo);
+                if (constructorAttribute.MemberNames != null)
+                {
+                    creatorMapping.SetMemberNames(constructorAttribute.MemberNames);
+                }
             }
         }
     }

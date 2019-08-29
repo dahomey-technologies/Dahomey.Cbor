@@ -9,17 +9,13 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     {
         private readonly IObjectMapping _objectMapping;
         private readonly CborConverterRegistry _converterRegistry;
-        private string _memberName;
-        private ICborConverter _memberConverter;
-        private bool? _canBeDeserialized;
-        private bool? _canBeSerialized;
 
         public MemberInfo MemberInfo { get; private set; }
         public Type MemberType { get; private set; }
-        public string MemberName => GetMemberName();
-        public ICborConverter MemberConverter => GetMemberConverter();
-        public bool CanBeDeserialized => GetCanBeDeserialized();
-        public bool CanBeSerialized => GetCanBeSerialized();
+        public string MemberName { get; private set; }
+        public ICborConverter MemberConverter { get; private set; }
+        public bool CanBeDeserialized { get; private set; }
+        public bool CanBeSerialized { get; private set; }
         public object DefaultValue { get; }
 
         public MemberMapping(CborConverterRegistry converterRegistry,
@@ -34,42 +30,47 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public MemberMapping SetMemberName(string memberName)
         {
-            _memberName = memberName;
+            MemberName = memberName;
             return this;
         }
 
         public MemberMapping SetMemberConverter(ICborConverter converter)
         {
-            VerifyMemberConverterType(converter.GetType());
-            _memberConverter = converter;
+            MemberConverter = converter;
             return this;
         }
 
-        private string GetMemberName()
+        public void Initialize()
         {
-            if (string.IsNullOrEmpty(_memberName))
+            InitializeMemberName();
+            InitializeMemberConverter();
+            InitializeCanBeDeserialized();
+            InitializeCanBeSerialized();
+        }
+
+        private void InitializeMemberName()
+        {
+            if (string.IsNullOrEmpty(MemberName))
             {
                 CborPropertyAttribute cborPropertyAttribute = MemberInfo.GetCustomAttribute<CborPropertyAttribute>();
                 if (cborPropertyAttribute != null && cborPropertyAttribute.PropertyName != null)
                 {
-                    _memberName = cborPropertyAttribute.PropertyName;
+                    MemberName = cborPropertyAttribute.PropertyName;
                 }
                 else if (_objectMapping.NamingConvention != null)
                 {
-                    _memberName = _objectMapping.NamingConvention.GetPropertyName(MemberInfo.Name);
+                    MemberName = _objectMapping.NamingConvention.GetPropertyName(MemberInfo.Name);
                 }
                 else
                 {
-                    _memberName = MemberInfo.Name;
+                    MemberName = MemberInfo.Name;
                 }
             }
-
-            return _memberName;
         }
 
-        private ICborConverter GetMemberConverter()
+        private void InitializeMemberConverter()
         {
-            if (_memberConverter == null)
+            if (MemberConverter == null)
             {
                 CborConverterAttribute converterAttribute = MemberInfo.GetCustomAttribute<CborConverterAttribute>();
                 if (converterAttribute != null)
@@ -77,61 +78,53 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     Type converterType = converterAttribute.ConverterType;
                     VerifyMemberConverterType(converterType);
 
-                    _memberConverter = (ICborConverter)Activator.CreateInstance(converterType);
+                    MemberConverter = (ICborConverter)Activator.CreateInstance(converterType);
                 }
                 else
                 {
-                    _memberConverter = _converterRegistry.Lookup(MemberType);
+                    MemberConverter = _converterRegistry.Lookup(MemberType);
                 }
             }
-
-            return _memberConverter;
+            else
+            {
+                VerifyMemberConverterType(MemberConverter.GetType());
+            }
         }
 
-        private bool GetCanBeDeserialized()
+        private void InitializeCanBeDeserialized()
         {
-            if (!_canBeDeserialized.HasValue)
+            switch (MemberInfo)
             {
-                switch (MemberInfo)
-                {
-                    case PropertyInfo propertyInfo:
-                        _canBeDeserialized = propertyInfo.CanWrite && !propertyInfo.GetMethod.IsStatic;
-                        break;
+                case PropertyInfo propertyInfo:
+                    CanBeDeserialized = propertyInfo.CanWrite && !propertyInfo.GetMethod.IsStatic;
+                    break;
 
-                    case FieldInfo fieldInfo:
-                        _canBeDeserialized = !fieldInfo.IsInitOnly && !fieldInfo.IsStatic;
-                        break;
+                case FieldInfo fieldInfo:
+                    CanBeDeserialized = !fieldInfo.IsInitOnly && !fieldInfo.IsStatic;
+                    break;
 
-                    default:
-                        _canBeDeserialized = false;
-                        break;
-                }
+                default:
+                    CanBeDeserialized = false;
+                    break;
             }
-
-            return _canBeDeserialized.Value;
         }
 
-        private bool GetCanBeSerialized()
+        private void InitializeCanBeSerialized()
         {
-            if (!_canBeSerialized.HasValue)
+            switch (MemberInfo)
             {
-                switch (MemberInfo)
-                {
-                    case PropertyInfo propertyInfo:
-                        _canBeSerialized = propertyInfo.CanRead;
-                        break;
+                case PropertyInfo propertyInfo:
+                    CanBeSerialized = propertyInfo.CanRead;
+                    break;
 
-                    case FieldInfo fieldInfo:
-                        _canBeSerialized = true;
-                        break;
+                case FieldInfo fieldInfo:
+                    CanBeSerialized = true;
+                    break;
 
-                    default:
-                        _canBeSerialized = false;
-                        break;
-                }
+                default:
+                    CanBeSerialized = false;
+                    break;
             }
-
-            return _canBeSerialized.Value;
         }
 
         private void VerifyMemberConverterType(Type memberConverterType)

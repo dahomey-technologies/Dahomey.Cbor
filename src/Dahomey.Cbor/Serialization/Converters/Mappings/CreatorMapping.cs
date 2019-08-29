@@ -15,18 +15,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private List<RawString> _memberNames = null;
         private List<object> _defaultValues = null;
 
-        public IReadOnlyCollection<RawString> MemberNames
-        {
-            get
-            {
-                if (_memberNames == null)
-                {
-                    Initialize();
-                }
-
-                return _memberNames;
-            }
-        }
+        public IReadOnlyCollection<RawString> MemberNames => _memberNames;
 
         public CreatorMapping(IObjectMapping objectMapping, ConstructorInfo constructorInfo)
         {
@@ -49,13 +38,20 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _parameters = method.GetParameters();
         }
 
-        public object CreateInstance(Dictionary<RawString, object> values)
+        public void SetMemberNames(IReadOnlyCollection<RawString> memberNames)
         {
-            if (_memberNames == null)
-            {
-                Initialize();
-            }
+            _memberNames = memberNames.ToList();
+        }
 
+        public void SetMemberNames(params string[] memberNames)
+        {
+            _memberNames = memberNames
+                .Select(m => new RawString(m))
+                .ToList();
+        }
+
+        object ICreatorMapping.CreateInstance(Dictionary<RawString, object> values)
+        {
             object[] args = new object[_memberNames.Count];
 
             for (int i = 0; i < _memberNames.Count; i++)
@@ -73,20 +69,48 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return _delegate.DynamicInvoke(args);
         }
 
-        private void Initialize()
+        public void Initialize()
         {
+            bool createMemberNames = _memberNames == null;
+
             IReadOnlyCollection<IMemberMapping> memberMappings = _objectMapping.MemberMappings;
-            _memberNames = new List<RawString>(_parameters.Length);
+            if (createMemberNames)
+            {
+                _memberNames = new List<RawString>(_parameters.Length);
+            }
+            else if (_memberNames.Count != _parameters.Length)
+            {
+                throw new CborException($"Size mismatch between creator parameters and member names");
+            }
+
             _defaultValues = new List<object>(_parameters.Length);
 
-            foreach(ParameterInfo parameter in _parameters)
+            for (int i = 0; i < _parameters.Length; i++)
             {
-                IMemberMapping memberMapping = memberMappings
-                    .FirstOrDefault(m => string.Compare(m.MemberInfo.Name, parameter.Name, ignoreCase: true) == 0);
+                ParameterInfo parameter = _parameters[i];
+                IMemberMapping memberMapping;
 
-                if (memberMapping == null)
+                if (createMemberNames)
                 {
-                    throw new CborException($"Cannot find a field or property named {parameter.Name} on type {_objectMapping.ObjectType.FullName}");
+                    memberMapping = memberMappings
+                        .FirstOrDefault(m => string.Compare(m.MemberInfo.Name, parameter.Name, ignoreCase: true) == 0);
+
+                    if (memberMapping == null)
+                    {
+                        throw new CborException($"Cannot find a field or property named {parameter.Name} on type {_objectMapping.ObjectType.FullName}");
+                    }
+
+                    _memberNames.Add(new RawString(memberMapping.MemberName, Encoding.ASCII));
+                }
+                else
+                {
+                    memberMapping = memberMappings
+                        .FirstOrDefault(m => new RawString(m.MemberName).Equals(_memberNames[i]));
+
+                    if (memberMapping == null)
+                    {
+                        throw new CborException($"Cannot find a field or property named {_memberNames[i]} on type {_objectMapping.ObjectType.FullName}");
+                    }
                 }
 
                 if (memberMapping.MemberType != parameter.ParameterType)
@@ -94,7 +118,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     throw new CborException($"Type mismatch between creator argument and field or property named {parameter.Name} on type {_objectMapping.ObjectType.FullName}");
                 }
 
-                _memberNames.Add(new RawString(memberMapping.MemberName, Encoding.ASCII));
                 _defaultValues.Add(memberMapping.DefaultValue);
             }
         }
