@@ -11,7 +11,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     public interface IObjectConverter
     {
         void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName);
-        object ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName);
+        bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, out object value);
         List<IMemberConverter> MemberConvertersForWrite { get; }
     }
 
@@ -161,16 +161,19 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public object ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName)
+        public bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, out object value)
         {
             if (!_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter memberConverter))
             {
-                // should not happen because creator arguments have been validated during initialization
-                throw new CborException("Unexpected error");
+                HandleUnknownName(ref reader, typeof(T), memberName);
+                reader.SkipDataItem();
+                value = default;
+                return false;
             }
             else
             {
-                return memberConverter.Read(ref reader);
+                value = memberConverter.Read(ref reader);
+                return true;
             }
         }
 
@@ -239,10 +242,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                         context.converter.ReadValue(ref reader, context.obj, memberName);
                     }
                 }
-                else if (shouldReadValue)
+                else if (shouldReadValue && context.converter.ReadValue(ref reader, memberName, out object value))
                 {
-                    object value = context.converter.ReadValue(ref reader, memberName);
-
                     bool isCreatorValue = false;
                     foreach(RawString creatorMemberName in _objectMapping.CreatorMapping.MemberNames)
                     {
