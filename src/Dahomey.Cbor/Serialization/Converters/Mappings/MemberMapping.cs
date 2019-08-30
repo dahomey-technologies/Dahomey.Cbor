@@ -16,7 +16,8 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public ICborConverter MemberConverter { get; private set; }
         public bool CanBeDeserialized { get; private set; }
         public bool CanBeSerialized { get; private set; }
-        public object DefaultValue { get; }
+        public object DefaultValue { get; private set; }
+        public bool IgnoreIfDefault { get; private set; }
 
         public MemberMapping(CborConverterRegistry converterRegistry,
             IObjectMapping objectMapping, MemberInfo memberInfo, Type memberType)
@@ -40,12 +41,25 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return this;
         }
 
+        public MemberMapping SetDefaultValue(object defaultValue)
+        {
+            DefaultValue = defaultValue;
+            return this;
+        }
+
+        public MemberMapping SetIngoreIfDefault(bool ignoreIfDefault)
+        {
+            IgnoreIfDefault = ignoreIfDefault;
+            return this;
+        }
+
         public void Initialize()
         {
             InitializeMemberName();
             InitializeMemberConverter();
             InitializeCanBeDeserialized();
             InitializeCanBeSerialized();
+            ValidateDefaultValue();
         }
 
         private void InitializeMemberName()
@@ -133,6 +147,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             if (!memberConverterType.GetInterfaces().Any(i => i == interfaceType))
             {
                 throw new CborException($"Custom converter on member {MemberInfo.ReflectedType.Name}.{MemberInfo.Name} is not a ICborConverter<{MemberType.Name}>");
+            }
+        }
+
+        private void ValidateDefaultValue()
+        {
+            if ((DefaultValue == null && MemberType.IsValueType)
+                || (DefaultValue != null && DefaultValue.GetType() != MemberType))
+            {
+                throw new CborException($"Default value type mismatch");
             }
         }
     }

@@ -12,5 +12,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         bool CanBeDeserialized { get; }
         bool CanBeSerialized { get; }
         object DefaultValue { get; }
+        bool IgnoreIfDefault { get; }
     }
 }

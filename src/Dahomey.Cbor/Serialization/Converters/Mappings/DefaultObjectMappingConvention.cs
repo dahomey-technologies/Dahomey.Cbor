@@ -2,6 +2,7 @@
 using Dahomey.Cbor.Serialization.Conventions;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -45,7 +46,9 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     continue;
                 }
 
-                memberMappings.Add(new MemberMapping(registry.ConverterRegistry, objectMapping, propertyInfo, propertyInfo.PropertyType));
+                MemberMapping memberMapping = new MemberMapping(registry.ConverterRegistry, objectMapping, propertyInfo, propertyInfo.PropertyType);
+                ProcessDefaultValue(propertyInfo, memberMapping);
+                memberMappings.Add(memberMapping);
             }
 
             foreach (FieldInfo fieldInfo in fields)
@@ -62,7 +65,10 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                 Type fieldType = fieldInfo.FieldType;
 
-                memberMappings.Add(new MemberMapping(registry.ConverterRegistry, objectMapping, fieldInfo, fieldInfo.FieldType));
+                MemberMapping memberMapping = new MemberMapping(registry.ConverterRegistry, objectMapping, fieldInfo, fieldInfo.FieldType);
+                ProcessDefaultValue(fieldInfo, memberMapping);
+
+                memberMappings.Add(memberMapping);
             }
 
             objectMapping.SetMemberMappings(memberMappings);
@@ -78,6 +84,20 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 {
                     creatorMapping.SetMemberNames(constructorAttribute.MemberNames);
                 }
+            }
+        }
+
+        private void ProcessDefaultValue(MemberInfo memberInfo, MemberMapping memberMapping)
+        {
+            DefaultValueAttribute defaultValueAttribute = memberInfo.GetCustomAttribute<DefaultValueAttribute>();
+            if (defaultValueAttribute != null)
+            {
+                memberMapping.SetDefaultValue(defaultValueAttribute.Value);
+            }
+
+            if (memberInfo.IsDefined(typeof(CborIgnoreIfDefaultAttribute)))
+            {
+                memberMapping.SetIngoreIfDefault(true);
             }
         }
     }

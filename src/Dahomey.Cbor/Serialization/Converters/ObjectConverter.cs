@@ -1,5 +1,4 @@
-﻿using Dahomey.Cbor.Attributes;
-using Dahomey.Cbor.Serialization.Conventions;
+﻿using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
@@ -12,7 +11,8 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName);
         bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, out object value);
-        List<IMemberConverter> MemberConvertersForWrite { get; }
+        IReadOnlyList<IMemberConverter> MemberConvertersForWrite { get; }
+        IReadOnlyList<IMemberConverter> MemberConvertersForWriteIgnoreIfDefault { get; }
     }
 
     public interface IObjectConverter<out T> : IObjectConverter
@@ -52,12 +52,14 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private readonly ByteBufferDictionary<IMemberConverter> _memberConvertersForRead = new ByteBufferDictionary<IMemberConverter>();
         private readonly List<IMemberConverter> _memberConvertersForWrite;
+        private readonly List<IMemberConverter> _memberConvertersForWriteIgnoreIfDefault;
         private readonly SerializationRegistry _registry;
         private readonly IObjectMapping _objectMapping;
         private readonly Func<T> _constructor;
         private readonly bool _isInterfaceOrAbstract;
 
-        public List<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
+        public IReadOnlyList<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
+        public IReadOnlyList<IMemberConverter> MemberConvertersForWriteIgnoreIfDefault => _memberConvertersForWriteIgnoreIfDefault;
 
         public ObjectConverter(SerializationRegistry registry)
         {
@@ -65,8 +67,9 @@ namespace Dahomey.Cbor.Serialization.Converters
             _objectMapping = registry.ObjectMappingRegistry.Lookup<T>();
 
             _memberConvertersForWrite = new List<IMemberConverter>();
+            _memberConvertersForWriteIgnoreIfDefault = new List<IMemberConverter>();
 
-            foreach(IMemberMapping memberMapping in _objectMapping.MemberMappings)
+            foreach (IMemberMapping memberMapping in _objectMapping.MemberMappings)
             {
                 IMemberConverter memberConverter = (IMemberConverter)Activator.CreateInstance(
                     typeof(MemberConverter<,>).MakeGenericType(typeof(T), memberMapping.MemberType),
@@ -91,6 +94,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                 if (memberMapping.CanBeSerialized)
                 {
                     _memberConvertersForWrite.Add(memberConverter);
+
+                    if (memberConverter.IgnoreIfDefault)
+                    {
+                        _memberConvertersForWriteIgnoreIfDefault.Add(memberConverter);
+                    }
                 }
             }
 
@@ -245,7 +253,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 else if (shouldReadValue && context.converter.ReadValue(ref reader, memberName, out object value))
                 {
                     bool isCreatorValue = false;
-                    foreach(RawString creatorMemberName in _objectMapping.CreatorMapping.MemberNames)
+                    foreach (RawString creatorMemberName in _objectMapping.CreatorMapping.MemberNames)
                     {
                         if (creatorMemberName.Buffer.Span.SequenceEqual(memberName))
                         {
@@ -272,9 +280,19 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public int GetMapSize(ref MapWriterContext context)
         {
+            int writableMembersCount = context.objectConverter.MemberConvertersForWrite.Count;
+
+            foreach (IMemberConverter member in context.objectConverter.MemberConvertersForWriteIgnoreIfDefault)
+            {
+                if (member.IsDefaultValue(context.obj))
+                {
+                    writableMembersCount--;
+                }
+            }
+
             return context.state == MapWriterContext.State.Discriminator
-                ? context.objectConverter.MemberConvertersForWrite.Count + 1
-                : context.objectConverter.MemberConvertersForWrite.Count;
+                ? writableMembersCount + 1
+                : writableMembersCount;
         }
 
         public void WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
@@ -286,9 +304,16 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return;
             }
 
-            IMemberConverter memberConverter = context.objectConverter.MemberConvertersForWrite[context.memberIndex++];
-            writer.WriteString(memberConverter.MemberName);
-            memberConverter.Write(ref writer, context.obj);
+            while (context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count)
+            {
+                IMemberConverter memberConverter = context.objectConverter.MemberConvertersForWrite[context.memberIndex++];
+                if (!memberConverter.IgnoreIfDefault || !memberConverter.IsDefaultValue(context.obj))
+                {
+                    writer.WriteString(memberConverter.MemberName);
+                    memberConverter.Write(ref writer, context.obj);
+                    break;
+                }
+            }
         }
 
         private void HandleUnknownName(ref CborReader reader, Type type, ReadOnlySpan<byte> rawName)

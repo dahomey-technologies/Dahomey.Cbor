@@ -1,6 +1,7 @@
 ﻿using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
+using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
@@ -10,33 +11,37 @@ namespace Dahomey.Cbor.Serialization.Converters
     public interface IMemberConverter
     {
         ReadOnlySpan<byte> MemberName { get; }
+        bool IgnoreIfDefault { get; }
         void Read(ref CborReader reader, object obj);
         void Write(ref CborWriter writer, object obj);
         object Read(ref CborReader reader);
         void Set(object obj, object value);
+        bool IsDefaultValue(object obj);
     }
 
     public class MemberConverter<T, TM> : IMemberConverter
         where T : class
     {
-        private readonly IMemberMapping _memberMapping;
         private readonly Func<T, TM> _memberGetter;
         private readonly Action<T, TM> _memberSetter;
         private readonly ICborConverter<TM> _memberConverter;
         private ReadOnlyMemory<byte> _memberName;
+        private readonly TM _defaultValue;
+        private readonly bool _ignoreIfDefault;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
+        public bool IgnoreIfDefault => _ignoreIfDefault;
 
         public MemberConverter(CborConverterRegistry registry, IMemberMapping memberMapping)
         {
-            _memberMapping = memberMapping;
+            MemberInfo memberInfo = memberMapping.MemberInfo;
 
-            MemberInfo memberInfo = _memberMapping.MemberInfo;
-
-            _memberName = Encoding.UTF8.GetBytes(_memberMapping.MemberName);
+            _memberName = Encoding.UTF8.GetBytes(memberMapping.MemberName);
             _memberGetter = GenerateGetter(memberInfo);
             _memberSetter = GenerateSetter(memberInfo);
-            _memberConverter = (ICborConverter<TM>)_memberMapping.MemberConverter;
+            _memberConverter = (ICborConverter<TM>)memberMapping.MemberConverter;
+            _defaultValue = (TM)memberMapping.DefaultValue;
+            _ignoreIfDefault = memberMapping.IgnoreIfDefault;
         }
 
         public void Read(ref CborReader reader, object obj)
@@ -57,6 +62,12 @@ namespace Dahomey.Cbor.Serialization.Converters
         public void Set(object obj, object value)
         {
             _memberSetter((T)obj, (TM)value);
+        }
+
+        public bool IsDefaultValue(object obj)
+        {
+            TM value = _memberGetter((T)obj);
+            return EqualityComparer<TM>.Default.Equals(value, _defaultValue);
         }
 
         private Func<T, TM> GenerateGetter(MemberInfo memberInfo)
