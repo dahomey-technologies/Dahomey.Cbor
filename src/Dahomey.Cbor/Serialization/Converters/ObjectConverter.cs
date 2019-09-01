@@ -3,6 +3,7 @@ using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 
 namespace Dahomey.Cbor.Serialization.Converters
@@ -138,6 +139,10 @@ namespace Dahomey.Cbor.Serialization.Converters
             if (context.creatorValues != null)
             {
                 context.obj = (T)_objectMapping.CreatorMapping.CreateInstance(context.creatorValues);
+                if (context.obj is ISupportInitialize supportInitialize)
+                {
+                    supportInitialize.BeginInit();
+                }
 
                 foreach (KeyValuePair<RawString, object> value in context.regularValues)
                 {
@@ -149,6 +154,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                     memberConverter.Set(context.obj, value.Value);
                 }
+            }
+
+            if (context.obj is ISupportInitialize supportInitialize2)
+            {
+                supportInitialize2.EndInit();
             }
 
             return context.obj;
@@ -245,6 +255,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                 if (context.creatorValues == null)
                 {
                     context.obj = context.converter.CreateInstance();
+
+                    if (context.obj is ISupportInitialize supportInitialize)
+                    {
+                        supportInitialize.BeginInit();
+                    }
+
                     if (shouldReadValue)
                     {
                         context.converter.ReadValue(ref reader, context.obj, memberName);
