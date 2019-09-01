@@ -97,10 +97,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                     if (memberMapping == null)
                     {
-                        throw new CborException($"Cannot find a field or property named {parameter.Name} on type {_objectMapping.ObjectType.FullName}");
+                        _memberNames.Add(RawString.Empty);
                     }
-
-                    _memberNames.Add(new RawString(memberMapping.MemberName, Encoding.ASCII));
+                    else
+                    {
+                        _memberNames.Add(new RawString(memberMapping.MemberName, Encoding.ASCII));
+                    }
                 }
                 else
                 {
@@ -113,12 +115,19 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     }
                 }
 
-                if (memberMapping.MemberType != parameter.ParameterType)
+                if (memberMapping != null)
                 {
-                    throw new CborException($"Type mismatch between creator argument and field or property named {parameter.Name} on type {_objectMapping.ObjectType.FullName}");
-                }
+                    if (memberMapping.MemberType != parameter.ParameterType)
+                    {
+                        throw new CborException($"Type mismatch between creator argument and field or property named {parameter.Name} on type {_objectMapping.ObjectType.FullName}");
+                    }
 
-                _defaultValues.Add(memberMapping.DefaultValue);
+                    _defaultValues.Add(memberMapping.DefaultValue);
+                }
+                else
+                {
+                    _defaultValues.Add(parameter.ParameterType.GetDefaultValue());
+                }
             }
         }
     }

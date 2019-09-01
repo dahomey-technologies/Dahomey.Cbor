@@ -9,6 +9,8 @@ namespace Dahomey.Cbor.Util
         private readonly ReadOnlyMemory<byte> _buffer;
         public ReadOnlyMemory<byte> Buffer => _buffer;
 
+        public static RawString Empty = new RawString(new ReadOnlyMemory<byte>());
+
         public RawString(string str, Encoding encoding = null)
         {
             _buffer = (encoding ?? Encoding.UTF8).GetBytes(str);
