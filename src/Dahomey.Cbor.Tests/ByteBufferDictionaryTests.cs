@@ -1,15 +1,15 @@
 ﻿using Dahomey.Cbor.Util;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
 namespace Dahomey.Cbor.Tests
 {
-    [TestClass]
+
     public class ByteBufferDictionaryTests
     {
-        [DataTestMethod]
-        [DataRow("short1,short2")]
-        [DataRow("longvalue1,longvalue2")]
-        [DataRow("longvalue1,short1,longvalue2,short2")]
+        [Theory]
+        [InlineData("short1,short2")]
+        [InlineData("longvalue1,longvalue2")]
+        [InlineData("longvalue1,short1,longvalue2,short2")]
         public void AddTryGet(string values)
         {
             ByteBufferDictionary<string> binaryTree = new ByteBufferDictionary<string>();
@@ -23,8 +23,8 @@ namespace Dahomey.Cbor.Tests
             foreach (string value in valuesArray)
             {
                 bool success = binaryTree.TryGetValue(value.AsBinarySpan(), out string actualValue);
-                Assert.IsTrue(success);
-                Assert.AreEqual(value, actualValue);
+                Assert.True(success);
+                Assert.Equal(value, actualValue);
             }
         }
     }

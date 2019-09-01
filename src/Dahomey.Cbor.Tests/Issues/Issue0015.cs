@@ -1,12 +1,12 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace Dahomey.Cbor.Tests.Issues
 {
-    [TestClass]
+
     public class Issue0015
     {
         private class Tree
@@ -24,15 +24,15 @@ namespace Dahomey.Cbor.Tests.Issues
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void TestLong()
         {
             const string hexBuffer = "A1636167650C";
 
             Tree tree = Helper.Read<Tree>(hexBuffer);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual(12, tree._age);
+            Assert.NotNull(tree);
+            Assert.Equal(12, tree._age);
         }
 
         private class Tree2
@@ -50,15 +50,15 @@ namespace Dahomey.Cbor.Tests.Issues
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void TestInt()
         {
             const string hexBuffer = "A1636167650C";
 
             Tree2 tree = Helper.Read<Tree2>(hexBuffer);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual(12, tree._age);
+            Assert.NotNull(tree);
+            Assert.Equal(12, tree._age);
         }
     }
 }

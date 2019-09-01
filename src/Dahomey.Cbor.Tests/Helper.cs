@@ -1,7 +1,7 @@
 ﻿using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Util;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using System;
 using System.Collections;
 using System.Linq;
@@ -31,7 +31,7 @@ namespace Dahomey.Cbor.Tests
                 }
                 catch (Exception ex)
                 {
-                    Assert.IsInstanceOfType(ex, expectedExceptionType);
+                    Assert.IsType(expectedExceptionType, ex);
                 }
             }
             else
@@ -39,11 +39,11 @@ namespace Dahomey.Cbor.Tests
                 T actualValue = Read<T>(hexBuffer, options);
                 if (actualValue is ICollection actualCollection)
                 {
-                    CollectionAssert.AreEqual((ICollection)expectedValue, actualCollection);
+                    Assert.Equal((ICollection)expectedValue, actualCollection);
                 }
                 else
                 {
-                    Assert.AreEqual(expectedValue, actualValue);
+                    Assert.Equal(expectedValue, actualValue);
                 }
             }
         }
@@ -71,12 +71,12 @@ namespace Dahomey.Cbor.Tests
                 }
                 catch (Exception ex)
                 {
-                    Assert.IsInstanceOfType(ex, expectedExceptionType);
+                    Assert.IsType(expectedExceptionType, ex);
                 }
             }
             else
             {
-                Assert.AreEqual(hexBuffer, Write(value, options));
+                Assert.Equal(hexBuffer, Write(value, options));
             }
         }
 
@@ -100,7 +100,7 @@ namespace Dahomey.Cbor.Tests
                 }
                 catch (Exception ex)
                 {
-                    Assert.IsInstanceOfType(ex, expectedExceptionType);
+                    Assert.IsType(expectedExceptionType, ex);
                 }
             }
             else
@@ -108,11 +108,11 @@ namespace Dahomey.Cbor.Tests
                 T actualValue = Read<T>(methodName, hexBuffer);
                 if (actualValue is ICollection actualCollection)
                 {
-                    CollectionAssert.AreEqual((ICollection)expectedValue, actualCollection);
+                    Assert.Equal((ICollection)expectedValue, actualCollection);
                 }
                 else
                 {
-                    Assert.AreEqual(expectedValue, actualValue);
+                    Assert.Equal(expectedValue, actualValue);
                 }
             }
         }
@@ -140,12 +140,12 @@ namespace Dahomey.Cbor.Tests
                 }
                 catch (Exception ex)
                 {
-                    Assert.IsInstanceOfType(ex, expectedExceptionType);
+                    Assert.IsType(expectedExceptionType, ex);
                 }
             }
             else
             {
-                Assert.AreEqual(hexBuffer, Write(methodName, value, options));
+                Assert.Equal(hexBuffer, Write(methodName, value, options));
             }
         }
 

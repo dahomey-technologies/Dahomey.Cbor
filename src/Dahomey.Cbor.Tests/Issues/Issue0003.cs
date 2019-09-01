@@ -1,12 +1,12 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
 {
     /// <summary>
     /// https://github.com/dahomey-technologies/Dahomey.Cbor/issues/3
     /// </summary>
-    [TestClass]
+
     public class Issue0003
     {
         public enum TreeType
@@ -31,7 +31,7 @@ namespace Dahomey.Cbor.Tests.Issues
             public Tree() { }
         }
 
-        [TestMethod]
+        [Fact]
         public void Test()
         {
             Tree value = new Tree

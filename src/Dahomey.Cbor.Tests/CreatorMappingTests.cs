@@ -1,10 +1,9 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using System;
 
 namespace Dahomey.Cbor.Tests
 {
-    [TestClass]
     public class CreatorMappingTests
     {
         private class ObjectWithConstructor
@@ -20,10 +19,10 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
-        [DataTestMethod]
-        [DataRow("A26249640C644E616D6563666F6F", 12, "foo", 0)]
-        [DataRow("A16249640C", 12, null, 0)]
-        [DataRow("A36249640C644E616D6563666F6F634167650D", 12, "foo", 13)]
+        [Theory]
+        [InlineData("A26249640C644E616D6563666F6F", 12, "foo", 0)]
+        [InlineData("A16249640C", 12, null, 0)]
+        [InlineData("A36249640C644E616D6563666F6F634167650D", 12, "foo", 13)]
         public void ConstructorByApi(string hexBuffer, int expectedId, string expectedName, int expectedAge)
         {
             CborOptions options = new CborOptions();
@@ -35,10 +34,10 @@ namespace Dahomey.Cbor.Tests
 
             ObjectWithConstructor obj = Helper.Read<ObjectWithConstructor>(hexBuffer, options);
 
-            Assert.IsNotNull(obj);
-            Assert.AreEqual(expectedId, obj.Id);
-            Assert.AreEqual(expectedName, obj.Name);
-            Assert.AreEqual(expectedAge, obj.Age);
+            Assert.NotNull(obj);
+            Assert.Equal(expectedId, obj.Id);
+            Assert.Equal(expectedName, obj.Name);
+            Assert.Equal(expectedAge, obj.Age);
         }
 
         private class ObjectWithConstructor2
@@ -55,18 +54,18 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
-        [DataTestMethod]
-        [DataRow("A26249640C644E616D6563666F6F", 12, "foo", 0)]
-        [DataRow("A16249640C", 12, null, 0)]
-        [DataRow("A36249640C644E616D6563666F6F634167650D", 12, "foo", 13)]
+        [Theory]
+        [InlineData("A26249640C644E616D6563666F6F", 12, "foo", 0)]
+        [InlineData("A16249640C", 12, null, 0)]
+        [InlineData("A36249640C644E616D6563666F6F634167650D", 12, "foo", 13)]
         public void ConstructorByAttribute(string hexBuffer, int expectedId, string expectedName, int expectedAge)
         {
             ObjectWithConstructor2 obj = Helper.Read<ObjectWithConstructor2>(hexBuffer);
 
-            Assert.IsNotNull(obj);
-            Assert.AreEqual(expectedId, obj.Id);
-            Assert.AreEqual(expectedName, obj.Name);
-            Assert.AreEqual(expectedAge, obj.Age);
+            Assert.NotNull(obj);
+            Assert.Equal(expectedId, obj.Id);
+            Assert.Equal(expectedName, obj.Name);
+            Assert.Equal(expectedAge, obj.Age);
         }
 
         private class Factory
@@ -77,10 +76,10 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
-        [DataTestMethod]
-        [DataRow("A26249640C644E616D6563666F6F", 12, "foo", 0)]
-        [DataRow("A16249640C", 12, null, 0)]
-        [DataRow("A36249640C644E616D6563666F6F634167650D", 12, "foo", 13)]
+        [Theory]
+        [InlineData("A26249640C644E616D6563666F6F", 12, "foo", 0)]
+        [InlineData("A16249640C", 12, null, 0)]
+        [InlineData("A36249640C644E616D6563666F6F634167650D", 12, "foo", 13)]
         public void FactoryByApi(string hexBuffer, int expectedId, string expectedName, int expectedAge)
         {
             Factory factory = new Factory();
@@ -95,16 +94,16 @@ namespace Dahomey.Cbor.Tests
 
             ObjectWithConstructor obj = Helper.Read<ObjectWithConstructor>(hexBuffer, options);
 
-            Assert.IsNotNull(obj);
-            Assert.AreEqual(expectedId, obj.Id);
-            Assert.AreEqual(expectedName, obj.Name);
-            Assert.AreEqual(expectedAge, obj.Age);
+            Assert.NotNull(obj);
+            Assert.Equal(expectedId, obj.Id);
+            Assert.Equal(expectedName, obj.Name);
+            Assert.Equal(expectedAge, obj.Age);
         }
 
-        [DataTestMethod]
-        [DataRow("A26249640C644E616D6563666F6F", 12, "foo", 0)]
-        [DataRow("A16249640C", 12, null, 0)]
-        [DataRow("A36249640C644E616D6563666F6F634167650D", 12, "foo", 13)]
+        [Theory]
+        [InlineData("A26249640C644E616D6563666F6F", 12, "foo", 0)]
+        [InlineData("A16249640C", 12, null, 0)]
+        [InlineData("A36249640C644E616D6563666F6F634167650D", 12, "foo", 13)]
         public void FactoryMethodByApi(string hexBuffer, int expectedId, string expectedName, int expectedAge)
         {
             CborOptions options = new CborOptions();
@@ -116,10 +115,10 @@ namespace Dahomey.Cbor.Tests
 
             ObjectWithConstructor obj = Helper.Read<ObjectWithConstructor>(hexBuffer, options);
 
-            Assert.IsNotNull(obj);
-            Assert.AreEqual(expectedId, obj.Id);
-            Assert.AreEqual(expectedName, obj.Name);
-            Assert.AreEqual(expectedAge, obj.Age);
+            Assert.NotNull(obj);
+            Assert.Equal(expectedId, obj.Id);
+            Assert.Equal(expectedName, obj.Name);
+            Assert.Equal(expectedAge, obj.Age);
         }
 
         private static ObjectWithConstructor NewObjectWithConstructor(int id, string name)
@@ -142,7 +141,7 @@ namespace Dahomey.Cbor.Tests
             public IFoo Foo { get; set; }
         }
 
-        [TestMethod]
+        [Fact]
         public void Interface()
         {
             CborOptions options = new CborOptions();
@@ -155,10 +154,10 @@ namespace Dahomey.Cbor.Tests
             const string hexBuffer = "A163466F6FA16249640C";
             ObjectWithInterface obj = Helper.Read<ObjectWithInterface>(hexBuffer, options);
 
-            Assert.IsNotNull(obj);
-            Assert.IsNotNull(obj.Foo);
-            Assert.IsInstanceOfType(obj.Foo, typeof(Foo));
-            Assert.AreEqual(12, obj.Foo.Id);
+            Assert.NotNull(obj);
+            Assert.NotNull(obj.Foo);
+            Assert.IsType<Foo>(obj.Foo);
+            Assert.Equal(12, obj.Foo.Id);
 
             Helper.TestWrite(obj, hexBuffer, null, options);
         }
@@ -177,7 +176,7 @@ namespace Dahomey.Cbor.Tests
             public AbstractBar Bar { get; set; }
         }
 
-        [TestMethod]
+        [Fact]
         public void AbstractClass()
         {
             CborOptions options = new CborOptions();
@@ -190,10 +189,10 @@ namespace Dahomey.Cbor.Tests
             const string hexBuffer = "A163426172A16249640C";
             ObjectWithAbstractClass obj = Helper.Read<ObjectWithAbstractClass>(hexBuffer, options);
 
-            Assert.IsNotNull(obj);
-            Assert.IsNotNull(obj.Bar);
-            Assert.IsInstanceOfType(obj.Bar, typeof(Bar));
-            Assert.AreEqual(12, obj.Bar.Id);
+            Assert.NotNull(obj);
+            Assert.NotNull(obj.Bar);
+            Assert.IsType<Bar>(obj.Bar);
+            Assert.Equal(12, obj.Bar.Id);
 
             Helper.TestRead(hexBuffer, (ObjectWithAbstractClass)null, typeof(CborException));
 

@@ -1,5 +1,5 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
 {
@@ -7,7 +7,7 @@ namespace Dahomey.Cbor.Tests.Issues
     /// [bug] deserialization failing if get only property and const/static field are used alongside #14
     /// </summary>
     /// https://github.com/dahomey-technologies/Dahomey.Cbor/issues/14
-    [TestClass]
+
     public class Issue0014
     {
         private class Tree
@@ -25,18 +25,18 @@ namespace Dahomey.Cbor.Tests.Issues
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void Read()
         {
             const string hexBuffer = "A2636167650C62696463313233";
 
             Tree tree = Helper.Read<Tree>(hexBuffer);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual(12, tree.Age);
+            Assert.NotNull(tree);
+            Assert.Equal(12, tree.Age);
         }
 
-        [TestMethod]
+        [Fact]
         public void Write()
         {
             const string hexBuffer = "A2636167650C62696463313233";

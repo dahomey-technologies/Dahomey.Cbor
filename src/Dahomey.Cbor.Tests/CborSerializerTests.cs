@@ -1,12 +1,12 @@
 ﻿using Dahomey.Cbor.Util;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using System;
 using System.IO;
 using System.Threading.Tasks;
 
 namespace Dahomey.Cbor.Tests
 {
-    [TestClass]
+
     public class CborSerializerTests
     {
         private const string SimpleObjectHexBuffer = "AE67426F6F6C65616EF56553427974650D64427974650C65496E7431360E6655496E7431360F65496E743332106655496E7433321165496E743634126655496E7436341366537472696E6766737472696E676653696E676C65FA41A1AE1466446F75626C65FB40363AE147AE147B684461746554696D6574323031342D30322D32315431393A30303A30305A64456E756D6656616C756531";
@@ -34,7 +34,7 @@ namespace Dahomey.Cbor.Tests
             EnumFormat = ValueFormat.WriteToString
         };
 
-        [TestMethod]
+        [Fact]
         public async Task DeserializeFromMemoryStream()
         {
             MemoryStream stream = new MemoryStream(SimpleObjectHexBuffer.HexToBytes());
@@ -42,7 +42,7 @@ namespace Dahomey.Cbor.Tests
             TestSimpleObject(obj);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SerializeToMemoryStream()
         {
             MemoryStream stream = new MemoryStream();
@@ -50,7 +50,7 @@ namespace Dahomey.Cbor.Tests
             TestBuffer(stream.ToArray());
         }
 
-        [TestMethod]
+        [Fact]
         public async Task DeserializeFromFileStream()
         {
             string tempFileName = Path.GetTempFileName();
@@ -70,7 +70,7 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public async Task SerializeToFileStream()
         {
             string tempFileName = Path.GetTempFileName();
@@ -91,7 +91,7 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void DeserializeFromSpan()
         {
             Span<byte> buffer = SimpleObjectHexBuffer.HexToBytes();
@@ -99,7 +99,7 @@ namespace Dahomey.Cbor.Tests
             TestSimpleObject(obj);
         }
 
-        [TestMethod]
+        [Fact]
         public void SerializerToBufferWriter()
         {
             using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
@@ -112,26 +112,26 @@ namespace Dahomey.Cbor.Tests
         private void TestBuffer(byte[] actualBuffer)
         {
             string actualHexBuffer = BitConverter.ToString(actualBuffer).Replace("-", "");
-            Assert.AreEqual(SimpleObjectHexBuffer, actualHexBuffer);
+            Assert.Equal(SimpleObjectHexBuffer, actualHexBuffer);
         }
 
         private void TestSimpleObject(SimpleObject obj)
         {
-            Assert.IsNotNull(obj);
-            Assert.IsTrue(obj.Boolean);
-            Assert.AreEqual(12, obj.Byte);
-            Assert.AreEqual(13, obj.SByte);
-            Assert.AreEqual(14, obj.Int16);
-            Assert.AreEqual(15, obj.UInt16);
-            Assert.AreEqual(16, obj.Int32);
-            Assert.AreEqual(17u, obj.UInt32);
-            Assert.AreEqual(18, obj.Int64);
-            Assert.AreEqual(19ul, obj.UInt64);
-            Assert.AreEqual(20.21f, obj.Single);
-            Assert.AreEqual(22.23, obj.Double);
-            Assert.AreEqual("string", obj.String);
-            Assert.AreEqual(new DateTime(2014, 02, 21, 19, 0, 0, DateTimeKind.Utc), obj.DateTime);
-            Assert.AreEqual(EnumTest.Value1, obj.Enum);
+            Assert.NotNull(obj);
+            Assert.True(obj.Boolean);
+            Assert.Equal(12, obj.Byte);
+            Assert.Equal(13, obj.SByte);
+            Assert.Equal(14, obj.Int16);
+            Assert.Equal(15, obj.UInt16);
+            Assert.Equal(16, obj.Int32);
+            Assert.Equal(17u, obj.UInt32);
+            Assert.Equal(18, obj.Int64);
+            Assert.Equal(19ul, obj.UInt64);
+            Assert.Equal(20.21f, obj.Single);
+            Assert.Equal(22.23, obj.Double);
+            Assert.Equal("string", obj.String);
+            Assert.Equal(new DateTime(2014, 02, 21, 19, 0, 0, DateTimeKind.Utc), obj.DateTime);
+            Assert.Equal(EnumTest.Value1, obj.Enum);
         }
     }
 }

@@ -1,10 +1,10 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using System.Reflection;
 
 namespace Dahomey.Cbor.Tests
 {
-    [TestClass]
+
     public class ClassMemberModifierTests
     {
         public class ObjectWithPrivateProperty
@@ -37,7 +37,7 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void TestWritePrivateProperty()
         {
             ObjectWithPrivateProperty obj = new ObjectWithPrivateProperty(2, 3)
@@ -50,17 +50,17 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(obj, hexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void TestReadPrivateProperty()
         {
             const string hexBuffer = "A2624964016C5072697661746550726F703102";
 
             ObjectWithPrivateProperty obj = Helper.Read<ObjectWithPrivateProperty>(hexBuffer);
 
-            Assert.IsNotNull(obj);
-            Assert.AreEqual(1, obj.Id);
-            Assert.AreEqual(2, obj.GetProp1());
-            Assert.AreEqual(0, obj.GetProp2());
+            Assert.NotNull(obj);
+            Assert.Equal(1, obj.Id);
+            Assert.Equal(2, obj.GetProp1());
+            Assert.Equal(0, obj.GetProp2());
         }
 
         public class ObjectWithPrivateField
@@ -93,7 +93,7 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void TestWritePrivateField()
         {
             ObjectWithPrivateField obj = new ObjectWithPrivateField(2, 3)
@@ -106,17 +106,17 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(obj, hexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void TestReadPrivateField()
         {
             const string hexBuffer = "A2624964016C5072697661746550726F703102";
 
             ObjectWithPrivateField obj = Helper.Read<ObjectWithPrivateField>(hexBuffer);
 
-            Assert.IsNotNull(obj);
-            Assert.AreEqual(1, obj.Id);
-            Assert.AreEqual(2, obj.GetProp1());
-            Assert.AreEqual(0, obj.GetProp2());
+            Assert.NotNull(obj);
+            Assert.Equal(1, obj.Id);
+            Assert.Equal(2, obj.GetProp1());
+            Assert.Equal(0, obj.GetProp2());
         }
 
         public class ObjectWithReadOnlyField
@@ -133,7 +133,7 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void TestWriteReadOnlyField()
         {
             ObjectWithReadOnlyField obj = new ObjectWithReadOnlyField(1);
@@ -141,14 +141,14 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(obj, hexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void TestReadReadOnlyField()
         {
             const string hexBuffer = "A162496401";
             ObjectWithReadOnlyField obj = Helper.Read<ObjectWithReadOnlyField>(hexBuffer);
 
-            Assert.IsNotNull(obj);
-            Assert.AreEqual(0, obj.Id);
+            Assert.NotNull(obj);
+            Assert.Equal(0, obj.Id);
         }
 
         public class ObjectWithConstField
@@ -157,7 +157,7 @@ namespace Dahomey.Cbor.Tests
             public const int Id = 1;
         }
 
-        [TestMethod]
+        [Fact]
         public void TestWriteConstField()
         {
             ObjectWithConstField obj = new ObjectWithConstField();
@@ -165,13 +165,13 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(obj, hexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void TestReadConstField()
         {
             const string hexBuffer = "A162496401";
             ObjectWithConstField obj = Helper.Read<ObjectWithConstField>(hexBuffer);
 
-            Assert.IsNotNull(obj);
+            Assert.NotNull(obj);
         }
 
         public class ObjectWithStaticField
@@ -180,7 +180,7 @@ namespace Dahomey.Cbor.Tests
             public static int Id = 1;
         }
 
-        [TestMethod]
+        [Fact]
         public void TestWriteStaticField()
         {
             ObjectWithStaticField obj = new ObjectWithStaticField();
@@ -188,13 +188,13 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(obj, hexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void TestReadStaticField()
         {
             const string hexBuffer = "A162496401";
             ObjectWithStaticField obj = Helper.Read<ObjectWithStaticField>(hexBuffer);
 
-            Assert.IsNotNull(obj);
+            Assert.NotNull(obj);
         }
 
         public class ObjectWithStaticProperty
@@ -203,7 +203,7 @@ namespace Dahomey.Cbor.Tests
             public static int Id { get; set; } = 1;
         }
 
-        [TestMethod]
+        [Fact]
         public void TestWriteStaticProperty()
         {
             ObjectWithStaticProperty obj = new ObjectWithStaticProperty();
@@ -211,13 +211,13 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(obj, hexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void TestReadStaticProperty()
         {
             const string hexBuffer = "A162496401";
             ObjectWithStaticProperty obj = Helper.Read<ObjectWithStaticProperty>(hexBuffer);
 
-            Assert.IsNotNull(obj);
+            Assert.NotNull(obj);
         }
 
         private class Tree
@@ -227,7 +227,7 @@ namespace Dahomey.Cbor.Tests
             public static int WhatEver = 12;
         }
 
-        [TestMethod]
+        [Fact]
         public void TestWriteByApi()
         {
             CborOptions options = new CborOptions();

@@ -1,14 +1,14 @@
 ﻿using Dahomey.Cbor.ObjectModel;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using System;
 using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Tests
 {
-    [TestClass]
+
     public class CborValueTests
     {
-        [TestMethod]
+        [Fact]
         public void FromObject()
         {
             SimpleObject obj = new SimpleObject
@@ -31,83 +31,83 @@ namespace Dahomey.Cbor.Tests
 
             CborObject actual = CborObject.FromObject(obj);
 
-            Assert.IsNotNull(actual);
+            Assert.NotNull(actual);
 
             // pairs
-            Assert.AreEqual(14, actual.Count);
+            Assert.Equal(14, actual.Count);
 
             // Boolean
-            Assert.IsTrue(actual.TryGetValue("Boolean", out CborValue value));
-            Assert.AreEqual(CborValueType.Boolean, value.Type);
-            Assert.AreEqual(true, value.Value<bool>());
+            Assert.True(actual.TryGetValue("Boolean", out CborValue value));
+            Assert.Equal(CborValueType.Boolean, value.Type);
+            Assert.True(value.Value<bool>());
 
             // Byte
-            Assert.IsTrue(actual.TryGetValue("Byte", out value));
-            Assert.AreEqual(CborValueType.Positive, value.Type);
-            Assert.AreEqual(12, value.Value<byte>());
+            Assert.True(actual.TryGetValue("Byte", out value));
+            Assert.Equal(CborValueType.Positive, value.Type);
+            Assert.Equal(12, value.Value<byte>());
 
             // SByte
-            Assert.IsTrue(actual.TryGetValue("SByte", out value));
-            Assert.AreEqual(CborValueType.Positive, value.Type);
-            Assert.AreEqual(13, value.Value<sbyte>());
+            Assert.True(actual.TryGetValue("SByte", out value));
+            Assert.Equal(CborValueType.Positive, value.Type);
+            Assert.Equal(13, value.Value<sbyte>());
 
             // Int16
-            Assert.IsTrue(actual.TryGetValue("Int16", out value));
-            Assert.AreEqual(CborValueType.Positive, value.Type);
-            Assert.AreEqual(14, value.Value<short>());
+            Assert.True(actual.TryGetValue("Int16", out value));
+            Assert.Equal(CborValueType.Positive, value.Type);
+            Assert.Equal(14, value.Value<short>());
 
             // UInt16
-            Assert.IsTrue(actual.TryGetValue("UInt16", out value));
-            Assert.AreEqual(CborValueType.Positive, value.Type);
-            Assert.AreEqual(15, value.Value<ushort>());
+            Assert.True(actual.TryGetValue("UInt16", out value));
+            Assert.Equal(CborValueType.Positive, value.Type);
+            Assert.Equal(15, value.Value<ushort>());
 
             // Int32
-            Assert.IsTrue(actual.TryGetValue("Int32", out value));
-            Assert.AreEqual(CborValueType.Positive, value.Type);
-            Assert.AreEqual(16, value.Value<int>());
+            Assert.True(actual.TryGetValue("Int32", out value));
+            Assert.Equal(CborValueType.Positive, value.Type);
+            Assert.Equal(16, value.Value<int>());
 
             // UInt32
-            Assert.IsTrue(actual.TryGetValue("UInt32", out value));
-            Assert.AreEqual(CborValueType.Positive, value.Type);
-            Assert.AreEqual(17u, value.Value<uint>());
+            Assert.True(actual.TryGetValue("UInt32", out value));
+            Assert.Equal(CborValueType.Positive, value.Type);
+            Assert.Equal(17u, value.Value<uint>());
 
             // Int64
-            Assert.IsTrue(actual.TryGetValue("Int64", out value));
-            Assert.AreEqual(CborValueType.Positive, value.Type);
-            Assert.AreEqual(18L, value.Value<long>());
+            Assert.True(actual.TryGetValue("Int64", out value));
+            Assert.Equal(CborValueType.Positive, value.Type);
+            Assert.Equal(18L, value.Value<long>());
 
             // UInt64
-            Assert.IsTrue(actual.TryGetValue("UInt64", out value));
-            Assert.AreEqual(CborValueType.Positive, value.Type);
-            Assert.AreEqual(19ul, value.Value<ulong>());
+            Assert.True(actual.TryGetValue("UInt64", out value));
+            Assert.Equal(CborValueType.Positive, value.Type);
+            Assert.Equal(19ul, value.Value<ulong>());
 
             // Single
-            Assert.IsTrue(actual.TryGetValue("Single", out value));
-            Assert.AreEqual(CborValueType.Single, value.Type);
-            Assert.AreEqual(20.21f, value.Value<float>());
+            Assert.True(actual.TryGetValue("Single", out value));
+            Assert.Equal(CborValueType.Single, value.Type);
+            Assert.Equal(20.21f, value.Value<float>());
 
             // UInt64
-            Assert.IsTrue(actual.TryGetValue("Double", out value));
-            Assert.AreEqual(CborValueType.Double, value.Type);
-            Assert.AreEqual(22.23, value.Value<double>());
+            Assert.True(actual.TryGetValue("Double", out value));
+            Assert.Equal(CborValueType.Double, value.Type);
+            Assert.Equal(22.23, value.Value<double>());
 
             // String
-            Assert.IsTrue(actual.TryGetValue("String", out value));
-            Assert.AreEqual(CborValueType.String, value.Type);
-            Assert.AreEqual("string", value.Value<string>());
+            Assert.True(actual.TryGetValue("String", out value));
+            Assert.Equal(CborValueType.String, value.Type);
+            Assert.Equal("string", value.Value<string>());
 
             // DateTime
-            Assert.IsTrue(actual.TryGetValue("DateTime", out value));
-            Assert.AreEqual(CborValueType.String, value.Type);
-            Assert.AreEqual("2014-02-21T19:00:00Z", value.Value<string>());
+            Assert.True(actual.TryGetValue("DateTime", out value));
+            Assert.Equal(CborValueType.String, value.Type);
+            Assert.Equal("2014-02-21T19:00:00Z", value.Value<string>());
 
             // Enum
-            Assert.IsTrue(actual.TryGetValue("Enum", out value));
-            Assert.AreEqual(CborValueType.Positive, value.Type);
-            Assert.AreEqual((int)EnumTest.Value1, value.Value<int>());
+            Assert.True(actual.TryGetValue("Enum", out value));
+            Assert.Equal(CborValueType.Positive, value.Type);
+            Assert.Equal((int)EnumTest.Value1, value.Value<int>());
         }
 
-        [TestMethod]
+        [Fact]
         public void ToObject()
         {
             CborObject obj = new CborObject
@@ -130,24 +130,24 @@ namespace Dahomey.Cbor.Tests
 
             SimpleObject actual = obj.ToObject<SimpleObject>();
 
-            Assert.IsNotNull(obj);
-            Assert.IsTrue(actual.Boolean);
-            Assert.AreEqual(12, actual.Byte);
-            Assert.AreEqual(13, actual.SByte);
-            Assert.AreEqual(14, actual.Int16);
-            Assert.AreEqual(15, actual.UInt16);
-            Assert.AreEqual(16, actual.Int32);
-            Assert.AreEqual(17u, actual.UInt32);
-            Assert.AreEqual(18, actual.Int64);
-            Assert.AreEqual(19ul, actual.UInt64);
-            Assert.AreEqual(20.21f, actual.Single);
-            Assert.AreEqual(22.23, actual.Double);
-            Assert.AreEqual("string", actual.String);
-            Assert.AreEqual(new DateTime(2014, 02, 21, 19, 0, 0, DateTimeKind.Utc), actual.DateTime);
-            Assert.AreEqual(EnumTest.Value1, actual.Enum);
+            Assert.NotNull(obj);
+            Assert.True(actual.Boolean);
+            Assert.Equal(12, actual.Byte);
+            Assert.Equal(13, actual.SByte);
+            Assert.Equal(14, actual.Int16);
+            Assert.Equal(15, actual.UInt16);
+            Assert.Equal(16, actual.Int32);
+            Assert.Equal(17u, actual.UInt32);
+            Assert.Equal(18, actual.Int64);
+            Assert.Equal(19ul, actual.UInt64);
+            Assert.Equal(20.21f, actual.Single);
+            Assert.Equal(22.23, actual.Double);
+            Assert.Equal("string", actual.String);
+            Assert.Equal(new DateTime(2014, 02, 21, 19, 0, 0, DateTimeKind.Utc), actual.DateTime);
+            Assert.Equal(EnumTest.Value1, actual.Enum);
         }
 
-        [TestMethod]
+        [Fact]
         public void ObjectComparison()
         {
             CborObject obj1 = new CborObject
@@ -186,50 +186,50 @@ namespace Dahomey.Cbor.Tests
                 ["Enum"] = (int)EnumTest.Value1,
             };
 
-            Assert.AreEqual(0, obj1.CompareTo(obj2));
-            Assert.AreEqual(obj1, obj2);
+            Assert.Equal(0, obj1.CompareTo(obj2));
+            Assert.Equal(obj1, obj2);
         }
 
-        [TestMethod]
+        [Fact]
         public void FromArray()
         {
             int[] array = { 1, 2, 3 };
             CborArray actual = CborArray.FromCollection(array);
-            Assert.AreEqual(new CborArray(1, 2, 3), actual);
+            Assert.Equal(new CborArray(1, 2, 3), actual);
         }
 
-        [TestMethod]
+        [Fact]
         public void ToArray()
         {
             CborArray array = new CborArray(1, 2, 3);
             int[] actual = array.ToCollection<int[]>();
-            CollectionAssert.AreEqual(new[] { 1, 2, 3 }, actual);
+            Assert.Equal(new[] { 1, 2, 3 }, actual);
         }
 
-        [TestMethod]
+        [Fact]
         public void FromList()
         {
             List<int> list = new List<int> { 1, 2, 3 };
             CborArray actual = CborArray.FromCollection(list);
-            Assert.AreEqual(new CborArray(1, 2, 3), actual);
+            Assert.Equal(new CborArray(1, 2, 3), actual);
         }
 
-        [TestMethod]
+        [Fact]
         public void ToList()
         {
             CborArray array = new CborArray(1, 2, 3);
             List<int> actual = array.ToCollection<List<int>>();
-            CollectionAssert.AreEqual(new List<int> { 1, 2, 3 }, actual);
+            Assert.Equal(new List<int> { 1, 2, 3 }, actual);
         }
 
-        [TestMethod]
+        [Fact]
         public void ArrayComparison()
         {
             CborArray array1 = new CborArray(1, 2, 3);
             CborArray array2 = new CborArray(1, 2, 3);
 
-            Assert.AreEqual(0, array1.CompareTo(array2));
-            Assert.AreEqual(array1, array2);
+            Assert.Equal(0, array1.CompareTo(array2));
+            Assert.Equal(array1, array2);
         }
     }
 }

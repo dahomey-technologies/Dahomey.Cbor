@@ -1,5 +1,5 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using System.Reflection;
 
 namespace Dahomey.Cbor.Tests.Issues
@@ -7,7 +7,7 @@ namespace Dahomey.Cbor.Tests.Issues
     /// <summary>
     /// https://github.com/dahomey-technologies/Dahomey.Cbor/issues/16
     /// </summary>
-    [TestClass]
+
     public class Issue0016
     {
         public class Tree
@@ -19,7 +19,7 @@ namespace Dahomey.Cbor.Tests.Issues
             public string GetName() => _name;
         }
 
-        [TestMethod]
+        [Fact]
         public void TestByApi()
         {
             CborOptions.Default.Registry.ObjectMappingRegistry.Register<Tree>(om =>
@@ -36,9 +36,9 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Tree tree = Helper.Read<Tree>(hexBuffer);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual(12, tree.GetAge());
-            Assert.AreEqual("foo", tree.GetName());
+            Assert.NotNull(tree);
+            Assert.Equal(12, tree.GetAge());
+            Assert.Equal("foo", tree.GetName());
         }
 
         public class Tree2
@@ -53,16 +53,16 @@ namespace Dahomey.Cbor.Tests.Issues
             public string GetName() => _name;
         }
 
-        [TestMethod]
+        [Fact]
         public void TestByAttribute()
         {
             const string hexBuffer = "A2636167650C646E616D6563666F6F";
 
             Tree2 tree = Helper.Read<Tree2>(hexBuffer);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual(12, tree.GetAge());
-            Assert.AreEqual("foo", tree.GetName());
+            Assert.NotNull(tree);
+            Assert.Equal(12, tree.GetAge());
+            Assert.Equal("foo", tree.GetName());
         }
     }
 }

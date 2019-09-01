@@ -1,13 +1,13 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Xunit;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
 namespace Dahomey.Cbor.Tests
 {
-    [TestClass]
+
     public class ImmutableCollectionsTests
     {
-        [TestMethod]
+        [Fact]
         public void WriteImmutableArrayOfInt32()
         {
             ImmutableArray<int> value = ImmutableArray.CreateRange(new[] { 1, 2, 3 });
@@ -15,7 +15,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(value, expectedHexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadImmutableArrayOfInt32()
         {
             ImmutableArray<int> expectedValue = ImmutableArray.CreateRange(new[] { 1, 2, 3 });
@@ -23,7 +23,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestRead(hexBuffer, expectedValue);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteImmutableListOfInt32()
         {
             ImmutableList<int> value = ImmutableList.CreateRange(new[] { 1, 2, 3 });
@@ -31,7 +31,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(value, expectedHexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadImmutableListOfInt32()
         {
             ImmutableList<int> expectedValue = ImmutableList.CreateRange(new[] { 1, 2, 3 });
@@ -39,7 +39,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestRead(hexBuffer, expectedValue);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteImmutableHashSetOfInt32()
         {
             ImmutableHashSet<int> value = ImmutableHashSet.CreateRange(new[] { 1, 2, 3 });
@@ -47,7 +47,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(value, expectedHexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadImmutableHashSetOfInt32()
         {
             ImmutableHashSet<int> expectedValue = ImmutableHashSet.CreateRange(new[] { 1, 2, 3 });
@@ -55,7 +55,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestRead(hexBuffer, expectedValue);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteImmutableSortedSetOfInt32()
         {
             ImmutableSortedSet<int> value = ImmutableSortedSet.CreateRange(new[] { 1, 2, 3 });
@@ -63,7 +63,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(value, expectedHexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadImmutableSortedSetOfInt32()
         {
             ImmutableSortedSet<int> expectedValue = ImmutableSortedSet.CreateRange(new[] { 1, 2, 3 });
@@ -71,7 +71,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestRead(hexBuffer, expectedValue);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteImmutableDictionaryOfInt32()
         {
             ImmutableDictionary<int, int> value = ImmutableDictionary.CreateRange(new Dictionary<int, int>
@@ -84,7 +84,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(value, expectedHexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadImmutableDictionaryOfInt32()
         {
             ImmutableDictionary<int, int> expectedValue = ImmutableDictionary.CreateRange(new Dictionary<int, int>
@@ -97,7 +97,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestRead(hexBuffer, expectedValue);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteImmutableSortedDictionaryOfInt32()
         {
             ImmutableSortedDictionary<int, int> value = ImmutableSortedDictionary.CreateRange(new SortedDictionary<int, int>
@@ -110,7 +110,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(value, expectedHexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadImmutableSortedDictionaryOfInt32()
         {
             ImmutableSortedDictionary<int, int> expectedValue = ImmutableSortedDictionary.CreateRange(new SortedDictionary<int, int>

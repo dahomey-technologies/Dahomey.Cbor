@@ -1,10 +1,10 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using System.ComponentModel;
 
 namespace Dahomey.Cbor.Tests
 {
-    [TestClass]
+
     public class DefaultValueTests
     {
         public class ObjectWithDefaultValue
@@ -26,7 +26,7 @@ namespace Dahomey.Cbor.Tests
             public int Age { get; set; }
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteByAttribute()
         {
             ObjectWithDefaultValue obj = new ObjectWithDefaultValue
@@ -50,7 +50,7 @@ namespace Dahomey.Cbor.Tests
             public int Age { get; set; }
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteValueByApi()
         {
             CborOptions options = new CborOptions();

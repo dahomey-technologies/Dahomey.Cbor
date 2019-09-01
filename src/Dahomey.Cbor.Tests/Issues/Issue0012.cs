@@ -1,9 +1,9 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
 {
-    [TestClass]
+
     public class Issue0012
     {
         public class Tree
@@ -19,18 +19,18 @@ namespace Dahomey.Cbor.Tests.Issues
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadReadOnlyProperty()
         {
             const string hexBuffer = "A1646E616D6563666F6F";
 
             Tree tree = Helper.Read<Tree>(hexBuffer);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual(null, tree.Name);
+            Assert.NotNull(tree);
+            Assert.Null(tree.Name);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteReadOnlyProperty()
         {
             const string hexBuffer = "A1646E616D6563666F6F";
@@ -38,7 +38,7 @@ namespace Dahomey.Cbor.Tests.Issues
             Helper.TestWrite(new Tree("foo"), hexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadReadOnlyPropertyWithNonDefaultConstructor()
         {
             CborOptions options = new CborOptions();
@@ -52,11 +52,11 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Tree tree = Helper.Read<Tree>(hexBuffer, options);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual("foo", tree.Name);
+            Assert.NotNull(tree);
+            Assert.Equal("foo", tree.Name);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteReadOnlyPropertyWithNonDefaultConstructor()
         {
             CborOptions options = new CborOptions();

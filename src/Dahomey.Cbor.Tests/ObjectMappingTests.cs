@@ -2,17 +2,16 @@
 using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Serialization.Converters.Mappings;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using System;
 using System.Linq;
 using System.Reflection;
 
 namespace Dahomey.Cbor.Tests
 {
-    [TestClass]
     public class ObjectMappingTests
     {
-        [TestMethod]
+        [Fact]
         public void ReadWithMapMember()
         {
             CborOptions options = new CborOptions();
@@ -26,24 +25,24 @@ namespace Dahomey.Cbor.Tests
             const string hexBuffer = "AE67426F6F6C65616EF56553427974650D64427974650C65496E7431360E6655496E7431360F65496E743332106655496E7433321165496E743634126655496E7436341366537472696E6766737472696E676653696E676C65FA41A1AE1466446F75626C65FB40363AE147AE147B684461746554696D6574323031342D30322D32315431393A30303A30305A64456E756D6656616C756531";
             SimpleObject obj = Helper.Read<SimpleObject>(hexBuffer, options);
 
-            Assert.IsNotNull(obj);
-            Assert.IsTrue(obj.Boolean);
-            Assert.AreEqual(0, obj.Byte);
-            Assert.AreEqual(0, obj.SByte);
-            Assert.AreEqual(0, obj.Int16);
-            Assert.AreEqual(0, obj.UInt16);
-            Assert.AreEqual(0, obj.Int32);
-            Assert.AreEqual(0u, obj.UInt32);
-            Assert.AreEqual(0L, obj.Int64);
-            Assert.AreEqual(0ul, obj.UInt64);
-            Assert.AreEqual(0f, obj.Single);
-            Assert.AreEqual(0.0, obj.Double);
-            Assert.AreEqual(null, obj.String);
-            Assert.AreEqual(DateTime.MinValue, obj.DateTime);
-            Assert.AreEqual(EnumTest.None, obj.Enum);
+            Assert.NotNull(obj);
+            Assert.True(obj.Boolean);
+            Assert.Equal(0, obj.Byte);
+            Assert.Equal(0, obj.SByte);
+            Assert.Equal(0, obj.Int16);
+            Assert.Equal(0, obj.UInt16);
+            Assert.Equal(0, obj.Int32);
+            Assert.Equal(0u, obj.UInt32);
+            Assert.Equal(0L, obj.Int64);
+            Assert.Equal(0ul, obj.UInt64);
+            Assert.Equal(0f, obj.Single);
+            Assert.Equal(0.0, obj.Double);
+            Assert.Null(obj.String);
+            Assert.Equal(DateTime.MinValue, obj.DateTime);
+            Assert.Equal(EnumTest.None, obj.Enum);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteWithMapMember()
         {
             CborOptions options = new CborOptions();
@@ -81,7 +80,7 @@ namespace Dahomey.Cbor.Tests
             public Guid Guid { get; set; }
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadWithMemberNameAndConverter()
         {
             CborOptions options = new CborOptions();
@@ -97,11 +96,11 @@ namespace Dahomey.Cbor.Tests
             const string hexBuffer = "A1616750E2AA33E949D7AE42B8628AC805DF082F";
             ObjectWithGuid obj = Helper.Read<ObjectWithGuid>(hexBuffer, options);
 
-            Assert.IsNotNull(obj);
-            Assert.AreEqual(Guid.Parse("E933AAE2-D749-42AE-B862-8AC805DF082F"), obj.Guid);
+            Assert.NotNull(obj);
+            Assert.Equal(Guid.Parse("E933AAE2-D749-42AE-B862-8AC805DF082F"), obj.Guid);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteWithMemberNameAndConverter()
         {
             CborOptions options = new CborOptions();
@@ -123,7 +122,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(obj, hexBuffer, null, options);
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadWithNamingConvention()
         {
             CborOptions options = new CborOptions();
@@ -136,11 +135,11 @@ namespace Dahomey.Cbor.Tests
             const string hexBuffer = "A168696E7456616C75650C";
             IntObject obj = Helper.Read<IntObject>(hexBuffer, options);
 
-            Assert.IsNotNull(obj);
-            Assert.AreEqual(12, obj.IntValue);
+            Assert.NotNull(obj);
+            Assert.Equal(12, obj.IntValue);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteWithNamingConvention()
         {
             CborOptions options = new CborOptions();
@@ -169,7 +168,7 @@ namespace Dahomey.Cbor.Tests
             public int InheritedValue { get; set; }
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadWithDiscriminator()
         {
             CborOptions options = new CborOptions();
@@ -182,13 +181,13 @@ namespace Dahomey.Cbor.Tests
             const string hexBuffer = "A3625F7469696E686572697465646E496E6865726974656456616C75650D694261736556616C75650C";
             BaseObject obj = Helper.Read<BaseObject>(hexBuffer, options);
 
-            Assert.IsNotNull(obj);
-            Assert.IsInstanceOfType(obj, typeof(InheritedObject));
-            Assert.AreEqual(12, obj.BaseValue);
-            Assert.AreEqual(13, ((InheritedObject)obj).InheritedValue);
+            Assert.NotNull(obj);
+            Assert.IsType<InheritedObject>(obj);
+            Assert.Equal(12, obj.BaseValue);
+            Assert.Equal(13, ((InheritedObject)obj).InheritedValue);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteWithDiscriminator()
         {
             CborOptions options = new CborOptions();
@@ -248,7 +247,7 @@ namespace Dahomey.Cbor.Tests
             public string Name { get; set; }
         }
 
-        [TestMethod]
+        [Fact]
         public void OptIn()
         {
             CborOptions options = new CborOptions();

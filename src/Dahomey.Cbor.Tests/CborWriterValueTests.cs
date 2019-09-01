@@ -1,116 +1,116 @@
 ﻿using Dahomey.Cbor.ObjectModel;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace Dahomey.Cbor.Tests
 {
-    [TestClass]
+
     public class CborWriterValueTests
     {
-        [DataTestMethod]
-        [DataRow("F5", true, null)]
-        [DataRow("F4", false, null)]
+        [Theory]
+        [InlineData("F5", true, null)]
+        [InlineData("F4", false, null)]
         public void WriteBoolean(string hexBuffer, bool value, Type expectedExceptionType)
         {
             Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
-        [DataTestMethod]
-        [DataRow("3B7FFFFFFFFFFFFFFF", long.MinValue, null)]
-        [DataRow("3903E7", -1000L, null)]
-        [DataRow("3863", -100L, null)]
-        [DataRow("3818", -25L, null)]
-        [DataRow("37", -24L, null)]
-        [DataRow("2B", -12L, null)]
-        [DataRow("1BFFFFFFFFFFFFFFFF", -1, typeof(CborException))]
-        [DataRow("18", -1, typeof(CborException))]
-        [DataRow("19", -1, typeof(CborException))]
-        [DataRow("1A", -1, typeof(CborException))]
-        [DataRow("1B", -1, typeof(CborException))]
-        [DataRow("1C", -1, typeof(CborException))]
-        [DataRow("1D", -1, typeof(CborException))]
-        [DataRow("1E", -1, typeof(CborException))]
-        [DataRow("1F", -1, typeof(CborException))]
+        [Theory]
+        [InlineData("3B7FFFFFFFFFFFFFFF", long.MinValue, null)]
+        [InlineData("3903E7", -1000L, null)]
+        [InlineData("3863", -100L, null)]
+        [InlineData("3818", -25L, null)]
+        [InlineData("37", -24L, null)]
+        [InlineData("2B", -12L, null)]
+        [InlineData("1BFFFFFFFFFFFFFFFF", -1, typeof(CborException))]
+        [InlineData("18", -1, typeof(CborException))]
+        [InlineData("19", -1, typeof(CborException))]
+        [InlineData("1A", -1, typeof(CborException))]
+        [InlineData("1B", -1, typeof(CborException))]
+        [InlineData("1C", -1, typeof(CborException))]
+        [InlineData("1D", -1, typeof(CborException))]
+        [InlineData("1E", -1, typeof(CborException))]
+        [InlineData("1F", -1, typeof(CborException))]
         public void WriteNegative(string hexBuffer, long value, Type expectedExceptionType)
         {
             Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
-        [DataTestMethod]
-        [DataRow("00", 0ul, null)]
-        [DataRow("0C", 12ul, null)]
-        [DataRow("17", 23ul, null)]
-        [DataRow("1818", 24ul, null)]
-        [DataRow("1864", 100ul, null)]
-        [DataRow("1903E8", 1000ul, null)]
-        [DataRow("1B7FFFFFFFFFFFFFFF", (ulong)long.MaxValue, null)]
-        [DataRow("1BFFFFFFFFFFFFFFFF", ulong.MaxValue, null)]
-        [DataRow("18", 0ul, typeof(CborException))]
-        [DataRow("19", 0ul, typeof(CborException))]
-        [DataRow("1A", 0ul, typeof(CborException))]
-        [DataRow("1B", 0ul, typeof(CborException))]
-        [DataRow("1C", 0ul, typeof(CborException))]
-        [DataRow("1D", 0ul, typeof(CborException))]
-        [DataRow("1E", 0ul, typeof(CborException))]
-        [DataRow("1F", 0ul, typeof(CborException))]
+        [Theory]
+        [InlineData("00", 0ul, null)]
+        [InlineData("0C", 12ul, null)]
+        [InlineData("17", 23ul, null)]
+        [InlineData("1818", 24ul, null)]
+        [InlineData("1864", 100ul, null)]
+        [InlineData("1903E8", 1000ul, null)]
+        [InlineData("1B7FFFFFFFFFFFFFFF", (ulong)long.MaxValue, null)]
+        [InlineData("1BFFFFFFFFFFFFFFFF", ulong.MaxValue, null)]
+        [InlineData("18", 0ul, typeof(CborException))]
+        [InlineData("19", 0ul, typeof(CborException))]
+        [InlineData("1A", 0ul, typeof(CborException))]
+        [InlineData("1B", 0ul, typeof(CborException))]
+        [InlineData("1C", 0ul, typeof(CborException))]
+        [InlineData("1D", 0ul, typeof(CborException))]
+        [InlineData("1E", 0ul, typeof(CborException))]
+        [InlineData("1F", 0ul, typeof(CborException))]
         public void WritePositive(string hexBuffer, ulong value, Type expectedExceptionType)
         {
             Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
-        [DataTestMethod]
-        [DataRow("FA4141EB85", 12.12f, null)]
-        [DataRow("FAFFC00000", float.NaN, null)]
-        [DataRow("FA7F800000", float.PositiveInfinity, null)]
-        [DataRow("FAFF800000", float.NegativeInfinity, null)]
+        [Theory]
+        [InlineData("FA4141EB85", 12.12f, null)]
+        [InlineData("FAFFC00000", float.NaN, null)]
+        [InlineData("FA7F800000", float.PositiveInfinity, null)]
+        [InlineData("FAFF800000", float.NegativeInfinity, null)]
         public void WriteSingle(string hexBuffer, float value, Type expectedExceptionType)
         {
             Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
-        [DataTestMethod]
-        [DataRow("FB40283D70A3D70A3D", 12.12, null)]
-        [DataRow("FBFFF8000000000000", double.NaN, null)]
-        [DataRow("FB7FF0000000000000", double.PositiveInfinity, null)]
-        [DataRow("FBFFF0000000000000", double.NegativeInfinity, null)]
+        [Theory]
+        [InlineData("FB40283D70A3D70A3D", 12.12, null)]
+        [InlineData("FBFFF8000000000000", double.NaN, null)]
+        [InlineData("FB7FF0000000000000", double.PositiveInfinity, null)]
+        [InlineData("FBFFF0000000000000", double.NegativeInfinity, null)]
         public void WriteDouble(string hexBuffer, double value, Type expectedExceptionType)
         {
             Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
-        [DataTestMethod]
-        [DataRow("63666F6F", "foo", null)]
-        [DataRow("60", "", null)]
+        [Theory]
+        [InlineData("63666F6F", "foo", null)]
+        [InlineData("60", "", null)]
         public void WriteString(string hexBuffer, string value, Type expectedExceptionType)
         {
             Helper.TestWrite(value, hexBuffer, expectedExceptionType);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteNull()
         {
             Helper.TestWrite((CborValue)CborValue.Null, "F6");
         }
 
-        [DataTestMethod]
-        [DataRow("8401020304", "1,2,3,4", null)]
+        [Theory]
+        [InlineData("8401020304", "1,2,3,4", null)]
         public void WriteInt32List(string hexBuffer, string value, Type expectedExceptionType)
         {
             CborArray array = new CborArray(value.Split(',').Select(s => (CborValue)int.Parse(s)));
             Helper.TestWrite(array, hexBuffer, expectedExceptionType);
         }
 
-        [DataTestMethod]
-        [DataRow("84626161626262626363626464", "aa,bb,cc,dd", null)]
+        [Theory]
+        [InlineData("84626161626262626363626464", "aa,bb,cc,dd", null)]
         public void WriteStringList(string hexBuffer, string value, Type expectedExceptionType)
         {
             CborArray array = new CborArray(value.Split(',').Select(s => (CborValue)s));
             Helper.TestWrite(array, hexBuffer, expectedExceptionType);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteObject()
         {
             const string hexBuffer =
@@ -127,7 +127,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(obj, hexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteArray()
         {
             string hexBuffer = "8663666F6FFB40283D70A3D70A3DF5F6820102A162696401";

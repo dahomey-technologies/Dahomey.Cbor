@@ -1,9 +1,9 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
 {
-    [TestClass]
+
     public class Issue0017
     {
         private class Tree
@@ -34,7 +34,7 @@ namespace Dahomey.Cbor.Tests.Issues
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void Test()
         {
             CborOptions.Default.Registry.ObjectMappingRegistry.Register<Tree>(om =>
@@ -48,10 +48,10 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Tree tree = Helper.Read<Tree>(hexBuffer);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual(12, tree.age);
-            Assert.IsNull(tree.GetR());
-            Assert.IsNull(tree.GetS());
+            Assert.NotNull(tree);
+            Assert.Equal(12, tree.age);
+            Assert.Null(tree.GetR());
+            Assert.Null(tree.GetS());
         }
     }
 }

@@ -1,12 +1,12 @@
 ﻿using Dahomey.Cbor.Attributes;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
 {
     /// <summary>
     /// https://github.com/dahomey-technologies/Dahomey.Cbor/issues/13
     /// </summary>
-    [TestClass]
+
     public class Issue0013
     {
         public class Tree
@@ -22,18 +22,18 @@ namespace Dahomey.Cbor.Tests.Issues
             }
         }
         
-        [TestMethod]
+        [Fact]
         public void ReadReadOnlyField()
         {
             const string hexBuffer = "A1646E616D6563666F6F";
 
             Tree tree = Helper.Read<Tree>(hexBuffer);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual(null, tree._name);
+            Assert.NotNull(tree);
+            Assert.Null(tree._name);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteReadOnlyField()
         {
             const string hexBuffer = "A1646E616D6563666F6F";
@@ -41,7 +41,7 @@ namespace Dahomey.Cbor.Tests.Issues
             Helper.TestWrite(new Tree("foo"), hexBuffer);
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadReadOnlyFieldWithNonDefaultConstructor()
         {
             CborOptions options = new CborOptions();
@@ -56,11 +56,11 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Tree tree = Helper.Read<Tree>(hexBuffer, options);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual("foo", tree._name);
+            Assert.NotNull(tree);
+            Assert.Equal("foo", tree._name);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteReadOnlyFieldWithNonDefaultConstructor()
         {
             CborOptions options = new CborOptions();
@@ -88,18 +88,18 @@ namespace Dahomey.Cbor.Tests.Issues
             }
         }
 
-        [TestMethod]
+        [Fact]
         public void ReadReadOnlyFieldWithCborContructor()
         {
             const string hexBuffer = "A1646E616D6563666F6F";
 
             Tree2 tree = Helper.Read<Tree2>(hexBuffer);
 
-            Assert.IsNotNull(tree);
-            Assert.AreEqual("foo", tree._name);
+            Assert.NotNull(tree);
+            Assert.Equal("foo", tree._name);
         }
 
-        [TestMethod]
+        [Fact]
         public void WriteReadOnlyFieldWithCborConstructor()
         {
             const string hexBuffer = "A1646E616D6563666F6F";
