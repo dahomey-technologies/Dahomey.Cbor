@@ -18,7 +18,7 @@ namespace Dahomey.Cbor.Tests.Issues
 
             public Tree(string name)
             {
-                this._name = name;
+                _name = name;
             }
         }
         
