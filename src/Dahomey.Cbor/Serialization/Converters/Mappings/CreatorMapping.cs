@@ -93,7 +93,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 if (createMemberNames)
                 {
                     memberMapping = memberMappings
-                        .FirstOrDefault(m => string.Compare(m.MemberName, parameter.Name, ignoreCase: true) == 0);
+                        .FirstOrDefault(m => string.Compare(m.MemberInfo.Name, parameter.Name, ignoreCase: true) == 0);
 
                     if (memberMapping == null)
                     {
