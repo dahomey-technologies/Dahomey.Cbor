@@ -16,7 +16,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         void Write(ref CborWriter writer, object obj);
         object Read(ref CborReader reader);
         void Set(object obj, object value);
-        bool IsDefaultValue(object obj);
+        bool ShouldSerialize(object obj);
     }
 
     public class MemberConverter<T, TM> : IMemberConverter
@@ -28,6 +28,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private ReadOnlyMemory<byte> _memberName;
         private readonly TM _defaultValue;
         private readonly bool _ignoreIfDefault;
+        private readonly Func<object, bool> _shouldSeriliazeMethod;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
         public bool IgnoreIfDefault => _ignoreIfDefault;
@@ -42,6 +43,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             _memberConverter = (ICborConverter<TM>)memberMapping.MemberConverter;
             _defaultValue = (TM)memberMapping.DefaultValue;
             _ignoreIfDefault = memberMapping.IgnoreIfDefault;
+            _shouldSeriliazeMethod = memberMapping.ShouldSerializeMethod;
         }
 
         public void Read(ref CborReader reader, object obj)
@@ -64,10 +66,19 @@ namespace Dahomey.Cbor.Serialization.Converters
             _memberSetter((T)obj, (TM)value);
         }
 
-        public bool IsDefaultValue(object obj)
+        public bool ShouldSerialize(object obj)
         {
-            TM value = _memberGetter((T)obj);
-            return EqualityComparer<TM>.Default.Equals(value, _defaultValue);
+            if (IgnoreIfDefault && EqualityComparer<TM>.Default.Equals(_memberGetter((T)obj), _defaultValue))
+            {
+                return false;
+            }
+
+            if (_shouldSeriliazeMethod != null && !_shouldSeriliazeMethod(obj))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private Func<T, TM> GenerateGetter(MemberInfo memberInfo)

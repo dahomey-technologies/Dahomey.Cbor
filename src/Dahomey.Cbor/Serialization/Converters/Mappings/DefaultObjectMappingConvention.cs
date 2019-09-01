@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 
@@ -48,6 +49,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                 MemberMapping memberMapping = new MemberMapping(registry.ConverterRegistry, objectMapping, propertyInfo, propertyInfo.PropertyType);
                 ProcessDefaultValue(propertyInfo, memberMapping);
+                ProcessShouldSerializeMethod(memberMapping);
                 memberMappings.Add(memberMapping);
             }
 
@@ -67,6 +69,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                 MemberMapping memberMapping = new MemberMapping(registry.ConverterRegistry, objectMapping, fieldInfo, fieldInfo.FieldType);
                 ProcessDefaultValue(fieldInfo, memberMapping);
+                ProcessShouldSerializeMethod(memberMapping);
 
                 memberMappings.Add(memberMapping);
             }
@@ -98,6 +101,28 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             if (memberInfo.IsDefined(typeof(CborIgnoreIfDefaultAttribute)))
             {
                 memberMapping.SetIngoreIfDefault(true);
+            }
+        }
+
+        private void ProcessShouldSerializeMethod(MemberMapping memberMapping)
+        {
+            string shouldSerializeMethodName = "ShouldSerialize" + memberMapping.MemberInfo.Name;
+            Type objectType = memberMapping.MemberInfo.DeclaringType;
+
+            MethodInfo shouldSerializeMethodInfo = objectType.GetMethod(shouldSerializeMethodName, new Type[] { });
+            if (shouldSerializeMethodInfo != null &&
+                shouldSerializeMethodInfo.IsPublic &&
+                shouldSerializeMethodInfo.ReturnType == typeof(bool))
+            {
+                // l(obj) => ((TClass) obj).ShouldSerializeXyz()
+                ParameterExpression objParameter = Expression.Parameter(typeof(object), "obj");
+                Expression<Func<object, bool>> lambdaExpression = Expression.Lambda<Func<object, bool>>(
+                    Expression.Call(
+                        Expression.Convert(objParameter, objectType), 
+                        shouldSerializeMethodInfo), 
+                    objParameter);
+
+                memberMapping.SetShouldSerializeMethod(lambdaExpression.Compile());
             }
         }
     }

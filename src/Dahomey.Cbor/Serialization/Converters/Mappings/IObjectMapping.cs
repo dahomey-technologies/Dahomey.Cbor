@@ -1,6 +1,7 @@
 ﻿using Dahomey.Cbor.Serialization.Conventions;
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {

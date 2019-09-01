@@ -24,6 +24,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public INamingConvention NamingConvention { get; private set; }
         public IReadOnlyCollection<IMemberMapping> MemberMappings => _memberMappings;
         public ICreatorMapping CreatorMapping => _creatorMapping;
+        public MethodInfo ShouldSerializeMethod { get; private set; }
 
         public ObjectMapping(SerializationRegistry registry)
         {
