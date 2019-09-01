@@ -74,6 +74,16 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return memberMapping;
         }
 
+        public MemberMapping MapMember(FieldInfo fieldInfo)
+        {
+            return MapMember(fieldInfo, fieldInfo.FieldType);
+        }
+
+        public MemberMapping MapMember(PropertyInfo propertyInfo)
+        {
+            return MapMember(propertyInfo, propertyInfo.PropertyType);
+        }
+
         public ObjectMapping<T> SetMemberMappings(IReadOnlyCollection<IMemberMapping> memberMappings)
         {
             _memberMappings = memberMappings.ToList();
