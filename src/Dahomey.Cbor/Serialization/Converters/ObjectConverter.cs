@@ -199,7 +199,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 obj = value,
             };
 
-            if (!_isInterfaceOrAbstract && value.GetType() != typeof(T))
+            if (_objectMapping.CreatorMapping == null && value.GetType() != typeof(T))
             {
                 context.state = MapWriterContext.State.Discriminator;
                 context.objectConverter = (IObjectConverter)_registry.ConverterRegistry.Lookup(value.GetType());
