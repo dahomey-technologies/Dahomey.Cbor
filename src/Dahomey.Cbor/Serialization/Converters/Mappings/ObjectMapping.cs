@@ -24,7 +24,10 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public INamingConvention NamingConvention { get; private set; }
         public IReadOnlyCollection<IMemberMapping> MemberMappings => _memberMappings;
         public ICreatorMapping CreatorMapping => _creatorMapping;
-        public MethodInfo ShouldSerializeMethod { get; private set; }
+        public Delegate OnSerializingMethod { get; private set; }
+        public Delegate OnSerializedMethod { get; private set; }
+        public Delegate OnDeserializingMethod { get; private set; }
+        public Delegate OnDeserializedMethod { get; private set; }
 
         public ObjectMapping(SerializationRegistry registry)
         {
@@ -156,6 +159,30 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public ObjectMapping<T> SetCreatorMapping(ICreatorMapping creatorMapping)
         {
             _creatorMapping = creatorMapping;
+            return this;
+        }
+
+        public ObjectMapping<T> SetOnSerializingMethod(Action<T> onSerializingMethod)
+        {
+            OnSerializingMethod = onSerializingMethod;
+            return this;
+        }
+
+        public ObjectMapping<T> SetOnSerializedMethod(Action<T> onSerializedMethod)
+        {
+            OnSerializedMethod = onSerializedMethod;
+            return this;
+        }
+
+        public ObjectMapping<T> SetOnDeserializingMethod(Action<T> onDeserializingMethod)
+        {
+            OnDeserializingMethod = onDeserializingMethod;
+            return this;
+        }
+
+        public ObjectMapping<T> SetOnDeserializedMethod(Action<T> onDeserializedMethod)
+        {
+            OnDeserializedMethod = onDeserializedMethod;
             return this;
         }
 

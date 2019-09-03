@@ -130,9 +130,9 @@ namespace Dahomey.Cbor.Serialization.Converters
             if (context.creatorValues != null)
             {
                 context.obj = (T)_objectMapping.CreatorMapping.CreateInstance(context.creatorValues);
-                if (context.obj is ISupportInitialize supportInitialize)
+                if (_objectMapping.OnDeserializingMethod != null)
                 {
-                    supportInitialize.BeginInit();
+                    ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
                 }
 
                 foreach (KeyValuePair<RawString, object> value in context.regularValues)
@@ -147,9 +147,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
             }
 
-            if (context.obj is ISupportInitialize supportInitialize2)
+            if (_objectMapping.OnDeserializedMethod != null)
             {
-                supportInitialize2.EndInit();
+                ((Action<T>)_objectMapping.OnDeserializedMethod)(context.obj);
             }
 
             return context.obj;
@@ -194,6 +194,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return;
             }
 
+            if (_objectMapping.OnSerializingMethod != null)
+            {
+                ((Action<T>)_objectMapping.OnSerializingMethod)(value);
+            }
+
             MapWriterContext context = new MapWriterContext
             {
                 obj = value,
@@ -211,6 +216,11 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
 
             writer.WriteMap(this, ref context);
+
+            if (_objectMapping.OnSerializedMethod != null)
+            {
+                ((Action<T>)_objectMapping.OnSerializedMethod)(value);
+            }
         }
 
         public void ReadBeginMap(int size, ref MapReaderContext context)
@@ -247,9 +257,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     context.obj = context.converter.CreateInstance();
 
-                    if (context.obj is ISupportInitialize supportInitialize)
+                    if (_objectMapping.OnDeserializingMethod != null)
                     {
-                        supportInitialize.BeginInit();
+                        ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
                     }
 
                     if (shouldReadValue)

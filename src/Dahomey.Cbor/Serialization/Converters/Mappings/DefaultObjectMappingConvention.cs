@@ -1,11 +1,13 @@
 ﻿using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization.Conventions;
+using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.Serialization;
 using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
@@ -88,6 +90,42 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     creatorMapping.SetMemberNames(constructorAttribute.MemberNames);
                 }
             }
+
+            MethodInfo methodInfo = type.GetMethods()
+                .FirstOrDefault(m => m.IsDefined(typeof(OnDeserializingAttribute)));
+            if (methodInfo != null)
+            {
+                objectMapping.SetOnDeserializingMethod(GenerateCallbackDelegate<T>(methodInfo));
+            }
+            else if (type.GetInterfaces().Any(i => i == typeof(ISupportInitialize)))
+            {
+                objectMapping.SetOnDeserializingMethod(t => ((ISupportInitialize)t).BeginInit());
+            }
+
+            methodInfo = type.GetMethods()
+                .FirstOrDefault(m => m.IsDefined(typeof(OnDeserializedAttribute)));
+            if (methodInfo != null)
+            {
+                objectMapping.SetOnDeserializedMethod(GenerateCallbackDelegate<T>(methodInfo));
+            }
+            else if (type.GetInterfaces().Any(i => i == typeof(ISupportInitialize)))
+            {
+                objectMapping.SetOnDeserializedMethod(t => ((ISupportInitialize)t).EndInit());
+            }
+
+            methodInfo = type.GetMethods()
+                .FirstOrDefault(m => m.IsDefined(typeof(OnSerializingAttribute)));
+            if (methodInfo != null)
+            {
+                objectMapping.SetOnSerializingMethod(GenerateCallbackDelegate<T>(methodInfo));
+            }
+
+            methodInfo = type.GetMethods()
+                .FirstOrDefault(m => m.IsDefined(typeof(OnSerializedAttribute)));
+            if (methodInfo != null)
+            {
+                objectMapping.SetOnSerializedMethod(GenerateCallbackDelegate<T>(methodInfo));
+            }
         }
 
         private void ProcessDefaultValue(MemberInfo memberInfo, MemberMapping memberMapping)
@@ -114,7 +152,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 shouldSerializeMethodInfo.IsPublic &&
                 shouldSerializeMethodInfo.ReturnType == typeof(bool))
             {
-                // l(obj) => ((TClass) obj).ShouldSerializeXyz()
+                // obj => ((TClass) obj).ShouldSerializeXyz()
                 ParameterExpression objParameter = Expression.Parameter(typeof(object), "obj");
                 Expression<Func<object, bool>> lambdaExpression = Expression.Lambda<Func<object, bool>>(
                     Expression.Call(
@@ -124,6 +162,19 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                 memberMapping.SetShouldSerializeMethod(lambdaExpression.Compile());
             }
+        }
+
+        private Action<T> GenerateCallbackDelegate<T>(MethodInfo methodInfo)
+        {
+            // obj => obj.Callback()
+            ParameterExpression objParameter = Expression.Parameter(typeof(T), "obj");
+            Expression<Action<T>> lambdaExpression = Expression.Lambda<Action<T>>(
+                    Expression.Call(
+                        Expression.Convert(objParameter, typeof(T)),
+                        methodInfo),
+                objParameter);
+
+            return lambdaExpression.Compile();
         }
     }
 }

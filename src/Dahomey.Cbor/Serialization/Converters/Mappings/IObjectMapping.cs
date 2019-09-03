@@ -1,7 +1,6 @@
 ﻿using Dahomey.Cbor.Serialization.Conventions;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
@@ -11,5 +10,9 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         INamingConvention NamingConvention { get; }
         IReadOnlyCollection<IMemberMapping> MemberMappings { get; }
         ICreatorMapping CreatorMapping { get;  }
+        Delegate OnSerializingMethod { get; }
+        Delegate OnSerializedMethod { get; }
+        Delegate OnDeserializingMethod { get; }
+        Delegate OnDeserializedMethod { get; }
     }
 }
