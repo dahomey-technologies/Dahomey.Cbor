@@ -17,6 +17,8 @@ namespace Dahomey.Cbor.Tests.Issues
 
             public int GetAge() => _age;
             public string GetName() => _name;
+            public void SetAge(int age) => _age = age;
+            public void SetName(string name) => _name = name;
         }
 
         [Fact]
@@ -51,6 +53,8 @@ namespace Dahomey.Cbor.Tests.Issues
 
             public int GetAge() => _age;
             public string GetName() => _name;
+            public void SetAge(int age) => _age = age;
+            public void SetName(string name) => _name = name;
         }
 
         [Fact]

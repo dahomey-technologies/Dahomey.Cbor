@@ -8,7 +8,7 @@ namespace Dahomey.Cbor.Tests.Issues
     {
         private class Tree
         {
-            public int age;
+            public int age = 0;
 
             [CborProperty("r")]
             private readonly byte[] _r;
