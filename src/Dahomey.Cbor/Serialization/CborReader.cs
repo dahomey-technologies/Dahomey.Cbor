@@ -337,6 +337,8 @@ namespace Dahomey.Cbor.Serialization
                 mapReader.ReadMapItem(ref this, ref context);
                 size--;
             }
+
+            _state = State.Start;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -353,6 +355,8 @@ namespace Dahomey.Cbor.Serialization
                 arrayReader.ReadArrayItem(ref this, ref context);
                 size--;
             }
+
+            _state = State.Start;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -638,6 +642,8 @@ namespace Dahomey.Cbor.Serialization
                 SkipDataItem();
                 size--;
             }
+
+            _state = State.Start;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -651,6 +657,8 @@ namespace Dahomey.Cbor.Serialization
                 SkipDataItem();
                 size--;
             }
+
+            _state = State.Start;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
