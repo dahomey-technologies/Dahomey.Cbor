@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -98,7 +99,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             if (!_isInterfaceOrAbstract && _objectMapping.CreatorMapping == null)
             {
-                _constructor = typeof(T).GetConstructor(new Type[0]).CreateDelegate<T>();
+                _constructor = typeof(T).GetConstructor(
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                    null,
+                    Type.EmptyTypes, 
+                    null).CreateDelegate<T>();
             }
         }
 
