@@ -84,7 +84,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public int GetArraySize(ref WriterContext context)
         {
-            return context.array.Length;
+            return context.array?.Length ?? 0;
         }
 
         public void WriteArrayItem(ref CborWriter writer, ref WriterContext context)
