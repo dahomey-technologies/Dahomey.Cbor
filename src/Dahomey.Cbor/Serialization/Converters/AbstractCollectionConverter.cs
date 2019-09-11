@@ -52,8 +52,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             WriterContext context = new WriterContext
             {
-                count = value.Count,
-                enumerator = value.GetEnumerator()
+                count = value?.Count ?? 0,
+                enumerator = value?.GetEnumerator()
             };
             writer.WriteArray(this, ref context);
         }
