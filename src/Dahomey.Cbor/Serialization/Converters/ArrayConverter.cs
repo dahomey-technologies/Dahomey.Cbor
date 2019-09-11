@@ -49,6 +49,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override void Write(ref CborWriter writer, TI[] value)
         {
+            if (value == null)
+            {
+                writer.WriteNull();
+                return;
+            }
             WriterContext context = new WriterContext
             {
                 array = value
