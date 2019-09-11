@@ -15,12 +15,7 @@ namespace Dahomey.Cbor.Tests.Issues
             public List<string> Items { get; set; }
         }
 
-		public class ObjectWithNullDictionary
-		{
-			public Dictionary<string, string> Items { get; set; }
-		}
-
-		[Fact]
+        [Fact]
         public void TestNullReferenceList()
         {
 
@@ -38,7 +33,7 @@ namespace Dahomey.Cbor.Tests.Issues
 
         }
 
-		[Fact]
+        [Fact]
         public void TestNullReferenceArray()
         {
 
@@ -55,22 +50,5 @@ namespace Dahomey.Cbor.Tests.Issues
             Assert.Equal("A1654279746573F6", hexResult);
         }
 
-
-		[Fact]
-		public void TestNullReferenceDictionary()
-		{
-			var obj = new ObjectWithNullDictionary();
-
-			string hexResult = null;
-
-			var ex = Record.Exception(() => {
-				hexResult = Helper.Write(obj);
-			});
-
-			Assert.NotEmpty(hexResult);
-			Assert.Null(ex);
-			Assert.Equal("A1654974656D73F6", hexResult);
-
-		}
-	}
+    }
 }
