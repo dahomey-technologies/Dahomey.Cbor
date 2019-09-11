@@ -49,6 +49,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override void Write(ref CborWriter writer, TI[] value)
         {
+            if (value == null)
+            {
+                writer.WriteNull();
+                return;
+            }
             WriterContext context = new WriterContext
             {
                 array = value
@@ -84,7 +89,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public int GetArraySize(ref WriterContext context)
         {
-            return context.array?.Length ?? 0;
+            return context.array.Length;
         }
 
         public void WriteArrayItem(ref CborWriter writer, ref WriterContext context)
