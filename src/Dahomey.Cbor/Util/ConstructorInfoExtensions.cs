@@ -9,6 +9,10 @@ namespace Dahomey.Cbor.Util
     {
         public static Func<T> CreateDelegate<T>(this ConstructorInfo constructorInfo)
         {
+            if ( constructorInfo == null)
+            {
+                return new Func<T>(() => { return default(T); });
+            }
             ParameterExpression[] parameters = constructorInfo.GetParameters()
                 .Select(p => Expression.Parameter(p.ParameterType, p.Name))
                 .ToArray();

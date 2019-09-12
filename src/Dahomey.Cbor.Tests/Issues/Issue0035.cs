@@ -2,11 +2,15 @@
 
 namespace Dahomey.Cbor.Tests.Issues
 {
-    public class Issue0035
+    public class Issue0033
     {
         public class Result<T>
         {
             public T Data { get; set; }
+            //public Result()
+            //{
+            //    // This is required now. Should not be
+            //}
 
             public Result(T data)
             {
@@ -14,20 +18,11 @@ namespace Dahomey.Cbor.Tests.Issues
             }
         }
 
-        [Fact]
-        void TestRead()
-        {
-            const string hexBuffer = "A164446174616474657374";
-            Result<string> result = Helper.Read<Result<string>>(hexBuffer);
-
-            Assert.NotNull(result);
-            Assert.Equal("test", result.Data);
-        }
 
         [Fact]
-        void TestWrite()
+        public void TestNonRequiredEmptyConstructor()
         {
-            Result<string> result = new Result<string>("test");
+            var result = new Result<string>("test");
             string hexEncoded = null;
             var ex = Record.Exception(() =>
             {
