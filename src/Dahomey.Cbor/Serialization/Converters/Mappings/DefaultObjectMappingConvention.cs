@@ -28,6 +28,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
             registry.DefaultDiscriminatorConvention.RegisterType(type, discriminator);
 
+            if (discriminatorAttribute != null)
+            {
+                objectMapping.SetDiscriminatorPolicy(discriminatorAttribute.Policy);
+            }
+
             Type namingConventionType = type.GetCustomAttribute<CborNamingConventionAttribute>()?.NamingConventionType;
             if (namingConventionType != null)
             {

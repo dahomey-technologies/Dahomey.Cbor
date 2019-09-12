@@ -1,4 +1,5 @@
-﻿using Dahomey.Cbor.Serialization.Conventions;
+﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
@@ -28,6 +29,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public Delegate OnSerializedMethod { get; private set; }
         public Delegate OnDeserializingMethod { get; private set; }
         public Delegate OnDeserializedMethod { get; private set; }
+        public CborDiscriminatorPolicy DiscriminatorPolicy { get; private set; }
 
         public ObjectMapping(SerializationRegistry registry)
         {
@@ -183,6 +185,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public ObjectMapping<T> SetOnDeserializedMethod(Action<T> onDeserializedMethod)
         {
             OnDeserializedMethod = onDeserializedMethod;
+            return this;
+        }
+
+        public ObjectMapping<T> SetDiscriminatorPolicy(CborDiscriminatorPolicy discriminatorPolicy)
+        {
+            DiscriminatorPolicy = discriminatorPolicy;
             return this;
         }
 

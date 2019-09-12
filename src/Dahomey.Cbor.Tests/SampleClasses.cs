@@ -160,6 +160,7 @@ namespace Dahomey.Cbor.Tests
     public class BaseObjectHolder
     {
         public BaseObject BaseObject { get; set; }
+        public NameObject NameObject { get; set; }
     }
 
     public class BaseObject
