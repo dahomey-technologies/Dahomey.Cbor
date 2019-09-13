@@ -8,7 +8,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         public override DateTime Read(ref CborReader reader)
         {
-            switch(reader.GetCurrentDataItemType())
+            switch (reader.GetCurrentDataItemType())
             {
                 case CborDataItemType.String:
                     ReadOnlySpan<byte> rawString = reader.ReadRawString();
@@ -71,7 +71,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return false;
             }
 
-            if (!TryReadInt32(ref buffer, 2, out int hour))
+            if (!TryReadInt32(ref buffer, 2, out int hours))
             {
                 value = default;
                 return false;
@@ -83,7 +83,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return false;
             }
 
-            if (!TryReadInt32(ref buffer, 2, out int minute))
+            if (!TryReadInt32(ref buffer, 2, out int minutes))
             {
                 value = default;
                 return false;
@@ -95,19 +95,88 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return false;
             }
 
-            if (!TryReadInt32(ref buffer, 2, out int second))
+            if (!TryReadInt32(ref buffer, 2, out int seconds))
             {
                 value = default;
                 return false;
             }
 
-            if (!TryReadByte(ref buffer, (byte)'Z'))
+            int milliseconds = 0;
+            if (TryReadByte(ref buffer, (byte)'.'))
             {
-                value = default;
-                return false;
+                if (!TryReadInt32(ref buffer, 1, out int digit))
+                {
+                    value = default;
+                    return false;
+                }
+
+                milliseconds = digit;
+
+                while (TryReadInt32(ref buffer, 1, out digit))
+                {
+                    milliseconds = milliseconds * 10 + digit;
+                }
             }
 
-            value = new DateTime(year, month, day, hour, minute, second, DateTimeKind.Utc);
+            // unspecified time zone => assume local
+            if (buffer.IsEmpty)
+            {
+                value = new DateTime(year, month, day, hours, minutes, seconds, milliseconds, DateTimeKind.Local);
+            }
+            // UTC
+            else if (TryReadByte(ref buffer, (byte)'Z'))
+            {
+                value = new DateTime(year, month, day, hours, minutes, seconds, milliseconds, DateTimeKind.Utc);
+            }
+            // Other time zones => convert to local
+            else
+            {
+                bool negative;
+                if (TryReadByte(ref buffer, (byte)'-'))
+                {
+                    negative = true;
+                }
+                else if (TryReadByte(ref buffer, (byte)'+'))
+                {
+                    negative = false;
+                }
+                else
+                {
+                    value = default;
+                    return false;
+                }
+
+                if (!TryReadInt32(ref buffer, 2, out int offsetHours))
+                {
+                    value = default;
+                    return false;
+                }
+
+                if (!TryReadByte(ref buffer, (byte)':'))
+                {
+                    value = default;
+                    return false;
+                }
+
+                if (!TryReadInt32(ref buffer, 2, out int offsetMinutes))
+                {
+                    value = default;
+                    return false;
+                }
+
+                if (negative)
+                {
+                    offsetHours = -offsetHours;
+                    offsetMinutes = -offsetMinutes;
+                }
+
+                DateTimeOffset offset = new DateTimeOffset(
+                    year, month, day, hours, minutes, seconds, milliseconds, 
+                    TimeSpan.FromHours(offsetHours) + TimeSpan.FromMinutes(offsetMinutes));
+
+                value = offset.LocalDateTime;
+            }
+
             return true;
         }
 
