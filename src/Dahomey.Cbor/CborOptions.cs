@@ -1,4 +1,5 @@
-﻿using Dahomey.Cbor.Serialization;
+﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Conventions;
 
 namespace Dahomey.Cbor
@@ -31,6 +32,7 @@ namespace Dahomey.Cbor
         public DateTimeFormat DateTimeFormat { get; set; }
         public bool IsIndented { get; set; }
         public IDiscriminatorConvention DiscriminatorConvention { get; set; }
+        public CborDiscriminatorPolicy DiscriminatorPolicy { get; set; }
 
         public CborOptions()
         {

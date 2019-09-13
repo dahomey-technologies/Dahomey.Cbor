@@ -107,7 +107,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 else
                 {
                     memberMapping = memberMappings
-                        .FirstOrDefault(m => new RawString(m.MemberName).Equals(_memberNames[i]));
+                        .FirstOrDefault(m => string.Compare(m.MemberName, _memberNames[i].ToString(), ignoreCase: true) == 0);
 
                     if (memberMapping == null)
                     {

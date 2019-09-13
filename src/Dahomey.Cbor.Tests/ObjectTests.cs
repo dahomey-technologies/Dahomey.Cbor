@@ -450,28 +450,6 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public void ReadPolymorphicObject()
-        {
-            const string hexBuffer = "A16A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F62496401";
-            BaseObjectHolder obj = Helper.Read<BaseObjectHolder>(hexBuffer);
-        }
-
-        [Fact]
-        public void WritePolymorphicObject()
-        {
-            const string hexBuffer = "A16A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F62496401";
-            BaseObjectHolder obj = new BaseObjectHolder
-            {
-                BaseObject = new NameObject
-                {
-                    Id = 1,
-                    Name = "foo"
-                }
-            };
-            Helper.TestWrite(obj, hexBuffer);
-        }
-
-        [Fact]
         public void ReadWithCustomConverterOnProperty()
         {
             const string hexBuffer = "A16447756964505DF4EB676C01484B8AE61E389127B717";

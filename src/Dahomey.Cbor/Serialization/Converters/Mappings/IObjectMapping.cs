@@ -1,4 +1,5 @@
-﻿using Dahomey.Cbor.Serialization.Conventions;
+﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization.Conventions;
 using System;
 using System.Collections.Generic;
 
@@ -14,5 +15,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         Delegate OnSerializedMethod { get; }
         Delegate OnDeserializingMethod { get; }
         Delegate OnDeserializedMethod { get; }
+        CborDiscriminatorPolicy DiscriminatorPolicy { get; }
     }
 }

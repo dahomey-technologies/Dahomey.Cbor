@@ -1,9 +1,9 @@
-﻿using Dahomey.Cbor.Serialization.Conventions;
+﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 
@@ -99,11 +99,18 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             if (!_isInterfaceOrAbstract && _objectMapping.CreatorMapping == null)
             {
-                _constructor = typeof(T).GetConstructor(
+                ConstructorInfo defaultConstructorInfo = typeof(T).GetConstructor(
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
                     null,
-                    Type.EmptyTypes, 
-                    null).CreateDelegate<T>();
+                    Type.EmptyTypes,
+                    null);
+
+                if (defaultConstructorInfo == null)
+                {
+                    throw new CborException($"Cannot find a default constructor on type {typeof(T)}");
+                }
+
+                _constructor = defaultConstructorInfo.CreateDelegate<T>();
             }
         }
 
@@ -209,15 +216,30 @@ namespace Dahomey.Cbor.Serialization.Converters
                 obj = value,
             };
 
-            if (_objectMapping.CreatorMapping == null && value.GetType() != typeof(T))
+            Type declaredType = typeof(T);
+            Type actualType = value.GetType();
+
+            if (_objectMapping.CreatorMapping == null && actualType != declaredType)
             {
-                context.state = MapWriterContext.State.Discriminator;
                 context.objectConverter = (IObjectConverter)_registry.ConverterRegistry.Lookup(value.GetType());
             }
             else
             {
-                context.state = MapWriterContext.State.Properties;
                 context.objectConverter = this;
+            }
+
+            CborDiscriminatorPolicy discriminatorPolicy = _objectMapping.DiscriminatorPolicy != CborDiscriminatorPolicy.Default ? _objectMapping.DiscriminatorPolicy
+                : (writer.Options.DiscriminatorPolicy != CborDiscriminatorPolicy.Default ? writer.Options.DiscriminatorPolicy : CborDiscriminatorPolicy.Auto);
+
+            if (_objectMapping.CreatorMapping == null &&
+                (discriminatorPolicy == CborDiscriminatorPolicy.Always
+                || discriminatorPolicy == CborDiscriminatorPolicy.Auto && actualType != declaredType))
+            {
+                context.state = MapWriterContext.State.Discriminator;
+            }
+            else
+            {
+                context.state = MapWriterContext.State.Properties;
             }
 
             writer.WriteMap(this, ref context);
