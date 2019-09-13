@@ -83,7 +83,9 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
             objectMapping.SetMemberMappings(memberMappings);
 
-            ConstructorInfo constructorInfo = type.GetConstructors()
+            ConstructorInfo[] constructorInfos = type.GetConstructors();
+
+            ConstructorInfo constructorInfo = constructorInfos
                 .FirstOrDefault(c => c.IsDefined(typeof(CborConstructorAttribute)));
 
             if (constructorInfo != null)
@@ -94,6 +96,16 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 {
                     creatorMapping.SetMemberNames(constructorAttribute.MemberNames);
                 }
+            }
+            // if no default constructor, pick up first one
+            else if (constructorInfos.Length > 0 && !constructorInfos.Any(c => c.GetParameters().Length == 0))
+            {
+                constructorInfo = constructorInfos[0];
+
+                CreatorMapping creatorMapping = objectMapping.MapCreator(constructorInfo);
+                creatorMapping.SetMemberNames(constructorInfo.GetParameters()
+                    .Select(p => new RawString(p.Name))
+                    .ToList());
             }
 
             MethodInfo methodInfo = type.GetMethods()

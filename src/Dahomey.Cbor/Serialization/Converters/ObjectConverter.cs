@@ -99,11 +99,18 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             if (!_isInterfaceOrAbstract && _objectMapping.CreatorMapping == null)
             {
-                _constructor = typeof(T).GetConstructor(
+                ConstructorInfo defaultConstructorInfo = typeof(T).GetConstructor(
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
                     null,
-                    Type.EmptyTypes, 
-                    null).CreateDelegate<T>();
+                    Type.EmptyTypes,
+                    null);
+
+                if (defaultConstructorInfo == null)
+                {
+                    throw new CborException($"Cannot find a default constructor on type {typeof(T)}");
+                }
+
+                _constructor = defaultConstructorInfo.CreateDelegate<T>();
             }
         }
 
