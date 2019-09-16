@@ -1,5 +1,4 @@
-﻿using Dahomey.Cbor.Serialization.Converters;
-using System;
+﻿using System;
 
 namespace Dahomey.Cbor.Serialization.Conventions
 {
@@ -8,5 +7,6 @@ namespace Dahomey.Cbor.Serialization.Conventions
         ReadOnlySpan<byte> MemberName { get; }
         Type ReadDiscriminator(ref CborReader reader);
         void WriteDiscriminator<T>(ref CborWriter writer, Type actualType) where T : class;
+        bool IsTypeDiscriminated(Type type);
     }
 }

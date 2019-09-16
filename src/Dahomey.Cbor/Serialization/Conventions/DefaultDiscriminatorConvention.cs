@@ -13,6 +13,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
         private readonly ReadOnlyMemory<byte> _memberName = Encoding.ASCII.GetBytes("_t");
         private readonly ByteBufferDictionary<Type> _typesByDiscriminator = new ByteBufferDictionary<Type>();
         private readonly Dictionary<Type, ReadOnlyMemory<byte>> _discriminatorsByType = new Dictionary<Type, ReadOnlyMemory<byte>>();
+        private readonly HashSet<Type> _discriminatedTypes = new HashSet<Type>();
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
 
@@ -38,6 +39,16 @@ namespace Dahomey.Cbor.Serialization.Conventions
             writer.WriteString(discriminator.Span);
         }
 
+        /// <summary>
+        /// Returns whether the given type has any discriminators registered for any of its subclasses.
+        /// </summary>
+        /// <param name="type">A Type.</param>
+        /// <returns>True if the type is discriminated.</returns>
+        public bool IsTypeDiscriminated(Type type)
+        {
+            return type.IsInterface || _discriminatedTypes.Contains(type);
+        }
+
         public void RegisterAssembly(Assembly assembly)
         {
             foreach (Type type in assembly.GetTypes()
@@ -52,6 +63,12 @@ namespace Dahomey.Cbor.Serialization.Conventions
         {
             _typesByDiscriminator.Add(discriminator.Span, type);
             _discriminatorsByType[type] = discriminator;
+
+            // mark all base types as discriminated (so we know that it's worth reading a discriminator)
+            for (Type baseType = type.BaseType; baseType != null; baseType = baseType.BaseType)
+            {
+                _discriminatedTypes.Add(baseType);
+            }
         }
     }
 }

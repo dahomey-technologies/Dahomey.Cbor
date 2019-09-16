@@ -34,35 +34,45 @@ namespace Dahomey.Cbor.Serialization
         void ReadArrayItem(ref CborReader reader, ref TC context);
     }
 
+    public enum CborReaderState
+    {
+        Start,
+        Header,
+        Data
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 2)]
+    public struct CborReaderHeader
+    {
+        [FieldOffset(0)]
+        public CborMajorType MajorType;
+
+        [FieldOffset(1)]
+        public byte AdditionalValue;
+
+        [FieldOffset(1)]
+        public CborPrimitive Primitive;
+    }
+
+    public ref struct CborReaderBookmark
+    {
+        public ReadOnlySpan<byte> buffer;
+        public int currentPos;
+        public CborReaderState state;
+        public CborReaderHeader header;
+        public int remainingItemCount;
+    }
+
     public ref struct CborReader
     {
-        private enum State
-        {
-            Start,
-            Header,
-            Data
-        }
-
-        [StructLayout(LayoutKind.Explicit, Size = 2)]
-        private struct Header
-        {
-            [FieldOffset(0)]
-            public CborMajorType MajorType;
-
-            [FieldOffset(1)]
-            public byte AdditionalValue;
-
-            [FieldOffset(1)]
-            public CborPrimitive Primitive;
-        }
-
         private const int CHUNK_SIZE = 1024;
         private const byte INDEFINITE_LENGTH = 31;
 
         private ReadOnlySpan<byte> _buffer;
         private int _currentPos;
-        private State _state;
-        private Header _header;
+        private CborReaderState _state;
+        private CborReaderHeader _header;
+        private int _remainingItemCount;
 
         public CborOptions Options { get; }
 
@@ -71,8 +81,9 @@ namespace Dahomey.Cbor.Serialization
             _buffer = buffer;
             Options = options ?? CborOptions.Default;
             _currentPos = 0;
-            _state = State.Start;
-            _header = new Header();
+            _state = CborReaderState.Start;
+            _header = new CborReaderHeader();
+            _remainingItemCount = 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -81,7 +92,7 @@ namespace Dahomey.Cbor.Serialization
             if (Accept(CborMajorType.SemanticTag))
             {
                 semanticTag = ReadInteger();
-                _state = State.Data;
+                _state = CborReaderState.Data;
                 return true;
             }
 
@@ -93,7 +104,7 @@ namespace Dahomey.Cbor.Serialization
         public CborDataItemType GetCurrentDataItemType()
         {
             SkipSemanticTag();
-            Header header = GetHeader();
+            CborReaderHeader header = GetHeader();
 
             switch (header.MajorType)
             {
@@ -147,6 +158,28 @@ namespace Dahomey.Cbor.Serialization
                 default:
                     throw BuildException("Major type not supported");
             }
+        }
+
+        public CborReaderBookmark GetBookmark()
+        {
+            CborReaderBookmark bookmark;
+
+            bookmark.buffer = _buffer;
+            bookmark.currentPos = _currentPos;
+            bookmark.state = _state;
+            bookmark.header = _header;
+            bookmark.remainingItemCount = _remainingItemCount;
+
+            return bookmark;
+        }
+
+        public void ReturnToBookmark(CborReaderBookmark bookmark)
+        {
+            _buffer = bookmark.buffer;
+            _currentPos = bookmark.currentPos;
+            _state = bookmark.state;
+            _header = bookmark.header;
+            _remainingItemCount = bookmark.remainingItemCount;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -316,7 +349,7 @@ namespace Dahomey.Cbor.Serialization
         {
             if (GetHeader().AdditionalValue == INDEFINITE_LENGTH)
             {
-                _state = State.Data;
+                _state = CborReaderState.Data;
                 return -1;
             }
 
@@ -328,17 +361,29 @@ namespace Dahomey.Cbor.Serialization
         {
             ReadBeginMap();
 
-            int size = ReadSize();
+            int previousRemainingItemCount = _remainingItemCount;
+            _remainingItemCount = ReadSize();
 
-            mapReader.ReadBeginMap(size, ref context);
+            mapReader.ReadBeginMap(_remainingItemCount, ref context);
 
-            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
+            while (MoveNextMapItem())
             {
                 mapReader.ReadMapItem(ref this, ref context);
-                size--;
             }
 
-            _state = State.Start;
+            _state = CborReaderState.Start;
+            _remainingItemCount = previousRemainingItemCount;
+        }
+
+        public bool MoveNextMapItem()
+        {
+            if (_remainingItemCount == 0 || _remainingItemCount < 0 && GetCurrentDataItemType() == CborDataItemType.Break)
+            {
+                return false;
+            }
+
+            _remainingItemCount--;
+            return true;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -356,13 +401,13 @@ namespace Dahomey.Cbor.Serialization
                 size--;
             }
 
-            _state = State.Start;
+            _state = CborReaderState.Start;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ulong ReadUnsigned(ulong maxValue)
         {
-            Header header = GetHeader();
+            CborReaderHeader header = GetHeader();
 
             switch (header.MajorType)
             {
@@ -377,7 +422,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private long ReadSigned(long maxValue)
         {
-            Header header = GetHeader();
+            CborReaderHeader header = GetHeader();
 
             switch (header.MajorType)
             {
@@ -395,7 +440,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ulong ReadInteger(ulong maxValue = ulong.MaxValue)
         {
-            Header header = GetHeader();
+            CborReaderHeader header = GetHeader();
 
             ulong value;
 
@@ -429,7 +474,7 @@ namespace Dahomey.Cbor.Serialization
 
                 default:
                     value = header.AdditionalValue;
-                    _state = State.Data;
+                    _state = CborReaderState.Data;
                     break;
             }
 
@@ -517,9 +562,9 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private Header GetHeader()
+        private CborReaderHeader GetHeader()
         {
-            if (_state == State.Header)
+            if (_state == CborReaderState.Header)
             {
                 return _header;
             }
@@ -535,7 +580,7 @@ namespace Dahomey.Cbor.Serialization
             }
 
             Advance();
-            _state = State.Header;
+            _state = CborReaderState.Header;
 
             return _header;
         }
@@ -570,7 +615,7 @@ namespace Dahomey.Cbor.Serialization
             if (Accept(CborMajorType.SemanticTag))
             {
                 ReadInteger();
-                _state = State.Data;
+                _state = CborReaderState.Data;
                 return;
             }
         }
@@ -578,7 +623,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SkipDataItem()
         {
-            Header header = GetHeader();
+            CborReaderHeader header = GetHeader();
 
             switch (header.MajorType)
             {
@@ -601,7 +646,7 @@ namespace Dahomey.Cbor.Serialization
                     break;
 
                 case CborMajorType.SemanticTag:
-                    _state = State.Data;
+                    _state = CborReaderState.Data;
                     break;
 
                 case CborMajorType.Primitive:
@@ -613,7 +658,7 @@ namespace Dahomey.Cbor.Serialization
                         case CborPrimitive.Undefined:
                         case CborPrimitive.SimpleValue:
                         case CborPrimitive.Break:
-                            _state = State.Data;
+                            _state = CborReaderState.Data;
                             break;
 
                         case CborPrimitive.HalfFloat:
@@ -643,7 +688,7 @@ namespace Dahomey.Cbor.Serialization
                 size--;
             }
 
-            _state = State.Start;
+            _state = CborReaderState.Start;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -658,7 +703,7 @@ namespace Dahomey.Cbor.Serialization
                 size--;
             }
 
-            _state = State.Start;
+            _state = CborReaderState.Start;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -666,7 +711,7 @@ namespace Dahomey.Cbor.Serialization
         {
             if (Accept(CborMajorType.Primitive) && _header.Primitive == primitive)
             {
-                _state = State.Data;
+                _state = CborReaderState.Data;
                 return true;
             }
 
@@ -709,9 +754,9 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Advance(int length = 1)
         {
-            if (_state == State.Header)
+            if (_state == CborReaderState.Header)
             {
-                _state = State.Data;
+                _state = CborReaderState.Data;
             }
             _buffer = _buffer.Slice(length);
             _currentPos += length;

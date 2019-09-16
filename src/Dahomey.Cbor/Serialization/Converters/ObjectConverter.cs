@@ -256,29 +256,36 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadMapItem(ref CborReader reader, ref MapReaderContext context)
         {
-            // name
-            ReadOnlySpan<byte> memberName = reader.ReadRawString();
-
             if (context.obj == null)
             {
-                bool shouldReadValue = true;
-
                 if (context.converter == null)
                 {
                     IDiscriminatorConvention discriminatorConvention = reader.Options.DiscriminatorConvention;
 
-                    if (memberName.SequenceEqual(discriminatorConvention.MemberName))
+                    if (discriminatorConvention.IsTypeDiscriminated(typeof(T)))
                     {
-                        // discriminator value
-                        Type actualType = discriminatorConvention.ReadDiscriminator(ref reader);
-                        context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
-                        shouldReadValue = false;
+                        CborReaderBookmark bookmark = reader.GetBookmark();
+
+                        if (FindItem(ref reader, discriminatorConvention.MemberName))
+                        {
+                            // discriminator value
+                            Type actualType = discriminatorConvention.ReadDiscriminator(ref reader);
+                            context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
+                        }
+                        else
+                        {
+                            context.converter = this;
+                        }
+
+                        reader.ReturnToBookmark(bookmark);
                     }
                     else
                     {
                         context.converter = this;
                     }
                 }
+
+                ReadOnlySpan<byte> memberName = reader.ReadRawString();
 
                 if (context.creatorValues == null)
                 {
@@ -289,12 +296,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                         ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
                     }
 
-                    if (shouldReadValue)
-                    {
-                        context.converter.ReadValue(ref reader, context.obj, memberName);
-                    }
+                    context.converter.ReadValue(ref reader, context.obj, memberName);
                 }
-                else if (shouldReadValue && context.converter.ReadValue(ref reader, memberName, out object value))
+                else if (context.converter.ReadValue(ref reader, memberName, out object value))
                 {
                     bool isCreatorValue = false;
                     foreach (RawString creatorMemberName in _objectMapping.CreatorMapping.MemberNames)
@@ -318,8 +322,26 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             else
             {
+                ReadOnlySpan<byte> memberName = reader.ReadRawString();
                 context.converter.ReadValue(ref reader, context.obj, memberName);
             }
+        }
+
+        public static bool FindItem(ref CborReader reader, ReadOnlySpan<byte> name)
+        {
+            do
+            {
+                ReadOnlySpan<byte> memberName = reader.ReadRawString();
+                if (memberName.SequenceEqual(name))
+                {
+                    return true;
+                }
+
+                reader.SkipDataItem();
+            }
+            while (reader.MoveNextMapItem());
+
+            return false;
         }
 
         public int GetMapSize(ref MapWriterContext context)
