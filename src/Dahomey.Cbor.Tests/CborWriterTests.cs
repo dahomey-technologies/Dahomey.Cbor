@@ -1,4 +1,4 @@
-﻿using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Util;
 using Xunit;
 using System;
