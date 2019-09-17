@@ -16,6 +16,7 @@ namespace Dahomey.Cbor.Tests.Issues
         public class Conversation
         {
             [CborProperty("id")]
+            [CborIgnoreIfDefault]
             public int id { get; set; }
             [CborProperty("participants")]
             public List<Participant> participants { get; set; }

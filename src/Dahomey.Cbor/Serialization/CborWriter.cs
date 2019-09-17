@@ -155,14 +155,14 @@ namespace Dahomey.Cbor.Serialization
                 return;
             }
 
-            WriteInteger(CborMajorType.TextString, (ulong)value.Length);
+            int byteCount = Encoding.UTF8.GetByteCount(value);
+            WriteInteger(CborMajorType.TextString, (ulong)byteCount);
 
-            if (value.Length == 0)
+            if (byteCount == 0)
             {
                 return;
             }
 
-            int byteCount = Encoding.UTF8.GetByteCount(value);
             Span<byte> bytes = _bufferWriter.GetSpan(byteCount);
             Encoding.UTF8.GetBytes(value.AsSpan(), bytes);
             _bufferWriter.Advance(byteCount);
