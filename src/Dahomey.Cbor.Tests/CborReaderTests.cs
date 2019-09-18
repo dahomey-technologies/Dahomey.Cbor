@@ -165,6 +165,7 @@ namespace Dahomey.Cbor.Tests
         [InlineData("7F6166616F616FFF", "foo", typeof(NotSupportedException))]
         [InlineData("F6", null, null)]
         [InlineData("60", "", null)]
+        [InlineData("68C3A9C3A0C3AAC3AF", "éàêï", null)]
         public void ReadString(string hexBuffer, string expectedValue, Type expectedExceptionType)
         {
             Helper.TestRead(nameof(CborReader.ReadString), hexBuffer, expectedValue, expectedExceptionType);

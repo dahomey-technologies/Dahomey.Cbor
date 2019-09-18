@@ -1,4 +1,4 @@
-﻿using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Util;
 using Xunit;
 using System;
@@ -170,6 +170,7 @@ namespace Dahomey.Cbor.Tests
         [InlineData("63666F6F", "foo", null)]
         [InlineData("F6", null, null)]
         [InlineData("60", "", null)]
+        [InlineData("68C3A9C3A0C3AAC3AF", "éàêï", null)]
         public void WriteString(string hexBuffer, string value, Type expectedExceptionType)
         {
             Helper.TestWrite(nameof(CborWriter.WriteString), value, hexBuffer, expectedExceptionType);
