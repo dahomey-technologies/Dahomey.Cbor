@@ -7,7 +7,7 @@ namespace Dahomey.Cbor.Tests.Issues
     {
         public class ObjectWithNullArray
         {
-            public byte[] Bytes { get; set; }
+            public int[] Bytes { get; set; }
         }
 
         public class ObjectWithNullLists

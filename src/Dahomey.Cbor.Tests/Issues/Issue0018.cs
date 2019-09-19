@@ -9,12 +9,12 @@ namespace Dahomey.Cbor.Tests.Issues
         private class Tree
         {
             [CborProperty("NOTr")]
-            private readonly byte[] _r;
+            private readonly int[] _r;
 
-            public byte[] R => _r;
+            public int[] R => _r;
 
             [CborConstructor("NOTr")]
-            public Tree(byte[] r)
+            public Tree(int[] r)
             {
                 _r = r;
             }

@@ -22,6 +22,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
             [typeof(string)] = typeof(StringConverter),
             [typeof(DateTime)] = typeof(DateTimeConverter),
             [typeof(ReadOnlyMemory<byte>)] = typeof(ReadOnlyMemoryConverter),
+            [typeof(byte[])] = typeof(ByteArrayConverter),
         };
 
         public override ICborConverter GetConverter(Type type, SerializationRegistry registry)
