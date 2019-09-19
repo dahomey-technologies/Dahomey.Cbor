@@ -6,12 +6,8 @@ using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class EnumConverter<T> : CborConverterBase<T> where T : struct
+    public class EnumConverter<T> : CborConverterBase<T> where T : Enum
     {
-        private static readonly Func<int, int> intIdentity = x => x;
-        private static readonly Func<int, T> intToEnum = (Func<int, T>)Delegate.CreateDelegate(typeof(Func<int, T>), null, intIdentity.Method);
-        private static readonly Func<T, int> enumToInt = (Func<T, int>)Delegate.CreateDelegate(typeof(Func<T, int>), null, intIdentity.Method);
-
         private ByteBufferDictionary<T> names2Values = new ByteBufferDictionary<T>();
         private Dictionary<T, ReadOnlyMemory<byte>> values2Names;
 
@@ -61,7 +57,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public T ReadInt32(ref CborReader reader)
         {
-            return intToEnum((int)reader.ReadInt64());
+            return (T)(ValueType)(int)reader.ReadInt64();
         }
 
         public override void Write(ref CborWriter writer, T value)
@@ -84,13 +80,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             else
             {
-                writer.WriteInt64(enumToInt(value));
+                writer.WriteInt64((int)(object)value);
             }
         }
 
         public void WriteInt32(ref CborWriter writer, T value)
         {
-            writer.WriteInt64(enumToInt(value));
+            writer.WriteInt64((int)(object)value);
         }
     }
 }
