@@ -2,11 +2,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
-    public class EnumConverter<T> : CborConverterBase<T> where T : Enum
+    public class EnumConverter<T> : CborConverterBase<T> where T : struct
     {
         private ByteBufferDictionary<T> names2Values = new ByteBufferDictionary<T>();
         private Dictionary<T, ReadOnlyMemory<byte>> values2Names;
@@ -57,7 +58,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public T ReadInt32(ref CborReader reader)
         {
-            return (T)(ValueType)(int)reader.ReadInt64();
+            int value = (int)reader.ReadInt64();
+            return Unsafe.As<int, T>(ref value);
         }
 
         public override void Write(ref CborWriter writer, T value)
@@ -80,13 +82,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             else
             {
-                writer.WriteInt64((int)(object)value);
+                WriteInt32(ref writer, value);
             }
         }
 
         public void WriteInt32(ref CborWriter writer, T value)
         {
-            writer.WriteInt64((int)(object)value);
+            writer.WriteInt64(Unsafe.As<T, int>(ref value));
         }
     }
 }
