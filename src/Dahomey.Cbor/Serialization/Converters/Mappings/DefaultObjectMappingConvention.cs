@@ -19,17 +19,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             Type type = objectMapping.ObjectType;
             List<MemberMapping> memberMappings = new List<MemberMapping>();
 
-            ReadOnlyMemory<byte> typeName = Encoding.ASCII.GetBytes($"{type.FullName}, {type.Assembly.GetName().Name}");
             CborDiscriminatorAttribute discriminatorAttribute = type.GetCustomAttribute<CborDiscriminatorAttribute>();
-
-            ReadOnlyMemory<byte> discriminator = Encoding.UTF8.GetBytes(discriminatorAttribute != null ?
-                discriminatorAttribute.Discriminator :
-                $"{type.FullName}, {type.Assembly.GetName().Name}");
-
-            registry.DefaultDiscriminatorConvention.RegisterType(type, discriminator);
 
             if (discriminatorAttribute != null)
             {
+                registry.DiscriminatorConventionRegistry.DefaultDiscriminatorConvention.RegisterType(type, discriminatorAttribute.Discriminator);
                 objectMapping.SetDiscriminatorPolicy(discriminatorAttribute.Policy);
             }
 

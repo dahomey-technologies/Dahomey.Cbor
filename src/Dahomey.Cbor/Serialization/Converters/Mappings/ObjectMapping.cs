@@ -46,7 +46,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public ObjectMapping<T> SetDiscriminator(ReadOnlyMemory<byte> discriminator)
         {
-            _registry.DefaultDiscriminatorConvention.RegisterType(ObjectType, discriminator);
+            _registry.DiscriminatorConventionRegistry.DefaultDiscriminatorConvention.RegisterType(ObjectType, discriminator);
             return this;
         }
 
