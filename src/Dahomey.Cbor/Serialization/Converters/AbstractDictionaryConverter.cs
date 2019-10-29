@@ -17,6 +17,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             public int count;
             public IEnumerator<KeyValuePair<TK, TV>> enumerator;
+            public LengthMode lengthMode;
         }
 
         private readonly ICborConverter<TK> _keyConverter;
@@ -43,18 +44,22 @@ namespace Dahomey.Cbor.Serialization.Converters
             return InstantiateCollection(context.dict);
         }
 
-        public override void Write(ref CborWriter writer, TC value)
+        public override void Write(ref CborWriter writer, TC value, LengthMode lengthMode)
         {
             if (value == null)
             {
                 writer.WriteNull();
                 return;
             }
+
             WriterContext context = new WriterContext
             {
                 count = value.Count,
-                enumerator = value.GetEnumerator()
+                enumerator = value.GetEnumerator(),
+                lengthMode = lengthMode != LengthMode.Default
+                    ? lengthMode : writer.Options.MapLengthMode
             };
+
             writer.WriteMap(this, ref context);
         }
 
@@ -73,15 +78,20 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public int GetMapSize(ref WriterContext context)
         {
-            return context.count;
+            return context.lengthMode == LengthMode.IndefiniteLength ? -1 : context.count;
         }
 
-        public void WriteMapItem(ref CborWriter writer, ref WriterContext context)
+        public bool WriteMapItem(ref CborWriter writer, ref WriterContext context)
         {
             if (context.enumerator.MoveNext())
             {
                 _keyConverter.Write(ref writer, context.enumerator.Current.Key);
                 _valueConverter.Write(ref writer, context.enumerator.Current.Value);
+                return true;
+            }
+            else
+            {
+                return false;
             }
         }
     }

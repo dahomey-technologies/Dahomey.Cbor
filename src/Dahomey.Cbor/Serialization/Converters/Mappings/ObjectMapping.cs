@@ -30,6 +30,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public Delegate OnDeserializingMethod { get; private set; }
         public Delegate OnDeserializedMethod { get; private set; }
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; private set; }
+        public LengthMode LengthMode { get; private set; }
 
         public ObjectMapping(SerializationRegistry registry)
         {
@@ -191,6 +192,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public ObjectMapping<T> SetDiscriminatorPolicy(CborDiscriminatorPolicy discriminatorPolicy)
         {
             DiscriminatorPolicy = discriminatorPolicy;
+            return this;
+        }
+
+        public ObjectMapping<T> SetLengthMode(LengthMode lengthMode)
+        {
+            LengthMode = lengthMode;
             return this;
         }
 

@@ -49,6 +49,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             public T obj;
             public int memberIndex;
             public IObjectConverter objectConverter;
+            public LengthMode lengthMode;
         }
 
         private readonly ByteBufferDictionary<IMemberConverter> _memberConvertersForRead = new ByteBufferDictionary<IMemberConverter>();
@@ -198,7 +199,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public override void Write(ref CborWriter writer, T value)
+        public override void Write(ref CborWriter writer, T value, LengthMode lengthMode)
         {
             if (value == null)
             {
@@ -214,6 +215,9 @@ namespace Dahomey.Cbor.Serialization.Converters
             MapWriterContext context = new MapWriterContext
             {
                 obj = value,
+                lengthMode = lengthMode != LengthMode.Default 
+                    ? lengthMode : _objectMapping.LengthMode != LengthMode.Default 
+                        ? _objectMapping.LengthMode : writer.Options.MapLengthMode
             };
 
             Type declaredType = typeof(T);
@@ -346,6 +350,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public int GetMapSize(ref MapWriterContext context)
         {
+            if (context.lengthMode == LengthMode.IndefiniteLength)
+            {
+                return -1;
+            }
+
             int writableMembersCount = 0;
 
             foreach (IMemberConverter member in context.objectConverter.MemberConvertersForWrite)
@@ -361,13 +370,13 @@ namespace Dahomey.Cbor.Serialization.Converters
                 : writableMembersCount;
         }
 
-        public void WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
+        public bool WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
         {
             if (context.state == MapWriterContext.State.Discriminator)
             {
                 writer.Options.DiscriminatorConvention.WriteDiscriminator<T>(ref writer, context.obj.GetType());
                 context.state = MapWriterContext.State.Properties;
-                return;
+                return true;
             }
 
             while (context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count)
@@ -380,6 +389,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                     break;
                 }
             }
+
+            return context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count;
         }
 
         private void HandleUnknownName(ref CborReader reader, Type type, ReadOnlySpan<byte> rawName)

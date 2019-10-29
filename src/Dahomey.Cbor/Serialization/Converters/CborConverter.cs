@@ -2,29 +2,27 @@
 {
     public interface ICborConverter
     {
-        object Read(ref CborReader reader);
-        void Write(ref CborWriter writer, object value);
     }
 
     public interface ICborConverter<T> : ICborConverter
     {
-        new T Read(ref CborReader reader);
+        T Read(ref CborReader reader);
         void Write(ref CborWriter writer, T value);
+        void Write(ref CborWriter writer, T value, LengthMode lengthMode);
     }
 
     public abstract class CborConverterBase<T> : ICborConverter<T>
     {
         public abstract T Read(ref CborReader reader);
-        public abstract void Write(ref CborWriter writer, T value);
 
-        object ICborConverter.Read(ref CborReader reader)
+        public virtual void Write(ref CborWriter writer, T value)
         {
-            return Read(ref reader);
+            Write(ref writer, value, LengthMode.Default);
         }
 
-        void ICborConverter.Write(ref CborWriter writer, object value)
+        public virtual void Write(ref CborWriter writer, T value, LengthMode lengthMode)
         {
-            Write(ref writer, (T)value);
+            Write(ref writer, value);
         }
     }
 }
