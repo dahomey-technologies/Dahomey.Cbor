@@ -22,6 +22,16 @@ namespace Dahomey.Cbor
         Unix = 1,
     }
 
+    /// <summary>
+    /// https://tools.ietf.org/html/rfc7049#section-2.2
+    /// </summary>
+    public enum LengthMode
+    {
+        Default = 0,
+        DefiniteLength = 1,
+        IndefiniteLength = 2
+    }
+
     public class CborOptions
     {
         public static CborOptions Default { get; } = new CborOptions();
@@ -32,5 +42,7 @@ namespace Dahomey.Cbor
         public DateTimeFormat DateTimeFormat { get; set; }
         public bool IsIndented { get; set; }
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; set; }
+        public LengthMode ArrayLengthMode { get; set; } = LengthMode.DefiniteLength;
+        public LengthMode MapLengthMode { get; set; } = LengthMode.DefiniteLength;
     }
 }

@@ -16,5 +16,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         Delegate OnDeserializingMethod { get; }
         Delegate OnDeserializedMethod { get; }
         CborDiscriminatorPolicy DiscriminatorPolicy { get; }
+        LengthMode LengthMode { get; }
     }
 }

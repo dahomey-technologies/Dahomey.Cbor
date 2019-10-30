@@ -33,6 +33,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 objectMapping.SetNamingConvention((INamingConvention)Activator.CreateInstance(namingConventionType));
             }
 
+            CborLengthModeAttribute lengthModeAttribute = type.GetCustomAttribute<CborLengthModeAttribute>();
+            if (lengthModeAttribute != null)
+            {
+                objectMapping.SetLengthMode(lengthModeAttribute.LengthMode);
+            }
+
             PropertyInfo[] properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
             FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
 
@@ -51,6 +57,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 MemberMapping memberMapping = new MemberMapping(registry.ConverterRegistry, objectMapping, propertyInfo, propertyInfo.PropertyType);
                 ProcessDefaultValue(propertyInfo, memberMapping);
                 ProcessShouldSerializeMethod(memberMapping);
+                ProcessLengthMode(propertyInfo, memberMapping);
                 memberMappings.Add(memberMapping);
             }
 
@@ -71,6 +78,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 MemberMapping memberMapping = new MemberMapping(registry.ConverterRegistry, objectMapping, fieldInfo, fieldInfo.FieldType);
                 ProcessDefaultValue(fieldInfo, memberMapping);
                 ProcessShouldSerializeMethod(memberMapping);
+                ProcessLengthMode(fieldInfo, memberMapping);
 
                 memberMappings.Add(memberMapping);
             }
@@ -168,6 +176,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     objParameter);
 
                 memberMapping.SetShouldSerializeMethod(lambdaExpression.Compile());
+            }
+        }
+
+        private void ProcessLengthMode(MemberInfo memberInfo, MemberMapping memberMapping)
+        {
+            CborLengthModeAttribute lengthModeAttribute = memberInfo.GetCustomAttribute<CborLengthModeAttribute>();
+            if (lengthModeAttribute != null)
+            {
+                memberMapping.SetLengthMode(lengthModeAttribute.LengthMode);
             }
         }
 

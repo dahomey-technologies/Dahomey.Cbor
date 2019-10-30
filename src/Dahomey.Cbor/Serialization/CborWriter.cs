@@ -1,8 +1,6 @@
-﻿using Dahomey.Cbor.Serialization.Converters;
-using System;
+﻿using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -12,17 +10,19 @@ namespace Dahomey.Cbor.Serialization
     public interface ICborMapWriter<TC>
     {
         int GetMapSize(ref TC context);
-        void WriteMapItem(ref CborWriter writer, ref TC context);
+        bool WriteMapItem(ref CborWriter writer, ref TC context);
     }
 
     public interface ICborArrayWriter<TC>
     {
         int GetArraySize(ref TC context);
-        void WriteArrayItem (ref CborWriter writer, ref TC context);
+        bool WriteArrayItem (ref CborWriter writer, ref TC context);
     }
 
     public ref struct CborWriter
     {
+        private const byte INDEFINITE_LENGTH = 31;
+
         private IBufferWriter<byte> _bufferWriter;
 
         public CborOptions Options { get; }
@@ -190,7 +190,15 @@ namespace Dahomey.Cbor.Serialization
 
         public void WriteBeginMap(int size)
         {
-            WriteInteger(CborMajorType.Map, (ulong)size);
+            WriteSize(CborMajorType.Map, size);
+        }
+
+        public void WriteEndMap(int size)
+        {
+            if (size == -1)
+            {
+                WritePrimitive(CborPrimitive.Break);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -198,16 +206,21 @@ namespace Dahomey.Cbor.Serialization
         {
             int size = mapWriter.GetMapSize(ref context);
             WriteBeginMap(size);
-
-            for (int i = 0; i < size; i++)
-            {
-                mapWriter.WriteMapItem(ref this, ref context);
-            }
+            while (mapWriter.WriteMapItem(ref this, ref context));
+            WriteEndMap(size);
         }
 
         public void WriteBeginArray(int size)
         {
-            WriteInteger(CborMajorType.Array, (ulong)size);
+            WriteSize(CborMajorType.Array, size);
+        }
+
+        public void WriteEndArray(int size)
+        {
+            if (size == -1)
+            {
+                WritePrimitive(CborPrimitive.Break);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -215,10 +228,19 @@ namespace Dahomey.Cbor.Serialization
         {
             int size = arrayWriter.GetArraySize(ref context);
             WriteBeginArray(size);
+            while(arrayWriter.WriteArrayItem(ref this, ref context));
+            WriteEndArray(size);
+        }
 
-            for (int i = 0; i < size; i++)
+        private void WriteSize(CborMajorType majorType, int size)
+        {
+            if (size >= 0)
             {
-                arrayWriter.WriteArrayItem(ref this, ref context);
+                WriteInteger(majorType, (ulong)size);
+            }
+            else
+            {
+                WriteHeader(majorType, INDEFINITE_LENGTH);
             }
         }
 

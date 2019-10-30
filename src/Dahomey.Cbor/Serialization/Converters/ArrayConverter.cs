@@ -18,6 +18,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             public TI[] array;
             public int index;
+            public LengthMode lengthMode;
         }
 
         private readonly ICborConverter<TI> _itemConverter;
@@ -47,7 +48,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public override void Write(ref CborWriter writer, TI[] value)
+        public override void Write(ref CborWriter writer, TI[] value, LengthMode lengthMode)
         {
             if (value == null)
             {
@@ -56,7 +57,9 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             WriterContext context = new WriterContext
             {
-                array = value
+                array = value,
+                lengthMode = lengthMode != LengthMode.Default
+                    ? lengthMode : writer.Options.ArrayLengthMode
             };
             writer.WriteArray(this, ref context);
         }
@@ -89,12 +92,13 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public int GetArraySize(ref WriterContext context)
         {
-            return context.array.Length;
+            return context.lengthMode == LengthMode.IndefiniteLength ? -1 : context.array.Length;
         }
 
-        public void WriteArrayItem(ref CborWriter writer, ref WriterContext context)
+        public bool WriteArrayItem(ref CborWriter writer, ref WriterContext context)
         {
             _itemConverter.Write(ref writer, context.array[context.index++]);
+            return context.index < context.array.Length;
         }
     }
 }

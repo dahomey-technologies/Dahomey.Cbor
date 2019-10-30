@@ -182,7 +182,7 @@ namespace Dahomey.Cbor.ObjectModel
 
             using (ByteBufferWriter buffer = new ByteBufferWriter())
             {
-                ICborConverter listConverter = options.Registry.ConverterRegistry.Lookup<T>();
+                ICborConverter<T> listConverter = options.Registry.ConverterRegistry.Lookup<T>();
                 CborWriter writer = new CborWriter(buffer);
                 listConverter.Write(ref writer, collection);
 

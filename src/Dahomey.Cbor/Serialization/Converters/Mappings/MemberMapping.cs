@@ -19,6 +19,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public object DefaultValue { get; private set; }
         public bool IgnoreIfDefault { get; private set; }
         public Func<object, bool> ShouldSerializeMethod { get; private set; }
+        public LengthMode LengthMode { get; private set; }
 
         public MemberMapping(CborConverterRegistry converterRegistry,
             IObjectMapping objectMapping, MemberInfo memberInfo, Type memberType)
@@ -57,6 +58,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public MemberMapping SetShouldSerializeMethod(Func<object, bool> shouldSerializeMethod)
         {
             ShouldSerializeMethod = shouldSerializeMethod;
+            return this;
+        }
+
+        public MemberMapping SetLengthMode(LengthMode lengthMode)
+        {
+            LengthMode = lengthMode;
             return this;
         }
 
