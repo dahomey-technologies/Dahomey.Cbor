@@ -1,6 +1,5 @@
 ﻿using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization.Conventions;
-using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,12 +29,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public Delegate OnDeserializingMethod { get; private set; }
         public Delegate OnDeserializedMethod { get; private set; }
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; private set; }
+        public string Discriminator { get; private set; }
         public LengthMode LengthMode { get; private set; }
 
         public ObjectMapping(SerializationRegistry registry)
         {
             _registry = registry;
             ObjectType = typeof(T);
+        }
+
+        void IObjectMapping.AutoMap()
+        {
+            AutoMap();
         }
 
         public ObjectMapping<T> AutoMap()
@@ -45,15 +50,10 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return this;
         }
 
-        public ObjectMapping<T> SetDiscriminator(ReadOnlyMemory<byte> discriminator)
-        {
-            _registry.DiscriminatorConventionRegistry.DefaultDiscriminatorConvention.RegisterType(ObjectType, discriminator);
-            return this;
-        }
-
         public ObjectMapping<T> SetDiscriminator(string discriminator)
         {
-            return SetDiscriminator(discriminator.AsBinaryMemory());
+            Discriminator = discriminator;
+            return this;
         }
 
         public ObjectMapping<T> SetNamingConvention(INamingConvention namingConvention)

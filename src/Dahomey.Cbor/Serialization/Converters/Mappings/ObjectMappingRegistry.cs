@@ -40,12 +40,19 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public IObjectMapping Lookup<T>() where T : class
         {
-            return _objectMappings.GetOrAdd(typeof(T), t => CreateDefaultObjectMapping<T>());
+            return Lookup(typeof(T));
         }
 
-        private IObjectMapping CreateDefaultObjectMapping<T>() where T : class
+        public IObjectMapping Lookup(Type type)
         {
-            ObjectMapping<T> objectMapping = new ObjectMapping<T>(_registry);
+            return _objectMappings.GetOrAdd(type, t => CreateDefaultObjectMapping(type));
+        }
+
+        private IObjectMapping CreateDefaultObjectMapping(Type type)
+        {
+            IObjectMapping objectMapping = 
+                (IObjectMapping)Activator.CreateInstance(typeof(ObjectMapping<>).MakeGenericType(type), _registry);
+
             objectMapping.AutoMap();
 
             if (objectMapping is IMappingInitialization mappingInitialization)

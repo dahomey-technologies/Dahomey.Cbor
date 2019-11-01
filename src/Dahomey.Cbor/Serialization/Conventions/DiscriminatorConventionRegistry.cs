@@ -1,8 +1,6 @@
-﻿using Dahomey.Cbor.Serialization.Converters;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Linq;
-using System.Reflection;
 
 namespace Dahomey.Cbor.Serialization.Conventions
 {
@@ -10,15 +8,14 @@ namespace Dahomey.Cbor.Serialization.Conventions
     {
         private readonly SerializationRegistry _serializationRegistry;
         private readonly ConcurrentStack<IDiscriminatorConvention> _conventions = new ConcurrentStack<IDiscriminatorConvention>();
-        public DefaultDiscriminatorConvention DefaultDiscriminatorConvention { get; }
+        private readonly ConcurrentDictionary<Type, IDiscriminatorConvention> _conventionsByType = new ConcurrentDictionary<Type, IDiscriminatorConvention>();
 
         public DiscriminatorConventionRegistry(SerializationRegistry serializationRegistry)
         {
             _serializationRegistry = serializationRegistry;
-            DefaultDiscriminatorConvention = new DefaultDiscriminatorConvention(_serializationRegistry);
 
             // order matters. It's in reverse order of how they'll get consumed
-            RegisterConvention(DefaultDiscriminatorConvention);
+            RegisterConvention(new DefaultDiscriminatorConvention(_serializationRegistry));
         }
 
         /// <summary>
@@ -37,22 +34,25 @@ namespace Dahomey.Cbor.Serialization.Conventions
             _conventions.Push(convention);
         }
 
-        public void RegisterAssembly(Assembly assembly)
+        public IDiscriminatorConvention GetConvention(Type type)
         {
-            if (assembly == null)
-            {
-                throw new ArgumentNullException(nameof(assembly));
-            }
+            return _conventionsByType.GetOrAdd(type, t => RegisterType(t));
+        }
 
-            foreach (Type type in assembly.GetTypes().Where(t => t.IsClass))
-            {
-                IDiscriminatorConvention discriminatorConvention = _conventions.FirstOrDefault(c => c.TryRegisterType(type));
+        private IDiscriminatorConvention RegisterType(Type type)
+        {
+            IDiscriminatorConvention convention = _conventions.FirstOrDefault(c => c.TryRegisterType(type));
 
-                if (discriminatorConvention == null)
+            if (convention != null)
+            {
+                // setup discriminator for all base types
+                for (Type currentType = type.BaseType; currentType != null && currentType != typeof(object); currentType = currentType.BaseType)
                 {
-                    continue;
+                    _conventionsByType.TryAdd(currentType, convention);
                 }
             }
+
+            return convention;
         }
     }
 }

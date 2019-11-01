@@ -23,7 +23,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
             if (discriminatorAttribute != null)
             {
-                registry.DiscriminatorConventionRegistry.DefaultDiscriminatorConvention.RegisterType(type, discriminatorAttribute.Discriminator);
+                objectMapping.SetDiscriminator(discriminatorAttribute.Discriminator);
                 objectMapping.SetDiscriminatorPolicy(discriminatorAttribute.Policy);
             }
 

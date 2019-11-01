@@ -10,7 +10,9 @@ namespace Dahomey.Cbor.Tests
     {
         static SampleClasses()
         {
-            CborOptions.Default.Registry.DiscriminatorConventionRegistry.RegisterAssembly(typeof(SampleClasses).Assembly);
+            CborOptions.Default.Registry.RegisterType(typeof(NameObject));
+            CborOptions.Default.Registry.RegisterType(typeof(DescriptionObject));
+            CborOptions.Default.Registry.RegisterType(typeof(EmptyObjectWithDiscriminator));
         }
 
         /// <summary>

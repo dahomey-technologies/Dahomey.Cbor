@@ -14,7 +14,6 @@ namespace Dahomey.Cbor.Serialization.Converters
         void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName);
         bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, out object value);
         IReadOnlyList<IMemberConverter> MemberConvertersForWrite { get; }
-        void SetDiscriminatorConvention(IDiscriminatorConvention discriminatorConvention);
     }
 
     public interface IObjectConverter<out T> : IObjectConverter
@@ -115,11 +114,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 _constructor = defaultConstructorInfo.CreateDelegate<T>();
             }
-        }
 
-        public void SetDiscriminatorConvention(IDiscriminatorConvention discriminatorConvention)
-        {
-            _discriminatorConvention = discriminatorConvention;
+            _discriminatorConvention = registry.DiscriminatorConventionRegistry.GetConvention(typeof(T));
         }
 
         public T CreateInstance()

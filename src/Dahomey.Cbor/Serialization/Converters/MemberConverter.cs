@@ -1,4 +1,5 @@
-﻿using Dahomey.Cbor.Serialization.Converters.Mappings;
+﻿using Dahomey.Cbor.Serialization.Conventions;
+using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
@@ -136,6 +137,46 @@ namespace Dahomey.Cbor.Serialization.Converters
                 default:
                     return null;
             }
+        }
+    }
+
+    public class DiscriminatorMemberConverter<T> : IMemberConverter
+        where T : class
+    {
+        private readonly IDiscriminatorConvention _discriminatorConvention;
+
+        public DiscriminatorMemberConverter(IDiscriminatorConvention discriminatorConvention)
+        {
+            _discriminatorConvention = discriminatorConvention;
+        }
+
+        public ReadOnlySpan<byte> MemberName => _discriminatorConvention.MemberName;
+
+        public bool IgnoreIfDefault => false;
+
+        public void Read(ref CborReader reader, object obj)
+        {
+            throw new NotSupportedException();
+        }
+
+        public object Read(ref CborReader reader)
+        {
+            throw new NotSupportedException();
+        }
+
+        public void Set(object obj, object value)
+        {
+            throw new NotSupportedException();
+        }
+
+        public bool ShouldSerialize(object obj)
+        {
+            return true;
+        }
+
+        public void Write(ref CborWriter writer, object obj)
+        {
+            _discriminatorConvention.WriteDiscriminator<T>(ref writer, obj.GetType());
         }
     }
 }

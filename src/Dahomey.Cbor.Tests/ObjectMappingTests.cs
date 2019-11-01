@@ -177,6 +177,7 @@ namespace Dahomey.Cbor.Tests
                     .AutoMap()
                     .SetDiscriminator("inherited")
             );
+            options.Registry.RegisterType(typeof(InheritedObject));
 
             const string hexBuffer = "A3625F7469696E686572697465646E496E6865726974656456616C75650D694261736556616C75650C";
             BaseObject obj = Helper.Read<BaseObject>(hexBuffer, options);
@@ -196,6 +197,7 @@ namespace Dahomey.Cbor.Tests
                     .AutoMap()
                     .SetDiscriminator("inherited")
             );
+            options.Registry.RegisterType(typeof(InheritedObject));
 
             InheritedObject obj = new InheritedObject
             {
