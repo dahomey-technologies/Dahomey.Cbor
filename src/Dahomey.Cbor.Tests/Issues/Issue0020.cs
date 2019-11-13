@@ -47,8 +47,7 @@ namespace Dahomey.Cbor.Tests.Issues
         public void TestWrite()
         {
             CborOptions options = new CborOptions();
-            options.Registry.RegisterType(typeof(Apple));
-            options.Registry.RegisterType(typeof(Orange));
+            options.Registry.DiscriminatorConventionRegistry.RegisterAssembly(typeof(Fruit).Assembly);
 
             Tree tree = new Tree(10, new Apple());
 
@@ -60,8 +59,7 @@ namespace Dahomey.Cbor.Tests.Issues
         public void TestRead()
         {
             CborOptions options = new CborOptions();
-            options.Registry.RegisterType(typeof(Apple));
-            options.Registry.RegisterType(typeof(Orange));
+            options.Registry.DiscriminatorConventionRegistry.RegisterAssembly(typeof(Fruit).Assembly);
 
             const string hexBuffer = "A2636167650A656672756974A3625F74654170706C6564747970656D4920616D20616E206170706C6563696432646D796964";
             Tree tree = Helper.Read<Tree>(hexBuffer, options);

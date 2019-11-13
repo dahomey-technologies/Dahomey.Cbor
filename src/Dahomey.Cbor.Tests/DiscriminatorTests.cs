@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization;
@@ -41,8 +42,6 @@ namespace Dahomey.Cbor.Tests
                 om.AutoMap();
                 om.SetDiscriminatorPolicy(discriminatorPolicy);
             });
-
-            options.Registry.RegisterType(typeof(NameObject));
 
             BaseObjectHolder obj = new BaseObjectHolder
             {
@@ -103,6 +102,11 @@ namespace Dahomey.Cbor.Tests
                 writer.WriteString(MemberName);
                 writer.WriteInt32(discriminator);
             }
+
+            public bool IsDiscriminatedType(Type type)
+            {
+                return true;
+            }
         }
 
         [Fact]
@@ -110,7 +114,7 @@ namespace Dahomey.Cbor.Tests
         {
             CborOptions options = new CborOptions();
             options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new CustomDiscriminatorConvention());
-            options.Registry.RegisterType(typeof(NameObject));
+            options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(NameObject));
 
             const string hexBuffer = "A16A426173654F626A656374A364747970651A22134C83644E616D6563666F6F62496401";
             BaseObjectHolder obj = Helper.Read<BaseObjectHolder>(hexBuffer, options);
@@ -121,7 +125,7 @@ namespace Dahomey.Cbor.Tests
         {
             CborOptions options = new CborOptions();
             options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new CustomDiscriminatorConvention());
-            options.Registry.RegisterType(typeof(NameObject));
+            options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(NameObject));
 
             const string hexBuffer = "A26A426173654F626A656374A364747970651A22134C83644E616D6563666F6F624964016A4E616D654F626A656374F6";
 

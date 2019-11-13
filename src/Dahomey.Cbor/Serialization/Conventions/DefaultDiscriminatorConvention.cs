@@ -1,7 +1,10 @@
-﻿using Dahomey.Cbor.Serialization.Converters.Mappings;
+﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Conventions
@@ -40,6 +43,11 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
             writer.WriteString(MemberName);
             writer.WriteString(discriminator.Span);
+        }
+
+        public bool IsDiscriminatedType(Type type)
+        {
+            return type.IsDefined(typeof(CborDiscriminatorAttribute));
         }
 
         public bool TryRegisterType(Type type)

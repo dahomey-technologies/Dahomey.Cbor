@@ -25,7 +25,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly Func<T, TM> _memberGetter;
         private readonly Action<T, TM> _memberSetter;
-        private readonly ICborConverter<TM> _memberConverter;
+        private readonly ICborConverter<TM> _converter;
         private ReadOnlyMemory<byte> _memberName;
         private readonly TM _defaultValue;
         private readonly bool _ignoreIfDefault;
@@ -42,7 +42,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             _memberName = Encoding.UTF8.GetBytes(memberMapping.MemberName);
             _memberGetter = GenerateGetter(memberInfo);
             _memberSetter = GenerateSetter(memberInfo);
-            _memberConverter = (ICborConverter<TM>)memberMapping.MemberConverter;
+            _converter = (ICborConverter<TM>)memberMapping.Converter;
             _defaultValue = (TM)memberMapping.DefaultValue;
             _ignoreIfDefault = memberMapping.IgnoreIfDefault;
             _shouldSeriliazeMethod = memberMapping.ShouldSerializeMethod;
@@ -51,17 +51,17 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void Read(ref CborReader reader, object obj)
         {
-            _memberSetter((T)obj, _memberConverter.Read(ref reader));
+            _memberSetter((T)obj, _converter.Read(ref reader));
         }
 
         public void Write(ref CborWriter writer, object obj)
         {
-            _memberConverter.Write(ref writer, _memberGetter((T)obj), _lengthMode);
+            _converter.Write(ref writer, _memberGetter((T)obj), _lengthMode);
         }
 
         public object Read(ref CborReader reader)
         {
-            return _memberConverter.Read(ref reader);
+            return _converter.Read(ref reader);
         }
 
         public void Set(object obj, object value)

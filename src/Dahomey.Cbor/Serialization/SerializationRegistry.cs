@@ -22,25 +22,5 @@ namespace Dahomey.Cbor.Serialization
             ObjectMappingConventionRegistry = new ObjectMappingConventionRegistry();
             DiscriminatorConventionRegistry = new DiscriminatorConventionRegistry(this);
         }
-
-        public void RegisterAssembly(Assembly assembly)
-        {
-            if (assembly == null)
-            {
-                throw new ArgumentNullException(nameof(assembly));
-            }
-
-            foreach (Type type in assembly.GetTypes()
-                .Where(t => t.IsClass && !t.IsAbstract && !t.IsDefined(typeof(CompilerGeneratedAttribute))))
-            {
-                RegisterType(type);
-            }
-        }
-
-        public void RegisterType(Type type)
-        {
-            // First call will force the registration.
-            ConverterRegistry.Lookup(type);
-        }
     }
 }

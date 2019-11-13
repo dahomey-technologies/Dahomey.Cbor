@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Dahomey.Cbor.Serialization.Conventions
 {
@@ -36,10 +38,44 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
         public IDiscriminatorConvention GetConvention(Type type)
         {
-            return _conventionsByType.GetOrAdd(type, t => RegisterType(t));
+            return _conventionsByType.GetOrAdd(type, t => InternalGetConvention(t));
         }
 
-        private IDiscriminatorConvention RegisterType(Type type)
+        public void RegisterAssembly(Assembly assembly)
+        {
+            if (assembly == null)
+            {
+                throw new ArgumentNullException(nameof(assembly));
+            }
+
+            foreach (Type type in assembly.GetTypes()
+                .Where(t => t.IsClass 
+                    && !t.IsAbstract 
+                    && !t.IsGenericTypeDefinition
+                    && !t.IsDefined(typeof(CompilerGeneratedAttribute))))
+            {
+                IDiscriminatorConvention convention = _conventions.FirstOrDefault(c => c.IsDiscriminatedType(type));
+
+                if (convention != null)
+                {
+                    convention.TryRegisterType(type);
+
+                    // setup discriminator for all base types
+                    for (Type currentType = type.BaseType; currentType != null && currentType != typeof(object); currentType = currentType.BaseType)
+                    {
+                        _conventionsByType.TryAdd(currentType, convention);
+                    }
+                }
+            }
+        }
+
+        public void RegisterType(Type type)
+        {
+            // First call will force the registration.
+            GetConvention(type);
+        }
+
+        private IDiscriminatorConvention InternalGetConvention(Type type)
         {
             IDiscriminatorConvention convention = _conventions.FirstOrDefault(c => c.TryRegisterType(type));
 

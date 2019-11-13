@@ -5,7 +5,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
     public class ObjectMappingRegistry
     {
-        private readonly ConcurrentDictionary<Type, IObjectMapping> _objectMappings 
+        private readonly ConcurrentDictionary<Type, IObjectMapping> _objectMappings
             = new ConcurrentDictionary<Type, IObjectMapping>();
         private readonly SerializationRegistry _registry;
 
@@ -13,7 +13,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             _registry = registry;
         }
-        
+
         public void Register(IObjectMapping objectMapping)
         {
             if (objectMapping is IMappingInitialization mappingInitialization)
@@ -23,6 +23,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
             _objectMappings.AddOrUpdate(objectMapping.ObjectType, objectMapping,
                 (type, existingObjectMapping) => objectMapping);
+
+            if (!string.IsNullOrEmpty(objectMapping.Discriminator))
+            {
+                _registry.DiscriminatorConventionRegistry.RegisterType(objectMapping.ObjectType);
+            }
         }
 
         public void Register<T>() where T : class
@@ -50,7 +55,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         private IObjectMapping CreateDefaultObjectMapping(Type type)
         {
-            IObjectMapping objectMapping = 
+            IObjectMapping objectMapping =
                 (IObjectMapping)Activator.CreateInstance(typeof(ObjectMapping<>).MakeGenericType(type), _registry);
 
             objectMapping.AutoMap();

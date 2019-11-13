@@ -13,7 +13,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public MemberInfo MemberInfo { get; private set; }
         public Type MemberType { get; private set; }
         public string MemberName { get; private set; }
-        public ICborConverter MemberConverter { get; private set; }
+        public ICborConverter Converter { get; private set; }
         public bool CanBeDeserialized { get; private set; }
         public bool CanBeSerialized { get; private set; }
         public object DefaultValue { get; private set; }
@@ -37,9 +37,9 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return this;
         }
 
-        public MemberMapping SetMemberConverter(ICborConverter converter)
+        public MemberMapping SetConverter(ICborConverter converter)
         {
-            MemberConverter = converter;
+            Converter = converter;
             return this;
         }
 
@@ -70,7 +70,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public void Initialize()
         {
             InitializeMemberName();
-            InitializeMemberConverter();
+            InitializeConverter();
             InitializeCanBeDeserialized();
             InitializeCanBeSerialized();
             ValidateDefaultValue();
@@ -96,9 +96,9 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
         }
 
-        private void InitializeMemberConverter()
+        private void InitializeConverter()
         {
-            if (MemberConverter == null)
+            if (Converter == null)
             {
                 CborConverterAttribute converterAttribute = MemberInfo.GetCustomAttribute<CborConverterAttribute>();
                 if (converterAttribute != null)
@@ -106,16 +106,16 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     Type converterType = converterAttribute.ConverterType;
                     VerifyMemberConverterType(converterType);
 
-                    MemberConverter = (ICborConverter)Activator.CreateInstance(converterType);
+                    Converter = (ICborConverter)Activator.CreateInstance(converterType);
                 }
                 else
                 {
-                    MemberConverter = _converterRegistry.Lookup(MemberType);
+                    Converter = _converterRegistry.Lookup(MemberType);
                 }
             }
             else
             {
-                VerifyMemberConverterType(MemberConverter.GetType());
+                VerifyMemberConverterType(Converter.GetType());
             }
         }
 
