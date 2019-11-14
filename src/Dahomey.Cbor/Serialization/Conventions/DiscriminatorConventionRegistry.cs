@@ -41,23 +41,6 @@ namespace Dahomey.Cbor.Serialization.Conventions
             return _conventionsByType.GetOrAdd(type, t => InternalGetConvention(t));
         }
 
-        public void RegisterAssembly(Assembly assembly)
-        {
-            if (assembly == null)
-            {
-                throw new ArgumentNullException(nameof(assembly));
-            }
-
-            foreach (Type type in assembly.GetTypes()
-                .Where(t => t.IsClass
-                    && !t.IsAbstract
-                    && !t.IsGenericTypeDefinition
-                    && !t.IsDefined(typeof(CompilerGeneratedAttribute))))
-            {
-                RegisterType(type);
-            }
-        }
-
         public void RegisterType(Type type)
         {
             // First call will force the registration.

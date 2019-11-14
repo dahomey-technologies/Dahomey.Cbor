@@ -52,26 +52,16 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
         public bool TryRegisterType(Type type)
         {
-            string discriminator = null;
-            CborDiscriminatorAttribute discriminatorAttribute = type.GetCustomAttribute<CborDiscriminatorAttribute>();
+            IObjectMapping objectMapping = _serializationRegistry.ObjectMappingRegistry.Lookup(type);
 
-            if (discriminatorAttribute != null)
-            {
-                discriminator = discriminatorAttribute.Discriminator;
-            }
-            else if (_serializationRegistry.ObjectMappingRegistry.TryLookup(type, out IObjectMapping objectMapping))
-            {
-                discriminator = objectMapping.Discriminator;
-            }
-
-            if (string.IsNullOrEmpty(discriminator))
+            if (string.IsNullOrEmpty(objectMapping.Discriminator))
             {
                 return false;
             }
 
-            ReadOnlyMemory<byte> discriminatorMemory = discriminator.AsBinaryMemory();
-            _discriminatorsByType[type] = discriminatorMemory;
-            _typesByDiscriminator.Add(discriminatorMemory.Span, type);
+            ReadOnlyMemory<byte> discriminator = objectMapping.Discriminator.AsBinaryMemory();
+            _discriminatorsByType[type] = discriminator;
+            _typesByDiscriminator.Add(discriminator.Span, type);
             return true;
         }
     }

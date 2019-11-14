@@ -59,11 +59,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return _objectMappings.GetOrAdd(type, t => CreateDefaultObjectMapping(type));
         }
 
-        public bool TryLookup(Type type, out IObjectMapping objectMapping)
-        {
-            return _objectMappings.TryGetValue(type, out objectMapping);
-        }
-
         private IObjectMapping CreateDefaultObjectMapping(Type type)
         {
             IObjectMapping objectMapping =
