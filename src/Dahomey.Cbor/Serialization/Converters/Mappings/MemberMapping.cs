@@ -5,7 +5,7 @@ using System.Reflection;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
-    public class MemberMapping : IMemberMapping
+    public class MemberMapping<T> : IMemberMapping where T : class
     {
         private readonly IObjectMapping _objectMapping;
         private readonly CborConverterRegistry _converterRegistry;
@@ -31,37 +31,37 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             DefaultValue = (memberType.IsClass || memberType.IsInterface) ? null : Activator.CreateInstance(memberType);
         }
 
-        public MemberMapping SetMemberName(string memberName)
+        public MemberMapping<T> SetMemberName(string memberName)
         {
             MemberName = memberName;
             return this;
         }
 
-        public MemberMapping SetConverter(ICborConverter converter)
+        public MemberMapping<T> SetConverter(ICborConverter converter)
         {
             Converter = converter;
             return this;
         }
 
-        public MemberMapping SetDefaultValue(object defaultValue)
+        public MemberMapping<T> SetDefaultValue(object defaultValue)
         {
             DefaultValue = defaultValue;
             return this;
         }
 
-        public MemberMapping SetIngoreIfDefault(bool ignoreIfDefault)
+        public MemberMapping<T> SetIngoreIfDefault(bool ignoreIfDefault)
         {
             IgnoreIfDefault = ignoreIfDefault;
             return this;
         }
 
-        public MemberMapping SetShouldSerializeMethod(Func<object, bool> shouldSerializeMethod)
+        public MemberMapping<T> SetShouldSerializeMethod(Func<object, bool> shouldSerializeMethod)
         {
             ShouldSerializeMethod = shouldSerializeMethod;
             return this;
         }
 
-        public MemberMapping SetLengthMode(LengthMode lengthMode)
+        public MemberMapping<T> SetLengthMode(LengthMode lengthMode)
         {
             LengthMode = lengthMode;
             return this;
@@ -74,6 +74,19 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             InitializeCanBeDeserialized();
             InitializeCanBeSerialized();
             ValidateDefaultValue();
+        }
+
+        public void PostInitialize()
+        {
+        }
+
+        public IMemberConverter GenerateMemberConverter()
+        {
+            IMemberConverter memberConverter = (IMemberConverter)Activator.CreateInstance(
+                typeof(MemberConverter<,>).MakeGenericType(typeof(T), MemberType),
+                _converterRegistry, this);
+
+            return memberConverter;
         }
 
         private void InitializeMemberName()

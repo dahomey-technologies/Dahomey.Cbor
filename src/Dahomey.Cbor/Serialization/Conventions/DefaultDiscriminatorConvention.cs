@@ -12,15 +12,21 @@ namespace Dahomey.Cbor.Serialization.Conventions
     public class DefaultDiscriminatorConvention : IDiscriminatorConvention
     {
         private readonly SerializationRegistry _serializationRegistry;
-        private readonly ReadOnlyMemory<byte> _memberName = Encoding.ASCII.GetBytes("_t");
+        private readonly ReadOnlyMemory<byte> _memberName;
         private readonly ByteBufferDictionary<Type> _typesByDiscriminator = new ByteBufferDictionary<Type>();
         private readonly Dictionary<Type, ReadOnlyMemory<byte>> _discriminatorsByType = new Dictionary<Type, ReadOnlyMemory<byte>>();
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
 
         public DefaultDiscriminatorConvention(SerializationRegistry serializationRegistry)
+            : this(serializationRegistry, "_t")
+        {
+        }
+
+        public DefaultDiscriminatorConvention(SerializationRegistry serializationRegistry, string memberName)
         {
             _serializationRegistry = serializationRegistry;
+            _memberName = memberName.AsBinaryMemory();
         }
 
         public Type ReadDiscriminator(ref CborReader reader)
@@ -41,27 +47,31 @@ namespace Dahomey.Cbor.Serialization.Conventions
                 throw new CborException($"Unknown discriminator for type: {actualType}");
             }
 
-            writer.WriteString(MemberName);
             writer.WriteString(discriminator.Span);
-        }
-
-        public bool IsDiscriminatedType(Type type)
-        {
-            return type.IsDefined(typeof(CborDiscriminatorAttribute));
         }
 
         public bool TryRegisterType(Type type)
         {
-            IObjectMapping objectMapping = _serializationRegistry.ObjectMappingRegistry.Lookup(type);
+            string discriminator = null;
+            CborDiscriminatorAttribute discriminatorAttribute = type.GetCustomAttribute<CborDiscriminatorAttribute>();
 
-            if (string.IsNullOrEmpty(objectMapping.Discriminator))
+            if (discriminatorAttribute != null)
+            {
+                discriminator = discriminatorAttribute.Discriminator;
+            }
+            else if (_serializationRegistry.ObjectMappingRegistry.TryLookup(type, out IObjectMapping objectMapping))
+            {
+                discriminator = objectMapping.Discriminator;
+            }
+
+            if (string.IsNullOrEmpty(discriminator))
             {
                 return false;
             }
 
-            ReadOnlyMemory<byte> discriminator = objectMapping.Discriminator.AsBinaryMemory();
-            _discriminatorsByType[type] = discriminator;
-            _typesByDiscriminator.Add(discriminator.Span, type);
+            ReadOnlyMemory<byte> discriminatorMemory = discriminator.AsBinaryMemory();
+            _discriminatorsByType[type] = discriminatorMemory;
+            _typesByDiscriminator.Add(discriminatorMemory.Span, type);
             return true;
         }
     }

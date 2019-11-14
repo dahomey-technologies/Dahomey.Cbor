@@ -49,23 +49,12 @@ namespace Dahomey.Cbor.Serialization.Conventions
             }
 
             foreach (Type type in assembly.GetTypes()
-                .Where(t => t.IsClass 
-                    && !t.IsAbstract 
+                .Where(t => t.IsClass
+                    && !t.IsAbstract
                     && !t.IsGenericTypeDefinition
                     && !t.IsDefined(typeof(CompilerGeneratedAttribute))))
             {
-                IDiscriminatorConvention convention = _conventions.FirstOrDefault(c => c.IsDiscriminatedType(type));
-
-                if (convention != null)
-                {
-                    convention.TryRegisterType(type);
-
-                    // setup discriminator for all base types
-                    for (Type currentType = type.BaseType; currentType != null && currentType != typeof(object); currentType = currentType.BaseType)
-                    {
-                        _conventionsByType.TryAdd(currentType, convention);
-                    }
-                }
+                RegisterType(type);
             }
         }
 

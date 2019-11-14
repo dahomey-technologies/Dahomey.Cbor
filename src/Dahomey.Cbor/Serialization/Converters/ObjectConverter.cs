@@ -39,13 +39,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public struct MapWriterContext
         {
-            public enum State
-            {
-                Discriminator,
-                Properties
-            }
-
-            public State state;
+            public CborOptions options;
             public T obj;
             public int memberIndex;
             public IObjectConverter objectConverter;
@@ -71,9 +65,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             foreach (IMemberMapping memberMapping in _objectMapping.MemberMappings)
             {
-                IMemberConverter memberConverter = (IMemberConverter)Activator.CreateInstance(
-                    typeof(MemberConverter<,>).MakeGenericType(typeof(T), memberMapping.MemberType),
-                    _registry.ConverterRegistry, memberMapping);
+                IMemberConverter memberConverter = memberMapping.GenerateMemberConverter();
 
                 if (memberMapping.CanBeDeserialized)
                 {
@@ -217,6 +209,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             MapWriterContext context = new MapWriterContext
             {
+                options = writer.Options,
                 obj = value,
                 lengthMode = lengthMode != LengthMode.Default 
                     ? lengthMode : _objectMapping.LengthMode != LengthMode.Default 
@@ -233,27 +226,6 @@ namespace Dahomey.Cbor.Serialization.Converters
             else
             {
                 context.objectConverter = this;
-            }
-
-            if (_discriminatorConvention != null)
-            {
-                CborDiscriminatorPolicy discriminatorPolicy = _objectMapping.DiscriminatorPolicy != CborDiscriminatorPolicy.Default ? _objectMapping.DiscriminatorPolicy
-                    : (writer.Options.DiscriminatorPolicy != CborDiscriminatorPolicy.Default ? writer.Options.DiscriminatorPolicy : CborDiscriminatorPolicy.Auto);
-
-                if (_objectMapping.CreatorMapping == null &&
-                    (discriminatorPolicy == CborDiscriminatorPolicy.Always
-                    || discriminatorPolicy == CborDiscriminatorPolicy.Auto && actualType != declaredType))
-                {
-                    context.state = MapWriterContext.State.Discriminator;
-                }
-                else
-                {
-                    context.state = MapWriterContext.State.Properties;
-                }
-            }
-            else
-            {
-                context.state = MapWriterContext.State.Properties;
             }
 
             writer.WriteMap(this, ref context);
@@ -367,30 +339,21 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             foreach (IMemberConverter member in context.objectConverter.MemberConvertersForWrite)
             {
-                if (member.ShouldSerialize(context.obj))
+                if (member.ShouldSerialize(context.obj, typeof(T), context.options))
                 {
                     writableMembersCount++;
                 }
             }
 
-            return context.state == MapWriterContext.State.Discriminator
-                ? writableMembersCount + 1
-                : writableMembersCount;
+            return  writableMembersCount;
         }
 
         public bool WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
         {
-            if (context.state == MapWriterContext.State.Discriminator)
-            {
-                _discriminatorConvention.WriteDiscriminator<T>(ref writer, context.obj.GetType());
-                context.state = MapWriterContext.State.Properties;
-                return true;
-            }
-
             while (context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count)
             {
                 IMemberConverter memberConverter = context.objectConverter.MemberConvertersForWrite[context.memberIndex++];
-                if (memberConverter.ShouldSerialize(context.obj))
+                if (memberConverter.ShouldSerialize(context.obj, typeof(T), context.options))
                 {
                     writer.WriteString(memberConverter.MemberName);
                     memberConverter.Write(ref writer, context.obj);

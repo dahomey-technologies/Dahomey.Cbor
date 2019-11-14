@@ -15,5 +15,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         bool IgnoreIfDefault { get; }
         Func<object, bool> ShouldSerializeMethod { get; }
         LengthMode LengthMode { get; }
+        IMemberConverter GenerateMemberConverter();
     }
 }

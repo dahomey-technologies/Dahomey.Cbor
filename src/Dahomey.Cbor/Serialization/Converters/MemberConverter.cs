@@ -1,4 +1,5 @@
-﻿using Dahomey.Cbor.Serialization.Conventions;
+﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
@@ -17,7 +18,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         void Write(ref CborWriter writer, object obj);
         object Read(ref CborReader reader);
         void Set(object obj, object value);
-        bool ShouldSerialize(object obj);
+        bool ShouldSerialize(object obj, Type declaredType, CborOptions options);
     }
 
     public class MemberConverter<T, TM> : IMemberConverter
@@ -69,7 +70,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             _memberSetter((T)obj, (TM)value);
         }
 
-        public bool ShouldSerialize(object obj)
+        public bool ShouldSerialize(object obj, Type declaredType, CborOptions options)
         {
             if (IgnoreIfDefault && EqualityComparer<TM>.Default.Equals(_memberGetter((T)obj), _defaultValue))
             {
@@ -144,10 +145,14 @@ namespace Dahomey.Cbor.Serialization.Converters
         where T : class
     {
         private readonly IDiscriminatorConvention _discriminatorConvention;
+        private readonly CborDiscriminatorPolicy _discriminatorPolicy;
 
-        public DiscriminatorMemberConverter(IDiscriminatorConvention discriminatorConvention)
+        public DiscriminatorMemberConverter(
+            IDiscriminatorConvention discriminatorConvention, 
+            CborDiscriminatorPolicy discriminatorPolicy)
         {
             _discriminatorConvention = discriminatorConvention;
+            _discriminatorPolicy = discriminatorPolicy;
         }
 
         public ReadOnlySpan<byte> MemberName => _discriminatorConvention.MemberName;
@@ -169,9 +174,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             throw new NotSupportedException();
         }
 
-        public bool ShouldSerialize(object obj)
+        public bool ShouldSerialize(object obj, Type declaredType, CborOptions options)
         {
-            return true;
+            CborDiscriminatorPolicy discriminatorPolicy = _discriminatorPolicy != CborDiscriminatorPolicy.Default ? _discriminatorPolicy
+                : (options.DiscriminatorPolicy != CborDiscriminatorPolicy.Default ? options.DiscriminatorPolicy : CborDiscriminatorPolicy.Auto);
+
+            return discriminatorPolicy == CborDiscriminatorPolicy.Always
+                || discriminatorPolicy == CborDiscriminatorPolicy.Auto && obj.GetType() != declaredType;
         }
 
         public void Write(ref CborWriter writer, object obj)

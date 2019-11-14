@@ -16,7 +16,8 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public void Register(IObjectMapping objectMapping)
         {
-            if (objectMapping is IMappingInitialization mappingInitialization)
+            IMappingInitialization mappingInitialization = objectMapping as IMappingInitialization;
+            if (mappingInitialization != null)
             {
                 mappingInitialization.Initialize();
             }
@@ -27,6 +28,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             if (!string.IsNullOrEmpty(objectMapping.Discriminator))
             {
                 _registry.DiscriminatorConventionRegistry.RegisterType(objectMapping.ObjectType);
+            }
+
+            if (mappingInitialization != null)
+            {
+                mappingInitialization.PostInitialize();
             }
         }
 
@@ -51,6 +57,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public IObjectMapping Lookup(Type type)
         {
             return _objectMappings.GetOrAdd(type, t => CreateDefaultObjectMapping(type));
+        }
+
+        public bool TryLookup(Type type, out IObjectMapping objectMapping)
+        {
+            return _objectMappings.TryGetValue(type, out objectMapping);
         }
 
         private IObjectMapping CreateDefaultObjectMapping(Type type)

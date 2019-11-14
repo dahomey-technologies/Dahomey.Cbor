@@ -18,6 +18,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private readonly SerializationRegistry _registry;
         private List<IMemberMapping> _memberMappings = new List<IMemberMapping>();
         private ICreatorMapping _creatorMapping = null;
+        private Action _orderByAction = null; 
 
         public Type ObjectType { get; private set; }
 
@@ -53,6 +54,8 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public ObjectMapping<T> SetDiscriminator(string discriminator)
         {
             Discriminator = discriminator;
+            DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(_registry.DiscriminatorConventionRegistry, this);
+            _memberMappings.Add(memberMapping);
             return this;
         }
 
@@ -68,30 +71,36 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         /// <typeparam name="TM">The member type.</typeparam>
         /// <param name="memberLambda">A lambda expression specifying the member.</param>
         /// <returns>The member map.</returns>
-        public MemberMapping MapMember<TM>(Expression<Func<T, TM>> memberLambda)
+        public MemberMapping<T> MapMember<TM>(Expression<Func<T, TM>> memberLambda)
         {
             (MemberInfo memberInfo, Type memberType) = GetMemberInfoFromLambda(memberLambda);
             return MapMember(memberInfo, memberType);
         }
 
-        public MemberMapping MapMember(MemberInfo memberInfo, Type memberType)
+        public MemberMapping<T> MapMember(MemberInfo memberInfo, Type memberType)
         {
-            MemberMapping memberMapping = new MemberMapping(_registry.ConverterRegistry, this, memberInfo, memberType);
+            MemberMapping<T> memberMapping = new MemberMapping<T>(_registry.ConverterRegistry, this, memberInfo, memberType);
             _memberMappings.Add(memberMapping);
             return memberMapping;
         }
 
-        public MemberMapping MapMember(FieldInfo fieldInfo)
+        public MemberMapping<T> MapMember(FieldInfo fieldInfo)
         {
             return MapMember(fieldInfo, fieldInfo.FieldType);
         }
 
-        public MemberMapping MapMember(PropertyInfo propertyInfo)
+        public MemberMapping<T> MapMember(PropertyInfo propertyInfo)
         {
             return MapMember(propertyInfo, propertyInfo.PropertyType);
         }
 
-        public ObjectMapping<T> SetMemberMappings(IReadOnlyCollection<IMemberMapping> memberMappings)
+        public ObjectMapping<T> AddMemberMappings(IReadOnlyCollection<IMemberMapping> memberMappings)
+        {
+            _memberMappings.AddRange(memberMappings);
+            return this;
+        }
+
+        public ObjectMapping<T> SetMemberMappings(IEnumerable<IMemberMapping> memberMappings)
         {
             _memberMappings = memberMappings.ToList();
             return this;
@@ -201,6 +210,16 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return this;
         }
 
+        public void SetOrderBy<TP>(Func<IMemberMapping, TP> propertySelector)
+        {
+            _orderByAction = () =>
+            {
+                _memberMappings = _memberMappings
+                    .OrderBy(propertySelector)
+                    .ToList();
+            };
+        }
+
         public void Initialize()
         {
             foreach(IMemberMapping mapping in _memberMappings)
@@ -215,6 +234,24 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             {
                 creatorInitialization.Initialize();
             }
+        }
+
+        public void PostInitialize()
+        {
+            foreach (IMemberMapping mapping in _memberMappings)
+            {
+                if (mapping is IMappingInitialization memberInitialization)
+                {
+                    memberInitialization.PostInitialize();
+                }
+            }
+
+            if (CreatorMapping != null && CreatorMapping is IMappingInitialization creatorInitialization)
+            {
+                creatorInitialization.PostInitialize();
+            }
+
+            _orderByAction?.Invoke();
         }
 
         private static (MemberInfo, Type) GetMemberInfoFromLambda<TM>(Expression<Func<T, TM>> memberLambda)

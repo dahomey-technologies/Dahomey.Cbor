@@ -193,8 +193,8 @@ namespace Dahomey.Cbor.Tests
             CborOptions options = new CborOptions();
             options.Registry.ObjectMappingRegistry.Register<InheritedObject>(objectMapping =>
                 objectMapping
-                    .AutoMap()
                     .SetDiscriminator("inherited")
+                    .AutoMap()
             );
 
             InheritedObject obj = new InheritedObject

@@ -99,13 +99,7 @@ namespace Dahomey.Cbor.Tests
                     throw new CborException($"Unknown discriminator for type: {actualType}");
                 }
 
-                writer.WriteString(MemberName);
                 writer.WriteInt32(discriminator);
-            }
-
-            public bool IsDiscriminatedType(Type type)
-            {
-                return true;
             }
         }
 
