@@ -22,6 +22,11 @@ namespace Dahomey.Cbor.Tests
         {
             const string hexBuffer = "A16A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F62496401";
             BaseObjectHolder obj = Helper.Read<BaseObjectHolder>(hexBuffer);
+
+            Assert.NotNull(obj);
+            Assert.IsType<NameObject>(obj.BaseObject);
+            Assert.Equal("foo", ((NameObject)obj.BaseObject).Name);
+            Assert.Equal(1, obj.BaseObject.Id);
         }
 
         [Theory]
@@ -112,6 +117,11 @@ namespace Dahomey.Cbor.Tests
 
             const string hexBuffer = "A16A426173654F626A656374A364747970651A22134C83644E616D6563666F6F62496401";
             BaseObjectHolder obj = Helper.Read<BaseObjectHolder>(hexBuffer, options);
+
+            Assert.NotNull(obj);
+            Assert.IsType<NameObject>(obj.BaseObject);
+            Assert.Equal("foo", ((NameObject)obj.BaseObject).Name);
+            Assert.Equal(1, obj.BaseObject.Id);
         }
 
         [Fact]
