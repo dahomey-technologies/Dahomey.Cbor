@@ -39,8 +39,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
             return type;
         }
 
-        public void WriteDiscriminator<T>(ref CborWriter writer, Type actualType)
-            where T : class
+        public void WriteDiscriminator(ref CborWriter writer, Type actualType)
         {
             if (!_discriminatorsByType.TryGetValue(actualType, out ReadOnlyMemory<byte> discriminator))
             {

@@ -185,7 +185,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void Write(ref CborWriter writer, object obj)
         {
-            _discriminatorConvention.WriteDiscriminator<T>(ref writer, obj.GetType());
+            _discriminatorConvention.WriteDiscriminator(ref writer, obj.GetType());
         }
     }
 }
