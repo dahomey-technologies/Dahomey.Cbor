@@ -48,6 +48,30 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
+        public static void TestRead<T>(string hexBuffer, Type expectedExceptionType = null, CborOptions options = null)
+        {
+            if (expectedExceptionType != null)
+            {
+                bool exceptionCatched = false;
+
+                try
+                {
+                    Read<T>(hexBuffer, options);
+                }
+                catch (Exception ex)
+                {
+                    Assert.IsType(expectedExceptionType, ex);
+                    exceptionCatched = true;
+                }
+
+                Assert.True(exceptionCatched, $"Expected exception {expectedExceptionType}");
+            }
+            else
+            {
+                Read<T>(hexBuffer, options);
+            }
+        }
+
         public static string Write<T>(T value, CborOptions options = null)
         {
             options = options ?? CborOptions.Default;
@@ -77,6 +101,30 @@ namespace Dahomey.Cbor.Tests
             else
             {
                 Assert.Equal(hexBuffer, Write(value, options));
+            }
+        }
+
+        public static void TestWrite<T>(T value, Type expectedExceptionType = null, CborOptions options = null)
+        {
+            if (expectedExceptionType != null)
+            {
+                bool exceptionCatched = false;
+
+                try
+                {
+                    Write(value, options);
+                }
+                catch (Exception ex)
+                {
+                    Assert.IsType(expectedExceptionType, ex);
+                    exceptionCatched = true;
+                }
+
+                Assert.True(exceptionCatched, $"Expected exception {expectedExceptionType}");
+            }
+            else
+            {
+                Write(value, options);
             }
         }
 

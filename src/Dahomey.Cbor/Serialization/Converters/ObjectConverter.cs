@@ -6,14 +6,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
     public interface IObjectConverter
     {
-        void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName);
-        bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, out object value);
+        void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers);
+        bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers, out object value);
         IReadOnlyList<IMemberConverter> MemberConvertersForWrite { get; }
+        IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead { get; }
     }
 
     public interface IObjectConverter<out T> : IObjectConverter
@@ -35,6 +37,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             public IObjectConverter<T> converter;
             public Dictionary<RawString, object> creatorValues;
             public Dictionary<RawString, object> regularValues;
+            public HashSet<IMemberConverter> readMembers;
         }
 
         public struct MapWriterContext
@@ -53,6 +56,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         private readonly ByteBufferDictionary<IMemberConverter> _memberConvertersForRead = new ByteBufferDictionary<IMemberConverter>();
+        public List<IMemberConverter> _requiredMemberConvertersForRead = new List<IMemberConverter>();
         private readonly List<IMemberConverter> _memberConvertersForWrite;
         private readonly SerializationRegistry _registry;
         private readonly IObjectMapping _objectMapping;
@@ -60,6 +64,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly bool _isInterfaceOrAbstract;
 
         public IReadOnlyList<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
+        public IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead => _requiredMemberConvertersForRead;
 
         public ObjectConverter(SerializationRegistry registry)
         {
@@ -77,6 +82,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                 if (memberMapping.CanBeDeserialized || _objectMapping.IsCreatorMember(memberConverter.MemberName))
                 {
                     _memberConvertersForRead.Add(memberConverter.MemberName, memberConverter);
+
+                    if (memberConverter.RequirementPolicy == RequirementPolicy.AllowNull
+                        || memberConverter.RequirementPolicy == RequirementPolicy.Always)
+                    {
+                        _requiredMemberConvertersForRead.Add(memberConverter);
+                    }
                 }
 
                 if (memberMapping.CanBeSerialized)
@@ -124,7 +135,8 @@ namespace Dahomey.Cbor.Serialization.Converters
             MapReaderContext context = new MapReaderContext
             {
                 creatorValues = _objectMapping.CreatorMapping != null ? new Dictionary<RawString, object>() : null,
-                regularValues = _objectMapping.CreatorMapping != null ? new Dictionary<RawString, object>() : null
+                regularValues = _objectMapping.CreatorMapping != null ? new Dictionary<RawString, object>() : null,
+                readMembers = _requiredMemberConvertersForRead.Count != 0 ? new HashSet<IMemberConverter>() : null
             };
 
             reader.ReadMap(this, ref context);
@@ -149,6 +161,22 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
             }
 
+            if (context.readMembers != null)
+            {
+                if (context.converter == null)
+                {
+                    context.converter = this;
+                }
+
+                foreach (IMemberConverter memberConverter in context.converter.RequiredMemberConvertersForRead)
+                {
+                    if (!context.readMembers.Contains(memberConverter))
+                    {
+                        throw new CborException($"Required property '{Encoding.UTF8.GetString(memberConverter.MemberName)}' not found in JSON.");
+                    }
+                }
+            }
+
             if (_objectMapping.OnDeserializedMethod != null)
             {
                 ((Action<T>)_objectMapping.OnDeserializedMethod)(context.obj);
@@ -157,7 +185,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             return context.obj;
         }
 
-        public void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName)
+        public void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers)
         {
             T value = (T)obj;
 
@@ -168,11 +196,15 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             else
             {
+                if (readMembers != null)
+                {
+                    readMembers.Add(memberConverter);
+                }
                 memberConverter.Read(ref reader, value);
             }
         }
 
-        public bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, out object value)
+        public bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers, out object value)
         {
             if (!_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter memberConverter))
             {
@@ -183,6 +215,10 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             else
             {
+                if (readMembers != null)
+                {
+                    readMembers.Add(memberConverter);
+                }
                 value = memberConverter.Read(ref reader);
                 return true;
             }
@@ -289,9 +325,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                         ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
                     }
 
-                    context.converter.ReadValue(ref reader, context.obj, memberName);
+                    context.converter.ReadValue(ref reader, context.obj, memberName, context.readMembers);
                 }
-                else if (context.converter.ReadValue(ref reader, memberName, out object value))
+                else if (context.converter.ReadValue(ref reader, memberName, context.readMembers, out object value))
                 {
                     if (_objectMapping.IsCreatorMember(memberName))
                     {
@@ -306,7 +342,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             else
             {
                 ReadOnlySpan<byte> memberName = reader.ReadRawString();
-                context.converter.ReadValue(ref reader, context.obj, memberName);
+                context.converter.ReadValue(ref reader, context.obj, memberName, context.readMembers);
             }
         }
 
