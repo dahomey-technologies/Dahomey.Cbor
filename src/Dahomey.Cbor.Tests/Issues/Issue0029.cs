@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization.Conventions;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
@@ -20,6 +21,7 @@ namespace Dahomey.Cbor.Tests.Issues
         public void Test()
         {
             CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(DummyMessageParticle));
 
             // {"nonce": 2181035975144481159, "_t": "radix.particles.message"}

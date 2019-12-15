@@ -21,7 +21,7 @@ namespace Dahomey.Cbor.Tests.Issues
         public void Test()
         {
             CborOptions options = new CborOptions();
-            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new DefaultDiscriminatorConvention(options.Registry, "serializer"));
+            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry, "serializer"));
             options.Registry.ObjectMappingRegistry.Register<Atom>(objectMapping =>
             {
                 objectMapping.AutoMap();

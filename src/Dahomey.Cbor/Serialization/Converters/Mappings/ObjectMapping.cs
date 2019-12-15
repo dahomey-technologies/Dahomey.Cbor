@@ -38,6 +38,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             _registry = registry;
             ObjectType = typeof(T);
+
+            if (!ObjectType.IsAbstract && !ObjectType.IsInterface)
+            {
+                DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(registry.DiscriminatorConventionRegistry, this);
+                _memberMappings.Add(memberMapping);
+            }
         }
 
         void IObjectMapping.AutoMap()
@@ -55,8 +61,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public ObjectMapping<T> SetDiscriminator(string discriminator)
         {
             Discriminator = discriminator;
-            DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(_registry.DiscriminatorConventionRegistry, this);
-            _memberMappings.Add(memberMapping);
             return this;
         }
 

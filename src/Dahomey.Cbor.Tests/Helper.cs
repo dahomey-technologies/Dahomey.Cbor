@@ -85,7 +85,7 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
-        public static void TestWrite<T>(T value, string hexBuffer, Type expectedExceptionType = null, CborOptions options = null)
+        public static void TestWrite<T>(T value, string expectedHexBuffer, Type expectedExceptionType = null, CborOptions options = null)
         {
             if (expectedExceptionType != null)
             {
@@ -100,7 +100,8 @@ namespace Dahomey.Cbor.Tests
             }
             else
             {
-                Assert.Equal(hexBuffer, Write(value, options));
+                string actualHexBuffer = Write(value, options);
+                Assert.Equal(expectedHexBuffer, actualHexBuffer);
             }
         }
 

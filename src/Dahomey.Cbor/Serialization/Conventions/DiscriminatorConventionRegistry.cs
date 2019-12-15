@@ -36,6 +36,11 @@ namespace Dahomey.Cbor.Serialization.Conventions
             _conventions.Push(convention);
         }
 
+        public void ClearConventions()
+        {
+            _conventions.Clear();
+        }
+
         public IDiscriminatorConvention GetConvention(Type type)
         {
             return _conventionsByType.GetOrAdd(type, t => InternalGetConvention(t));
@@ -46,6 +51,8 @@ namespace Dahomey.Cbor.Serialization.Conventions
             // First call will force the registration.
             GetConvention(type);
         }
+
+        public void RegisterType<T>() where T : class => RegisterType(typeof(T));
 
         private IDiscriminatorConvention InternalGetConvention(Type type)
         {

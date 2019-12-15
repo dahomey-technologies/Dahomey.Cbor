@@ -1,9 +1,6 @@
-﻿using Dahomey.Cbor.Attributes;
-using Dahomey.Cbor.Serialization.Converters.Mappings;
-using Dahomey.Cbor.Util;
+﻿using Dahomey.Cbor.Util;
 using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 
@@ -13,8 +10,8 @@ namespace Dahomey.Cbor.Serialization.Conventions
     {
         private readonly SerializationRegistry _serializationRegistry;
         private readonly ReadOnlyMemory<byte> _memberName;
-        private readonly ByteBufferDictionary<Type> _typesByDiscriminator = new ByteBufferDictionary<Type>();
-        private readonly Dictionary<Type, ReadOnlyMemory<byte>> _discriminatorsByType = new Dictionary<Type, ReadOnlyMemory<byte>>();
+        private readonly ConcurrentDictionary<string, Type> _typesByDiscriminator = new ConcurrentDictionary<string, Type>();
+        private readonly ConcurrentDictionary<Type, string> _discriminatorsByType = new ConcurrentDictionary<Type, string>();
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
 
@@ -29,39 +26,62 @@ namespace Dahomey.Cbor.Serialization.Conventions
             _memberName = memberName.AsBinaryMemory();
         }
 
+
+        public bool TryRegisterType(Type type)
+        {
+            return true;
+        }
+
         public Type ReadDiscriminator(ref CborReader reader)
         {
-            ReadOnlySpan<byte> discriminator = reader.ReadRawString();
-            if (!_typesByDiscriminator.TryGetValue(discriminator, out Type type))
-            {
-                throw reader.BuildException($"Unknown type discriminator: {Encoding.UTF8.GetString(discriminator)}");
-            }
+            string discriminator = reader.ReadString();
+            Type type = _typesByDiscriminator.GetOrAdd(discriminator, NameToType);
             return type;
         }
 
         public void WriteDiscriminator(ref CborWriter writer, Type actualType)
         {
-            if (!_discriminatorsByType.TryGetValue(actualType, out ReadOnlyMemory<byte> discriminator))
-            {
-                throw new CborException($"Unknown discriminator for type: {actualType}");
-            }
-
-            writer.WriteString(discriminator.Span);
+            string discriminator = _discriminatorsByType.GetOrAdd(actualType, TypeToName);
+            writer.WriteString(discriminator);
         }
 
-        public bool TryRegisterType(Type type)
+        private string TypeToName(Type type)
         {
-            IObjectMapping objectMapping = _serializationRegistry.ObjectMappingRegistry.Lookup(type);
+            return type.FullName + ", " + type.Assembly.GetName().Name;
+        }
 
-            if (string.IsNullOrEmpty(objectMapping.Discriminator))
+        private Type NameToType(string name)
+        {
+            string[] parts = name.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+            string assemblyName;
+            string typeName;
+
+            switch (parts.Length)
             {
-                return false;
+                case 1:
+                    typeName = parts[0];
+                    assemblyName = null;
+                    break;
+
+                case 2:
+                    typeName = parts[0];
+                    assemblyName = parts[1];
+                    break;
+
+                default:
+                    throw new CborException($"Invalid discriminator {name}");
+
             }
 
-            ReadOnlyMemory<byte> discriminator = objectMapping.Discriminator.AsBinaryMemory();
-            _discriminatorsByType[type] = discriminator;
-            _typesByDiscriminator.Add(discriminator.Span, type);
-            return true;
+            if (!string.IsNullOrEmpty(assemblyName))
+            {
+                Assembly assembly = Assembly.Load(assemblyName);
+                Type type = assembly.GetType(typeName);
+                return type;
+            }
+
+            return Type.GetType(typeName);
         }
     }
 }

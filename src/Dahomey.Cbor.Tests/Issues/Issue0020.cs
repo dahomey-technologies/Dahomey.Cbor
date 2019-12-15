@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization.Conventions;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -47,6 +48,7 @@ namespace Dahomey.Cbor.Tests.Issues
         public void TestWrite()
         {
             CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(Apple));
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(Orange));
 
@@ -60,6 +62,7 @@ namespace Dahomey.Cbor.Tests.Issues
         public void TestRead()
         {
             CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(Apple));
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(Orange));
 

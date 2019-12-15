@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Text;
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Conventions;
-using Dahomey.Cbor.Util;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -20,13 +18,33 @@ namespace Dahomey.Cbor.Tests
         [Fact]
         public void ReadPolymorphicObject()
         {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
+            options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(NameObject));
+
             const string hexBuffer = "A16A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F62496401";
-            BaseObjectHolder obj = Helper.Read<BaseObjectHolder>(hexBuffer);
+            BaseObjectHolder obj = Helper.Read<BaseObjectHolder>(hexBuffer, options);
 
             Assert.NotNull(obj);
             Assert.IsType<NameObject>(obj.BaseObject);
             Assert.Equal("foo", ((NameObject)obj.BaseObject).Name);
             Assert.Equal(1, obj.BaseObject.Id);
+        }
+
+        [Fact]
+        public void ReadPolymorphicObjectWithDefaultDiscriminatorConvention()
+        {
+            const string hexBuffer = "A2625F7478374461686F6D65792E43626F722E54657374732E426173654F626A656374486F6C6465722C204461686F6D65792E43626F722E54657374736A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F62496401";
+
+            CborOptions options = new CborOptions();
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
+            registry.RegisterType<NameObject>();
+
+            object obj = Helper.Read<object>(hexBuffer, options);
+
+            Assert.NotNull(obj);
+            Assert.IsType<BaseObjectHolder>(obj);
         }
 
         [Theory]
@@ -37,6 +55,8 @@ namespace Dahomey.Cbor.Tests
         public void WritePolymorphicObject(CborDiscriminatorPolicy discriminatorPolicy, string hexBuffer)
         {
             CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
+            options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(NameObject));
             options.Registry.ObjectMappingRegistry.Register<NameObject>(om =>
             {
                 om.AutoMap();
@@ -141,6 +161,24 @@ namespace Dahomey.Cbor.Tests
                     Name = "foo"
                 },
             };
+
+            Helper.TestWrite(obj, hexBuffer, null, options);
+        }
+
+        [Fact]
+        public void WriteWithNoDiscriminatorConvention()
+        {
+            CborOptions options = new CborOptions();
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.ClearConventions();
+
+            NameObject obj = new NameObject
+            {
+                Id = 12,
+                Name = "foo"
+            };
+
+            const string hexBuffer = "A2644E616D6563666F6F6249640C";
 
             Helper.TestWrite(obj, hexBuffer, null, options);
         }
