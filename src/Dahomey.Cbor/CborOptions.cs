@@ -41,14 +41,8 @@ namespace Dahomey.Cbor
         public ValueFormat EnumFormat { get; set; }
         public DateTimeFormat DateTimeFormat { get; set; }
         public bool IsIndented { get; set; }
-        public IDiscriminatorConvention DiscriminatorConvention { get; set; }
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; set; }
         public LengthMode ArrayLengthMode { get; set; } = LengthMode.DefiniteLength;
         public LengthMode MapLengthMode { get; set; } = LengthMode.DefiniteLength;
-
-        public CborOptions()
-        {
-            DiscriminatorConvention = Registry.DefaultDiscriminatorConvention;
-        }
     }
 }

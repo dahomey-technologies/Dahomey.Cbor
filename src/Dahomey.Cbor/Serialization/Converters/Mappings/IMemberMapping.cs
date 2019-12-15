@@ -9,7 +9,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         MemberInfo MemberInfo { get; }
         Type MemberType { get; }
         string MemberName { get; }
-        ICborConverter MemberConverter { get; }
+        ICborConverter Converter { get; }
         bool CanBeDeserialized { get; }
         bool CanBeSerialized { get; }
         object DefaultValue { get; }
@@ -17,5 +17,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         Func<object, bool> ShouldSerializeMethod { get; }
         LengthMode LengthMode { get; }
         RequirementPolicy RequirementPolicy { get; }
+        IMemberConverter GenerateMemberConverter();
     }
 }

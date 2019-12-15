@@ -1,5 +1,4 @@
-﻿using Dahomey.Cbor.Serialization.Converters.Mappings;
-using Dahomey.Cbor.Serialization.Converters.Providers;
+﻿using Dahomey.Cbor.Serialization.Converters.Providers;
 using System;
 using System.Collections.Concurrent;
 using System.Linq;

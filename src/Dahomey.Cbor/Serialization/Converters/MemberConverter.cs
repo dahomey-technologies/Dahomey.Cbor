@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
@@ -19,7 +20,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         void Write(ref CborWriter writer, object obj);
         object Read(ref CborReader reader);
         void Set(object obj, object value);
-        bool ShouldSerialize(object obj);
+        bool ShouldSerialize(object obj, Type declaredType, CborOptions options);
     }
 
     public class MemberConverter<T, TM> : IMemberConverter
@@ -27,7 +28,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly Func<T, TM> _memberGetter;
         private readonly Action<T, TM> _memberSetter;
-        private readonly ICborConverter<TM> _memberConverter;
+        private readonly ICborConverter<TM> _converter;
         private ReadOnlyMemory<byte> _memberName;
         private readonly TM _defaultValue;
         private readonly bool _ignoreIfDefault;
@@ -47,7 +48,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             _memberName = Encoding.UTF8.GetBytes(memberMapping.MemberName);
             _memberGetter = GenerateGetter(memberInfo);
             _memberSetter = GenerateSetter(memberInfo);
-            _memberConverter = (ICborConverter<TM>)memberMapping.MemberConverter;
+            _converter = (ICborConverter<TM>)memberMapping.Converter;
             _defaultValue = (TM)memberMapping.DefaultValue;
             _ignoreIfDefault = memberMapping.IgnoreIfDefault;
             _shouldSerializeMethod = memberMapping.ShouldSerializeMethod;
@@ -65,7 +66,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
             }
 
-            _memberSetter((T)obj, _memberConverter.Read(ref reader));
+            _memberSetter((T)obj, _converter.Read(ref reader));
         }
 
         public void Write(ref CborWriter writer, object obj)
@@ -78,12 +79,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException($"Property '{Encoding.UTF8.GetString(_memberName.Span)}' cannot be null.");
             }
 
-            _memberConverter.Write(ref writer, value, _lengthMode);
+            _converter.Write(ref writer, value, _lengthMode);
         }
 
         public object Read(ref CborReader reader)
         {
-            return _memberConverter.Read(ref reader);
+            return _converter.Read(ref reader);
         }
 
         public void Set(object obj, object value)
@@ -91,7 +92,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             _memberSetter((T)obj, (TM)value);
         }
 
-        public bool ShouldSerialize(object obj)
+        public bool ShouldSerialize(object obj, Type declaredType, CborOptions options)
         {
             if (IgnoreIfDefault && EqualityComparer<TM>.Default.Equals(_memberGetter((T)obj), _defaultValue))
             {
@@ -159,6 +160,65 @@ namespace Dahomey.Cbor.Serialization.Converters
                 default:
                     return null;
             }
+        }
+    }
+
+    public class DiscriminatorMemberConverter<T> : IMemberConverter
+        where T : class
+    {
+        private readonly IDiscriminatorConvention _discriminatorConvention;
+        private readonly CborDiscriminatorPolicy _discriminatorPolicy;
+        private readonly ReadOnlyMemory<byte> _memberName;
+
+        public DiscriminatorMemberConverter(
+            IDiscriminatorConvention discriminatorConvention, 
+            CborDiscriminatorPolicy discriminatorPolicy)
+        {
+            _discriminatorConvention = discriminatorConvention;
+            _discriminatorPolicy = discriminatorPolicy;
+
+            if (discriminatorConvention != null)
+            {
+                _memberName = discriminatorConvention.MemberName.ToArray();
+            }
+        }
+
+        public ReadOnlySpan<byte> MemberName => _memberName.Span;
+        public bool IgnoreIfDefault => false;
+        public RequirementPolicy RequirementPolicy => RequirementPolicy.Never;
+
+        public void Read(ref CborReader reader, object obj)
+        {
+            throw new NotSupportedException();
+        }
+
+        public object Read(ref CborReader reader)
+        {
+            throw new NotSupportedException();
+        }
+
+        public void Set(object obj, object value)
+        {
+            throw new NotSupportedException();
+        }
+
+        public bool ShouldSerialize(object obj, Type declaredType, CborOptions options)
+        {
+            if (_discriminatorConvention == null)
+            {
+                return false;
+            }
+
+            CborDiscriminatorPolicy discriminatorPolicy = _discriminatorPolicy != CborDiscriminatorPolicy.Default ? _discriminatorPolicy
+                : (options.DiscriminatorPolicy != CborDiscriminatorPolicy.Default ? options.DiscriminatorPolicy : CborDiscriminatorPolicy.Auto);
+
+            return discriminatorPolicy == CborDiscriminatorPolicy.Always
+                || discriminatorPolicy == CborDiscriminatorPolicy.Auto && obj.GetType() != declaredType;
+        }
+
+        public void Write(ref CborWriter writer, object obj)
+        {
+            _discriminatorConvention.WriteDiscriminator(ref writer, obj.GetType());
         }
     }
 }

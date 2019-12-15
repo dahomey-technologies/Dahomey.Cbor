@@ -42,13 +42,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public struct MapWriterContext
         {
-            public enum State
-            {
-                Discriminator,
-                Properties
-            }
-
-            public State state;
+            public CborOptions options;
             public T obj;
             public int memberIndex;
             public IObjectConverter objectConverter;
@@ -62,6 +56,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly IObjectMapping _objectMapping;
         private readonly Func<T> _constructor;
         private readonly bool _isInterfaceOrAbstract;
+        private IDiscriminatorConvention _discriminatorConvention = null;
 
         public IReadOnlyList<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
         public IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead => _requiredMemberConvertersForRead;
@@ -75,9 +70,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             foreach (IMemberMapping memberMapping in _objectMapping.MemberMappings)
             {
-                IMemberConverter memberConverter = (IMemberConverter)Activator.CreateInstance(
-                    typeof(MemberConverter<,>).MakeGenericType(typeof(T), memberMapping.MemberType),
-                    _registry.ConverterRegistry, memberMapping);
+                IMemberConverter memberConverter = memberMapping.GenerateMemberConverter();
 
                 if (memberMapping.CanBeDeserialized || _objectMapping.IsCreatorMember(memberConverter.MemberName))
                 {
@@ -113,6 +106,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 _constructor = defaultConstructorInfo.CreateDelegate<T>();
             }
+
+            _discriminatorConvention = registry.DiscriminatorConventionRegistry.GetConvention(typeof(T));
         }
 
         public T CreateInstance()
@@ -239,6 +234,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             MapWriterContext context = new MapWriterContext
             {
+                options = writer.Options,
                 obj = value,
                 lengthMode = lengthMode != LengthMode.Default 
                     ? lengthMode : _objectMapping.LengthMode != LengthMode.Default 
@@ -255,20 +251,6 @@ namespace Dahomey.Cbor.Serialization.Converters
             else
             {
                 context.objectConverter = this;
-            }
-
-            CborDiscriminatorPolicy discriminatorPolicy = _objectMapping.DiscriminatorPolicy != CborDiscriminatorPolicy.Default ? _objectMapping.DiscriminatorPolicy
-                : (writer.Options.DiscriminatorPolicy != CborDiscriminatorPolicy.Default ? writer.Options.DiscriminatorPolicy : CborDiscriminatorPolicy.Auto);
-
-            if (_objectMapping.CreatorMapping == null &&
-                (discriminatorPolicy == CborDiscriminatorPolicy.Always
-                || discriminatorPolicy == CborDiscriminatorPolicy.Auto && actualType != declaredType))
-            {
-                context.state = MapWriterContext.State.Discriminator;
-            }
-            else
-            {
-                context.state = MapWriterContext.State.Properties;
             }
 
             writer.WriteMap(this, ref context);
@@ -289,16 +271,14 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (context.converter == null)
                 {
-                    IDiscriminatorConvention discriminatorConvention = reader.Options.DiscriminatorConvention;
-
-                    if (discriminatorConvention.IsTypeDiscriminated(typeof(T)))
+                    if (_discriminatorConvention != null)
                     {
                         CborReaderBookmark bookmark = reader.GetBookmark();
 
-                        if (FindItem(ref reader, discriminatorConvention.MemberName))
+                        if (FindItem(ref reader, _discriminatorConvention.MemberName))
                         {
                             // discriminator value
-                            Type actualType = discriminatorConvention.ReadDiscriminator(ref reader);
+                            Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
                             context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
                         }
                         else
@@ -374,30 +354,21 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             foreach (IMemberConverter member in context.objectConverter.MemberConvertersForWrite)
             {
-                if (member.ShouldSerialize(context.obj))
+                if (member.ShouldSerialize(context.obj, typeof(T), context.options))
                 {
                     writableMembersCount++;
                 }
             }
 
-            return context.state == MapWriterContext.State.Discriminator
-                ? writableMembersCount + 1
-                : writableMembersCount;
+            return  writableMembersCount;
         }
 
         public bool WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
         {
-            if (context.state == MapWriterContext.State.Discriminator)
-            {
-                writer.Options.DiscriminatorConvention.WriteDiscriminator<T>(ref writer, context.obj.GetType());
-                context.state = MapWriterContext.State.Properties;
-                return true;
-            }
-
             while (context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count)
             {
                 IMemberConverter memberConverter = context.objectConverter.MemberConvertersForWrite[context.memberIndex++];
-                if (memberConverter.ShouldSerialize(context.obj))
+                if (memberConverter.ShouldSerialize(context.obj, typeof(T), context.options))
                 {
                     writer.WriteString(memberConverter.MemberName);
                     memberConverter.Write(ref writer, context.obj);

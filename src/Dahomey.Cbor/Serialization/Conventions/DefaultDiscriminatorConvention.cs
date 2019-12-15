@@ -1,8 +1,6 @@
-﻿using Dahomey.Cbor.Attributes;
-using Dahomey.Cbor.Util;
+﻿using Dahomey.Cbor.Util;
 using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text;
 
@@ -10,65 +8,80 @@ namespace Dahomey.Cbor.Serialization.Conventions
 {
     public class DefaultDiscriminatorConvention : IDiscriminatorConvention
     {
-        private readonly ReadOnlyMemory<byte> _memberName = Encoding.ASCII.GetBytes("_t");
-        private readonly ByteBufferDictionary<Type> _typesByDiscriminator = new ByteBufferDictionary<Type>();
-        private readonly Dictionary<Type, ReadOnlyMemory<byte>> _discriminatorsByType = new Dictionary<Type, ReadOnlyMemory<byte>>();
-        private readonly HashSet<Type> _discriminatedTypes = new HashSet<Type>();
+        private readonly SerializationRegistry _serializationRegistry;
+        private readonly ReadOnlyMemory<byte> _memberName;
+        private readonly ConcurrentDictionary<string, Type> _typesByDiscriminator = new ConcurrentDictionary<string, Type>();
+        private readonly ConcurrentDictionary<Type, string> _discriminatorsByType = new ConcurrentDictionary<Type, string>();
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
 
+        public DefaultDiscriminatorConvention(SerializationRegistry serializationRegistry)
+            : this(serializationRegistry, "_t")
+        {
+        }
+
+        public DefaultDiscriminatorConvention(SerializationRegistry serializationRegistry, string memberName)
+        {
+            _serializationRegistry = serializationRegistry;
+            _memberName = memberName.AsBinaryMemory();
+        }
+
+
+        public bool TryRegisterType(Type type)
+        {
+            return true;
+        }
+
         public Type ReadDiscriminator(ref CborReader reader)
         {
-            ReadOnlySpan<byte> discriminator = reader.ReadRawString();
-            if (!_typesByDiscriminator.TryGetValue(discriminator, out Type type))
-            {
-                throw reader.BuildException($"Unknown type discriminator: {Encoding.UTF8.GetString(discriminator)}");
-            }
+            string discriminator = reader.ReadString();
+            Type type = _typesByDiscriminator.GetOrAdd(discriminator, NameToType);
             return type;
         }
 
-        public void WriteDiscriminator<T>(ref CborWriter writer, Type actualType)
-            where T : class
+        public void WriteDiscriminator(ref CborWriter writer, Type actualType)
         {
-            if (!_discriminatorsByType.TryGetValue(actualType, out ReadOnlyMemory<byte> discriminator))
-            {
-                throw new CborException($"Unknown discriminator for type: {actualType}");
-            }
-
-            writer.WriteString(MemberName);
-            writer.WriteString(discriminator.Span);
+            string discriminator = _discriminatorsByType.GetOrAdd(actualType, TypeToName);
+            writer.WriteString(discriminator);
         }
 
-        /// <summary>
-        /// Returns whether the given type has any discriminators registered for any of its subclasses.
-        /// </summary>
-        /// <param name="type">A Type.</param>
-        /// <returns>True if the type is discriminated.</returns>
-        public bool IsTypeDiscriminated(Type type)
+        private string TypeToName(Type type)
         {
-            return type.IsInterface || _discriminatedTypes.Contains(type);
+            return type.FullName + ", " + type.Assembly.GetName().Name;
         }
 
-        public void RegisterAssembly(Assembly assembly)
+        private Type NameToType(string name)
         {
-            foreach (Type type in assembly.GetTypes()
-                .Where(t => Attribute.IsDefined(t, typeof(CborDiscriminatorAttribute))))
-            {
-                string discriminator = type.GetCustomAttribute<CborDiscriminatorAttribute>().Discriminator;
-                RegisterType(type, discriminator.AsBinaryMemory());
-            }
-        }
+            string[] parts = name.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-        public void RegisterType(Type type, ReadOnlyMemory<byte> discriminator)
-        {
-            _typesByDiscriminator.Add(discriminator.Span, type);
-            _discriminatorsByType[type] = discriminator;
+            string assemblyName;
+            string typeName;
 
-            // mark all base types as discriminated (so we know that it's worth reading a discriminator)
-            for (Type baseType = type.BaseType; baseType != null; baseType = baseType.BaseType)
+            switch (parts.Length)
             {
-                _discriminatedTypes.Add(baseType);
+                case 1:
+                    typeName = parts[0];
+                    assemblyName = null;
+                    break;
+
+                case 2:
+                    typeName = parts[0];
+                    assemblyName = parts[1];
+                    break;
+
+                default:
+                    throw new CborException($"Invalid discriminator {name}");
+
             }
+
+            if (!string.IsNullOrEmpty(assemblyName))
+            {
+                Assembly assembly = Assembly.Load(assemblyName);
+                Type type = assembly.GetType(typeName);
+                return type;
+            }
+
+            return Type.GetType(typeName);
         }
     }
 }
