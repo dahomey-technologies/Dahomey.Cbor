@@ -28,7 +28,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private ReadOnlyMemory<byte> _memberName;
         private readonly TM _defaultValue;
         private readonly bool _ignoreIfDefault;
-        private readonly Func<object, bool> _shouldSeriliazeMethod;
+        private readonly Func<object, bool> _shouldSerializeMethod;
         private readonly LengthMode _lengthMode;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
@@ -44,7 +44,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             _memberConverter = (ICborConverter<TM>)memberMapping.MemberConverter;
             _defaultValue = (TM)memberMapping.DefaultValue;
             _ignoreIfDefault = memberMapping.IgnoreIfDefault;
-            _shouldSeriliazeMethod = memberMapping.ShouldSerializeMethod;
+            _shouldSerializeMethod = memberMapping.ShouldSerializeMethod;
             _lengthMode = memberMapping.LengthMode;
         }
 
@@ -75,7 +75,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return false;
             }
 
-            if (_shouldSeriliazeMethod != null && !_shouldSeriliazeMethod(obj))
+            if (_shouldSerializeMethod != null && !_shouldSerializeMethod(obj))
             {
                 return false;
             }
