@@ -62,6 +62,21 @@ namespace Dahomey.Cbor
             return converter.Read(ref reader);
         }
 
+        /// <summary>
+        /// Deserializes the JSON to the given anonymous type.
+        /// </summary>
+        /// <typeparam name="T">The anonymous type to deserialize to. This can't be specified directly and will be inferred from the anonymous type passed as a parameter.</typeparam>
+        /// <param name="buffer">The CBOR buffer to deserialize.</param>
+        /// <param name="anonymousTypeObject">The anonymous type object.</param>
+        /// <param name="options">The options used to deserialize the object. If this is null, default options will be used.</param>
+        /// <returns>The deserialized anonymous type from the CBOR buffer.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T DeserializeAnonymousType<T>(
+            ReadOnlySpan<byte> buffer, T anonymousTypeObject, CborOptions options = null)
+        {
+            return Deserialize<T>(buffer, options);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Task SerializeAsync<T>(
             T input, 

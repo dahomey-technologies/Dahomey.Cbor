@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 
 namespace Dahomey.Cbor.Util
 {
@@ -12,6 +13,15 @@ namespace Dahomey.Cbor.Util
             }
 
             return Activator.CreateInstance(type);
+        }
+
+        public static bool IsAnonymous(this Type type)
+        {
+            return type.Namespace == null
+                && type.IsSealed
+                && type.BaseType == typeof(object)
+                && !type.IsPublic
+                && type.IsDefined(typeof(CompilerGeneratedAttribute), false);
         }
     }
 }
