@@ -1,4 +1,5 @@
-﻿using Dahomey.Cbor.Serialization.Conventions;
+﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization.Conventions;
 using System;
 using System.Reflection;
 using System.Text;
@@ -20,6 +21,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public bool IgnoreIfDefault => false;
         public Func<object, bool> ShouldSerializeMethod => null;
         public LengthMode LengthMode => LengthMode.Default;
+        public RequirementPolicy RequirementPolicy => RequirementPolicy.Never;
 
         public DiscriminatorMapping(DiscriminatorConventionRegistry discriminatorConventionRegistry, 
             IObjectMapping objectMapping)

@@ -190,7 +190,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
         }
 
-        private void ProcessRequired(MemberInfo memberInfo, MemberMapping memberMapping)
+        private void ProcessRequired<T>(MemberInfo memberInfo, MemberMapping<T> memberMapping) where T : class
         {
             CborRequiredAttribute jsonRequiredAttribute = memberInfo.GetCustomAttribute<CborRequiredAttribute>();
             if (jsonRequiredAttribute != null)

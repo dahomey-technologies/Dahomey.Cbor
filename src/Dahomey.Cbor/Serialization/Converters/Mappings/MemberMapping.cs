@@ -68,7 +68,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return this;
         }
 
-        public MemberMapping SetRequired(RequirementPolicy requirementPolicy)
+        public MemberMapping<T> SetRequired(RequirementPolicy requirementPolicy)
         {
             RequirementPolicy = requirementPolicy;
             return this;
