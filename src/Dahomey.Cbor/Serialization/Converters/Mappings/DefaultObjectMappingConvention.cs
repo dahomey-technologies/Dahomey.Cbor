@@ -58,6 +58,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 ProcessDefaultValue(propertyInfo, memberMapping);
                 ProcessShouldSerializeMethod(memberMapping);
                 ProcessLengthMode(propertyInfo, memberMapping);
+                ProcessRequired(propertyInfo, memberMapping);
                 memberMappings.Add(memberMapping);
             }
 
@@ -79,6 +80,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 ProcessDefaultValue(fieldInfo, memberMapping);
                 ProcessShouldSerializeMethod(memberMapping);
                 ProcessLengthMode(fieldInfo, memberMapping);
+                ProcessRequired(fieldInfo, memberMapping);
 
                 memberMappings.Add(memberMapping);
             }
@@ -185,6 +187,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             if (lengthModeAttribute != null)
             {
                 memberMapping.SetLengthMode(lengthModeAttribute.LengthMode);
+            }
+        }
+
+        private void ProcessRequired(MemberInfo memberInfo, MemberMapping memberMapping)
+        {
+            CborRequiredAttribute jsonRequiredAttribute = memberInfo.GetCustomAttribute<CborRequiredAttribute>();
+            if (jsonRequiredAttribute != null)
+            {
+                memberMapping.SetRequired(jsonRequiredAttribute.Policy);
             }
         }
 

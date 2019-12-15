@@ -14,6 +14,8 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         ReadOnlySpan<byte> MemberName { get; }
         bool IgnoreIfDefault { get; }
+        RequirementPolicy RequirementPolicy { get; }
+
         void Read(ref CborReader reader, object obj);
         void Write(ref CborWriter writer, object obj);
         object Read(ref CborReader reader);
@@ -30,11 +32,14 @@ namespace Dahomey.Cbor.Serialization.Converters
         private ReadOnlyMemory<byte> _memberName;
         private readonly TM _defaultValue;
         private readonly bool _ignoreIfDefault;
-        private readonly Func<object, bool> _shouldSeriliazeMethod;
+        private readonly Func<object, bool> _shouldSerializeMethod;
         private readonly LengthMode _lengthMode;
+        private readonly RequirementPolicy _requirementPolicy;
+        private readonly bool _isClass = typeof(TM).IsClass;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
         public bool IgnoreIfDefault => _ignoreIfDefault;
+        public RequirementPolicy RequirementPolicy => _requirementPolicy;
 
         public MemberConverter(CborConverterRegistry registry, IMemberMapping memberMapping)
         {
@@ -46,18 +51,35 @@ namespace Dahomey.Cbor.Serialization.Converters
             _converter = (ICborConverter<TM>)memberMapping.Converter;
             _defaultValue = (TM)memberMapping.DefaultValue;
             _ignoreIfDefault = memberMapping.IgnoreIfDefault;
-            _shouldSeriliazeMethod = memberMapping.ShouldSerializeMethod;
+            _shouldSerializeMethod = memberMapping.ShouldSerializeMethod;
             _lengthMode = memberMapping.LengthMode;
+            _requirementPolicy = memberMapping.RequirementPolicy;
         }
 
         public void Read(ref CborReader reader, object obj)
         {
+            if (reader.GetCurrentDataItemType() == CborDataItemType.Null)
+            {
+                if (_requirementPolicy == RequirementPolicy.DisallowNull || _requirementPolicy == RequirementPolicy.Always)
+                {
+                    throw new CborException($"Property '{Encoding.UTF8.GetString(_memberName.Span)}' cannot be null.");
+                }
+            }
+
             _memberSetter((T)obj, _converter.Read(ref reader));
         }
 
         public void Write(ref CborWriter writer, object obj)
         {
-            _converter.Write(ref writer, _memberGetter((T)obj), _lengthMode);
+            TM value = _memberGetter((T)obj);
+
+            if (_isClass && value == null && (_requirementPolicy == RequirementPolicy.DisallowNull
+                || _requirementPolicy == RequirementPolicy.Always))
+            {
+                throw new CborException($"Property '{Encoding.UTF8.GetString(_memberName.Span)}' cannot be null.");
+            }
+
+            _converter.Write(ref writer, value, _lengthMode);
         }
 
         public object Read(ref CborReader reader)
@@ -77,7 +99,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return false;
             }
 
-            if (_shouldSeriliazeMethod != null && !_shouldSeriliazeMethod(obj))
+            if (_shouldSerializeMethod != null && !_shouldSerializeMethod(obj))
             {
                 return false;
             }
@@ -156,8 +178,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         public ReadOnlySpan<byte> MemberName => _discriminatorConvention.MemberName;
-
         public bool IgnoreIfDefault => false;
+        public RequirementPolicy RequirementPolicy => RequirementPolicy.Never;
 
         public void Read(ref CborReader reader, object obj)
         {

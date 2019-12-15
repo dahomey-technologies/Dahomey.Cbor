@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Dahomey.Cbor.Attributes;
+using System;
 using System.Reflection;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
@@ -15,6 +16,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         bool IgnoreIfDefault { get; }
         Func<object, bool> ShouldSerializeMethod { get; }
         LengthMode LengthMode { get; }
+        RequirementPolicy RequirementPolicy { get; }
         IMemberConverter GenerateMemberConverter();
     }
 }

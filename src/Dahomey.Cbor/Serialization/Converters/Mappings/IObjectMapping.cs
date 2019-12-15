@@ -20,5 +20,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         LengthMode LengthMode { get; }
 
         void AutoMap();
+        bool IsCreatorMember(ReadOnlySpan<byte> memberName);
     }
 }

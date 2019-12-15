@@ -1,5 +1,6 @@
 ﻿using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization.Conventions;
+using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -218,6 +219,24 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     .OrderBy(propertySelector)
                     .ToList();
             };
+        }
+
+        public bool IsCreatorMember(ReadOnlySpan<byte> memberName)
+        {
+            if (CreatorMapping == null)
+            {
+                return false;
+            }
+
+            foreach (RawString creatorMemberName in CreatorMapping.MemberNames)
+            {
+                if (creatorMemberName.Buffer.Span.SequenceEqual(memberName))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public void Initialize()
