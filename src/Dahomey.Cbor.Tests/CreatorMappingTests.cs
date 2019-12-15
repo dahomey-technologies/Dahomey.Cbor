@@ -8,14 +8,17 @@ namespace Dahomey.Cbor.Tests
     {
         private class ObjectWithConstructor
         {
-            public int Id { get; set; }
-            public string Name { get; set; }
+            private int id;
+            private string name;
+
+            public int Id => id;
+            public string Name => name;
             public int Age { get; set; }
 
             public ObjectWithConstructor(int id, string name)
             {
-                Id = id;
-                Name = name;
+                this.id = id;
+                this.name = name;
             }
         }
 

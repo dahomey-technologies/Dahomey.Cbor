@@ -74,20 +74,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                     typeof(MemberConverter<,>).MakeGenericType(typeof(T), memberMapping.MemberType),
                     _registry.ConverterRegistry, memberMapping);
 
-                if (memberMapping.CanBeDeserialized)
+                if (memberMapping.CanBeDeserialized || _objectMapping.IsCreatorMember(memberConverter.MemberName))
                 {
                     _memberConvertersForRead.Add(memberConverter.MemberName, memberConverter);
-                }
-                else if (_objectMapping.CreatorMapping != null)
-                {
-                    foreach (RawString creatorMemberName in _objectMapping.CreatorMapping.MemberNames)
-                    {
-                        if (creatorMemberName.Buffer.Span.SequenceEqual(memberConverter.MemberName))
-                        {
-                            _memberConvertersForRead.Add(memberConverter.MemberName, memberConverter);
-                            break;
-                        }
-                    }
                 }
 
                 if (memberMapping.CanBeSerialized)
@@ -304,17 +293,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
                 else if (context.converter.ReadValue(ref reader, memberName, out object value))
                 {
-                    bool isCreatorValue = false;
-                    foreach (RawString creatorMemberName in _objectMapping.CreatorMapping.MemberNames)
-                    {
-                        if (creatorMemberName.Buffer.Span.SequenceEqual(memberName))
-                        {
-                            isCreatorValue = true;
-                            break;
-                        }
-                    }
-
-                    if (isCreatorValue)
+                    if (_objectMapping.IsCreatorMember(memberName))
                     {
                         context.creatorValues.Add(new RawString(memberName), value);
                     }
