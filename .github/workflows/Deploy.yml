@@ -22,4 +22,4 @@ jobs:
       run: dotnet pack -p:Version=${GITHUB_REF} -p:FileVersion=${GITHUB_REF} -p:AssemblyVersion=${GITHUB_REF} -c Release src/Dahomey.Cbor
     
     - name: deploy
-    - run: dotnet nuget push src/Dahomey.Cbor/bin/Release/Dahomey.Cbor.${GITHUB_REF}.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json
+      run: dotnet nuget push src/Dahomey.Cbor/bin/Release/Dahomey.Cbor.${GITHUB_REF}.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json
