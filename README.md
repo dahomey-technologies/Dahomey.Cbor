@@ -2,7 +2,7 @@
 High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 
 ![Nuget (with prereleases)](https://img.shields.io/nuget/vpre/Dahomey.Cbor)
-![CircleCI](https://img.shields.io/circleci/build/github/dahomey-technologies/Dahomey.Cbor/master)
+![](https://github.com/dahomey-technologies/Dahomey.Cbor/workflows/Build%20and%20Test/badge.svg)
 
 ## Features
 * Serialization/Deserialization from/to Streams, byte buffer
