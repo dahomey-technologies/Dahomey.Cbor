@@ -383,7 +383,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (reader.Options.UnhandledNameMode == UnhandledNameMode.ThrowException)
             {
-                throw reader.BuildException("Unhandled name [{Encoding.ASCII.GetString(rawName)}] in class [{type.Name}] while deserializing.");
+                throw reader.BuildException($"Unhandled name [{Encoding.ASCII.GetString(rawName)}] in class [{type.Name}] while deserializing.");
             }
         }
     }
