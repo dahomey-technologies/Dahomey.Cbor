@@ -20,6 +20,8 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Object mapping to programmatically configure features on a class
 * Support for serialization callbacks (before/after serialization/deserialization)
 * Support for anonymous types
+* Support for Nullables
+* Support for collection interfaces: IList<>, ICollection<>, IEnumerable<>, IReadOnlyList<>, IReadOnlyCollection<>
 
 ## Installation
 ### NuGet
