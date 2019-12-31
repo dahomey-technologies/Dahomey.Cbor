@@ -186,7 +186,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         private void ValidateDefaultValue()
         {
-            if ((DefaultValue == null && MemberType.IsValueType)
+            if ((DefaultValue == null && MemberType.IsValueType && Nullable.GetUnderlyingType(MemberType) == null)
                 || (DefaultValue != null && DefaultValue.GetType() != MemberType))
             {
                 throw new CborException($"Default value type mismatch");

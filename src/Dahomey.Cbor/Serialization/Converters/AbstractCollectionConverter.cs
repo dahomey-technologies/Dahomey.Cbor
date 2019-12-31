@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -6,7 +7,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         CborConverterBase<TC>,
         ICborArrayReader<AbstractCollectionConverter<TC, TI>.ReaderContext>,
         ICborArrayWriter<AbstractCollectionConverter<TC, TI>.WriterContext>
-        where TC : ICollection<TI>
+        where TC : IEnumerable<TI>
     {
         public struct ReaderContext
         {
@@ -53,7 +54,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             WriterContext context = new WriterContext
             {
-                count = value.Count,
+                count = value.Count(),
                 enumerator = value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : writer.Options.ArrayLengthMode

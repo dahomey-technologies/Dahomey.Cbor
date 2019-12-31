@@ -74,6 +74,21 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                         typeof(HashSet<>).MakeGenericType(itemType), type, itemType);
                 }
 
+                if (type.IsInterface
+                    && type.IsGenericType
+                    && (type.GetGenericTypeDefinition() == typeof(IList<>)
+                        || type.GetGenericTypeDefinition() == typeof(ICollection<>)
+                        || type.GetGenericTypeDefinition() == typeof(IEnumerable<>)
+                        || type.GetGenericTypeDefinition() == typeof(IReadOnlyList<>)
+                        || type.GetGenericTypeDefinition() == typeof(IReadOnlyCollection<>)))
+                {
+                    Type itemType = type.GetGenericArguments()[0];
+                    return CreateGenericConverter(
+                        registry,
+                        typeof(InterfaceCollectionConverter<,,>),
+                        typeof(List<>).MakeGenericType(itemType), type, itemType);
+                }
+
                 if (type.GetInterfaces()
                     .Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(ICollection<>)))
                 {
@@ -81,17 +96,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                     return CreateGenericConverter(
                         registry,
                         typeof(CollectionConverter<,>), type, itemType);
-                }
-
-                if (type.IsInterface 
-                    && type.IsGenericType
-                    && type.GetGenericTypeDefinition() == typeof(ICollection<>))
-                {
-                    Type itemType = type.GetGenericArguments()[0];
-                    return CreateGenericConverter(
-                        registry,
-                        typeof(InterfaceCollectionConverter<,,>),
-                        typeof(List<>).MakeGenericType(itemType), type, itemType);
                 }
             }
 
