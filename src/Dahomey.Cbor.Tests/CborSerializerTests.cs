@@ -3,6 +3,7 @@ using Xunit;
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using System.IO.Pipelines;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -107,6 +108,42 @@ namespace Dahomey.Cbor.Tests
                 Cbor.Serialize(SimpleObject, bufferWriter, Options);
                 TestBuffer(bufferWriter.WrittenSpan.ToArray());
             }
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(32)]
+        [InlineData(512)]
+        public async Task DeserializeFromPipeReader(int bufferSize)
+        {
+            ReadOnlyMemory<byte> cborBytes = SimpleObjectHexBuffer.HexToBytes();
+
+            Pipe pipe = new Pipe();
+
+            async Task WriteAsync(int sliceSize)
+            {
+                Memory<byte> buffer = pipe.Writer.GetMemory(cborBytes.Length);
+
+                while (cborBytes.Length > 0)
+                {
+                    sliceSize = Math.Min(sliceSize, cborBytes.Length);
+                    cborBytes.Slice(0, sliceSize).CopyTo(buffer.Slice(0, sliceSize));
+                    cborBytes = cborBytes.Slice(sliceSize);
+                    buffer = buffer.Slice(sliceSize);
+                    pipe.Writer.Advance(sliceSize);
+                    await pipe.Writer.FlushAsync();
+                    await Task.Delay(1);
+                }
+
+                pipe.Writer.Complete();
+            }
+
+            Task<SimpleObject> readTask = Cbor.DeserializeAsync<SimpleObject>(pipe.Reader).AsTask();
+
+            await Task.WhenAll(WriteAsync(bufferSize), readTask);
+
+            SimpleObject obj = readTask.Result;
+            TestSimpleObject(obj);
         }
 
         private void TestBuffer(byte[] actualBuffer)

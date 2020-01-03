@@ -5,6 +5,7 @@ using Dahomey.Cbor.Util;
 using System;
 using System.Buffers;
 using System.IO;
+using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -48,6 +49,36 @@ namespace Dahomey.Cbor
             {
                 (byte[] bytes, int size) = await localTask.ConfigureAwait(false);
                 return Deserialize(bytes, size);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<T> DeserializeAsync<T>(PipeReader reader, CborOptions options = null)
+        {
+            if (reader.TryRead(out ReadResult result) && result.IsCompleted)
+            {
+                T obj = Deserialize<T>(result.Buffer.GetSpan(), options);
+                reader.AdvanceTo(result.Buffer.End);
+                return new ValueTask<T>(obj);
+            }
+
+            reader.AdvanceTo(result.Buffer.Start);
+            return ReadAsync<T>(reader, options);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static async ValueTask<T> ReadAsync<T>(PipeReader reader, CborOptions options = null)
+        {
+            while (true)
+            {
+                ReadResult result = await reader.ReadAsync();
+                if (result.IsCompleted)
+                {
+                    ReadOnlySequence<byte> sequence = result.Buffer;
+                    return Deserialize<T>(sequence.GetSpan(), options);
+                }
+
+                reader.AdvanceTo(result.Buffer.Start);
             }
         }
 
