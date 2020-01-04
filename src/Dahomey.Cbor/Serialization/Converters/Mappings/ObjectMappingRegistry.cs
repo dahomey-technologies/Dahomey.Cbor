@@ -69,6 +69,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             if (objectMapping is IMappingInitialization mappingInitialization)
             {
                 mappingInitialization.Initialize();
+                mappingInitialization.PostInitialize();
             }
 
             return objectMapping;
