@@ -17,7 +17,8 @@ namespace Dahomey.Cbor
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueTask<T> DeserializeAsync<T>(
             Stream stream,
-            CborOptions options = null)
+            CborOptions options = null,
+            CancellationToken token = default)
         {
             if (stream is MemoryStream ms && ms.TryGetBuffer(out ArraySegment<byte> buffer))
             {
@@ -25,30 +26,26 @@ namespace Dahomey.Cbor
                 return new ValueTask<T>(Deserialize<T>(span, options));
             }
 
-            ValueTask<(byte[], int)> task = stream.CanSeek
-                ? ReadStreamFullAsync(stream)
-                : ReadAsync(stream, 256);
+            ValueTask<IMemoryOwner<byte>> task = stream.ReadAsync(256, token);
 
             if (task.IsCompletedSuccessfully)
             {
-                (byte[] bytes, int size) = task.Result;
-                return new ValueTask<T>(Deserialize(bytes, size));
+                return new ValueTask<T>(Deserialize(task.Result));
             }
 
             return FinishDeserializeAsync(task);
 
-            T Deserialize(byte[] bytes, int size)
+            T Deserialize(IMemoryOwner<byte> memoryOwner)
             {
-                Span<byte> span = new Span<byte>(bytes, 0, size);
-                T result = Deserialize<T>(span, options);
-                ArrayPool<byte>.Shared.Return(bytes);
-                return result;
+                using (memoryOwner)
+                {
+                    return Deserialize<T>(memoryOwner.Memory.Span, options);
+                }
             }
 
-            async ValueTask<T> FinishDeserializeAsync(ValueTask<(byte[], int)> localTask)
+            async ValueTask<T> FinishDeserializeAsync(ValueTask<IMemoryOwner<byte>> localTask)
             {
-                (byte[] bytes, int size) = await localTask.ConfigureAwait(false);
-                return Deserialize(bytes, size);
+                return Deserialize(await localTask.ConfigureAwait(false));
             }
         }
 
@@ -56,7 +53,8 @@ namespace Dahomey.Cbor
         public static ValueTask<object> DeserializeAsync(
             Type objectType,
             Stream stream,
-            CborOptions options = null)
+            CborOptions options = null,
+            CancellationToken token = default)
         {
             if (stream is MemoryStream ms && ms.TryGetBuffer(out ArraySegment<byte> buffer))
             {
@@ -64,46 +62,36 @@ namespace Dahomey.Cbor
                 return new ValueTask<object>(Cbor.Deserialize(objectType, span, options));
             }
 
-            ValueTask<(byte[], int)> task = stream.CanSeek
-                ? ReadStreamFullAsync(stream)
-                : ReadAsync(stream, 256);
+            ValueTask<IMemoryOwner<byte>> task = stream.ReadAsync(256, token);
 
             if (task.IsCompletedSuccessfully)
             {
-                (byte[] bytes, int size) = task.Result;
-                return new ValueTask<object>(Deserialize(bytes, size));
+                return new ValueTask<object>(Deserialize(task.Result));
             }
 
             return FinishDeserializeAsync(task);
 
-            object Deserialize(byte[] bytes, int size)
+            object Deserialize(IMemoryOwner<byte> memoryOwner)
             {
-                Span<byte> span = new Span<byte>(bytes, 0, size);
-                object result = Cbor.Deserialize(objectType, span, options);
-                ArrayPool<byte>.Shared.Return(bytes);
-                return result;
+                using (memoryOwner)
+                {
+                    return Cbor.Deserialize(objectType, memoryOwner.Memory.Span, options);
+                }
             }
 
-            async ValueTask<object> FinishDeserializeAsync(ValueTask<(byte[], int)> localTask)
+            async ValueTask<object> FinishDeserializeAsync(ValueTask<IMemoryOwner<byte>> localTask)
             {
-                (byte[] bytes, int size) = await localTask.ConfigureAwait(false);
-                return Deserialize(bytes, size);
+                return Deserialize(await localTask.ConfigureAwait(false));
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ValueTask<T> DeserializeAsync<T>(PipeReader reader, CborOptions options = null)
+        public static ValueTask<T> DeserializeAsync<T>(
+            PipeReader reader, 
+            CborOptions options = null,
+            CancellationToken token = default)
         {
-            if (reader.TryRead(out ReadResult result) && result.IsCompleted)
-            {
-                T obj = Deserialize<T>(result.Buffer.GetSpan(), options);
-                reader.AdvanceTo(result.Buffer.End);
-                return new ValueTask<T>(obj);
-            }
-
-            reader.AdvanceTo(result.Buffer.Start);
-
-            ValueTask<ReadOnlySequence<byte>> task = ReadAsync(reader);
+            ValueTask<ReadOnlySequence<byte>> task = reader.FullReadAsync(token);
 
             if (task.IsCompletedSuccessfully)
             {
@@ -121,18 +109,13 @@ namespace Dahomey.Cbor
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static ValueTask<object> DeserializeAsync(Type objectType, PipeReader reader, CborOptions options = null)
+        public static ValueTask<object> DeserializeAsync(
+            Type objectType, 
+            PipeReader reader, 
+            CborOptions options = null,
+            CancellationToken token = default)
         {
-            if (reader.TryRead(out ReadResult result) && result.IsCompleted)
-            {
-                object obj = Deserialize(objectType, result.Buffer.GetSpan(), options);
-                reader.AdvanceTo(result.Buffer.End);
-                return new ValueTask<object>(obj);
-            }
-
-            reader.AdvanceTo(result.Buffer.Start);
-
-            ValueTask<ReadOnlySequence<byte>> task = ReadAsync(reader);
+            ValueTask<ReadOnlySequence<byte>> task = reader.FullReadAsync(token);
 
             if (task.IsCompletedSuccessfully)
             {
@@ -146,21 +129,6 @@ namespace Dahomey.Cbor
             {
                 ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
                 return Deserialize(objectType, sequence.GetSpan(), options);
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static async ValueTask<ReadOnlySequence<byte>> ReadAsync(PipeReader reader)
-        {
-            while (true)
-            {
-                ReadResult result = await reader.ReadAsync();
-                if (result.IsCompleted)
-                {
-                    return result.Buffer;
-                }
-
-                reader.AdvanceTo(result.Buffer.Start);
             }
         }
 
@@ -206,12 +174,13 @@ namespace Dahomey.Cbor
         public static Task SerializeAsync<T>(
             T input, 
             Stream stream, 
-            CborOptions options = null)
+            CborOptions options = null,
+            CancellationToken token = default)
         {
             using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
             {
                 Serialize(input, bufferWriter, options);
-                return bufferWriter.CopyToAsync(stream);
+                return bufferWriter.CopyToAsync(stream, token);
             }
         }
 
@@ -220,12 +189,13 @@ namespace Dahomey.Cbor
             object input,
             Type inputType,
             Stream stream,
-            CborOptions options = null)
+            CborOptions options = null,
+            CancellationToken token = default)
         {
             using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
             {
                 Serialize(input, inputType, bufferWriter, options);
-                return bufferWriter.CopyToAsync(stream);
+                return bufferWriter.CopyToAsync(stream, token);
             }
         }
 
@@ -258,34 +228,6 @@ namespace Dahomey.Cbor
             CborOptions options = null)
         {
             return Deserialize<CborValue>(buffer, options).ToString();
-        }
-
-        private static async ValueTask<(byte[], int)> ReadStreamFullAsync(Stream stream, CancellationToken cancellationToken = default)
-        {
-            byte[] buffer = ArrayPool<byte>.Shared.Rent((int)stream.Length);
-            int read = await stream.ReadAsync(buffer, 0, buffer.Length);
-            return (buffer, read);
-        }
-
-        private static async ValueTask<(byte[], int)> ReadAsync(Stream stream, int sizeHint)
-        {
-            var totalSize = 0;
-            var buffer = ArrayPool<byte>.Shared.Rent(sizeHint);
-            int read;
-            while ((read = await stream.ReadAsync(buffer, totalSize, buffer.Length - totalSize)) > 0)
-            {
-                if (totalSize + read == buffer.Length)
-                {
-                    byte[] backup = buffer;
-                    buffer = ArrayPool<byte>.Shared.Rent(backup.Length * 2);
-                    backup.AsSpan().CopyTo(buffer);
-                    ArrayPool<byte>.Shared.Return(backup);
-                }
-
-                totalSize += read;
-            }
-
-            return (buffer, totalSize);
         }
     }
 }

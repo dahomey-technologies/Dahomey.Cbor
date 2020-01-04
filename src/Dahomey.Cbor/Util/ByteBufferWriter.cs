@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Dahomey.Cbor.Util
@@ -95,9 +96,9 @@ namespace Dahomey.Cbor.Util
             Debug.Assert(FreeCapacity > 0 && FreeCapacity >= sizeHint);
         }
 
-        public Task CopyToAsync(Stream stream)
+        public Task CopyToAsync(Stream stream, CancellationToken token = default)
         {
-            return stream.WriteAsync(_buffer, 0, _size);
+            return stream.WriteAsync(_buffer, 0, _size, token);
         }
     }
 }
