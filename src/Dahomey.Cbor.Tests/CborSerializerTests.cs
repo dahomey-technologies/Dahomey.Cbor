@@ -44,10 +44,26 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
+        public async Task DeserializeObjectFromMemoryStream()
+        {
+            MemoryStream stream = new MemoryStream(SimpleObjectHexBuffer.HexToBytes());
+            SimpleObject obj = (SimpleObject)await Cbor.DeserializeAsync(typeof(SimpleObject), stream);
+            TestSimpleObject(obj);
+        }
+
+        [Fact]
         public async Task SerializeToMemoryStream()
         {
             MemoryStream stream = new MemoryStream();
             await Cbor.SerializeAsync(SimpleObject, stream, Options);
+            TestBuffer(stream.ToArray());
+        }
+
+        [Fact]
+        public async Task SerializeOBjectToMemoryStream()
+        {
+            MemoryStream stream = new MemoryStream();
+            await Cbor.SerializeAsync(SimpleObject, typeof(SimpleObject), stream, Options);
             TestBuffer(stream.ToArray());
         }
 
@@ -72,7 +88,27 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public async Task SerializeToFileStream()
+        public async Task DeserializeObjectFromFileStream()
+        {
+            string tempFileName = Path.GetTempFileName();
+            File.WriteAllBytes(tempFileName, SimpleObjectHexBuffer.HexToBytes());
+
+            try
+            {
+                using (FileStream stream = File.OpenRead(tempFileName))
+                {
+                    SimpleObject obj = (SimpleObject)await Cbor.DeserializeAsync(typeof(SimpleObject), stream);
+                    TestSimpleObject(obj);
+                }
+            }
+            finally
+            {
+                File.Delete(tempFileName);
+            }
+        }
+
+        [Fact]
+        public async Task SerializeObjectToFileStream()
         {
             string tempFileName = Path.GetTempFileName();
 
@@ -80,7 +116,7 @@ namespace Dahomey.Cbor.Tests
             {
                 using (FileStream stream = File.OpenWrite(tempFileName))
                 {
-                    await Cbor.SerializeAsync(SimpleObject, stream, Options);
+                    await Cbor.SerializeAsync(SimpleObject, typeof(SimpleObject), stream, Options);
                 }
 
                 byte[] actualBuffer = File.ReadAllBytes(tempFileName);
@@ -101,11 +137,29 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public void SerializerToBufferWriter()
+        public void DeserializeObjectFromSpan()
+        {
+            Span<byte> buffer = SimpleObjectHexBuffer.HexToBytes();
+            SimpleObject obj = (SimpleObject)Cbor.Deserialize(typeof(SimpleObject), buffer);
+            TestSimpleObject(obj);
+        }
+
+        [Fact]
+        public void SerializeToBufferWriter()
         {
             using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
             {
                 Cbor.Serialize(SimpleObject, bufferWriter, Options);
+                TestBuffer(bufferWriter.WrittenSpan.ToArray());
+            }
+        }
+
+        [Fact]
+        public void SerializeObjectToBufferWriter()
+        {
+            using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
+            {
+                Cbor.Serialize(SimpleObject, typeof(SimpleObject), bufferWriter, Options);
                 TestBuffer(bufferWriter.WrittenSpan.ToArray());
             }
         }
@@ -143,6 +197,42 @@ namespace Dahomey.Cbor.Tests
             await Task.WhenAll(WriteAsync(bufferSize), readTask);
 
             SimpleObject obj = readTask.Result;
+            TestSimpleObject(obj);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(32)]
+        [InlineData(512)]
+        public async Task DeserializeObjectFromPipeReader(int bufferSize)
+        {
+            ReadOnlyMemory<byte> cborBytes = SimpleObjectHexBuffer.HexToBytes();
+
+            Pipe pipe = new Pipe();
+
+            async Task WriteAsync(int sliceSize)
+            {
+                Memory<byte> buffer = pipe.Writer.GetMemory(cborBytes.Length);
+
+                while (cborBytes.Length > 0)
+                {
+                    sliceSize = Math.Min(sliceSize, cborBytes.Length);
+                    cborBytes.Slice(0, sliceSize).CopyTo(buffer.Slice(0, sliceSize));
+                    cborBytes = cborBytes.Slice(sliceSize);
+                    buffer = buffer.Slice(sliceSize);
+                    pipe.Writer.Advance(sliceSize);
+                    await pipe.Writer.FlushAsync();
+                    await Task.Delay(1);
+                }
+
+                pipe.Writer.Complete();
+            }
+
+            Task<object> readTask = Cbor.DeserializeAsync(typeof(SimpleObject), pipe.Reader).AsTask();
+
+            await Task.WhenAll(WriteAsync(bufferSize), readTask);
+
+            SimpleObject obj = (SimpleObject)readTask.Result;
             TestSimpleObject(obj);
         }
 

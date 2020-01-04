@@ -39,13 +39,52 @@ namespace Dahomey.Cbor
 
             T Deserialize(byte[] bytes, int size)
             {
-                Memory<byte> memory = new Memory<byte>(bytes, 0, size);
-                T result = Deserialize<T>(memory.Span, options);
+                Span<byte> span = new Span<byte>(bytes, 0, size);
+                T result = Deserialize<T>(span, options);
                 ArrayPool<byte>.Shared.Return(bytes);
                 return result;
             }
 
             async ValueTask<T> FinishDeserializeAsync(ValueTask<(byte[], int)> localTask)
+            {
+                (byte[] bytes, int size) = await localTask.ConfigureAwait(false);
+                return Deserialize(bytes, size);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<object> DeserializeAsync(
+            Type objectType,
+            Stream stream,
+            CborOptions options = null)
+        {
+            if (stream is MemoryStream ms && ms.TryGetBuffer(out ArraySegment<byte> buffer))
+            {
+                ReadOnlySpan<byte> span = new ReadOnlySpan<byte>(buffer.Array, buffer.Offset, buffer.Count);
+                return new ValueTask<object>(Cbor.Deserialize(objectType, span, options));
+            }
+
+            ValueTask<(byte[], int)> task = stream.CanSeek
+                ? ReadStreamFullAsync(stream)
+                : ReadAsync(stream, 256);
+
+            if (task.IsCompletedSuccessfully)
+            {
+                (byte[] bytes, int size) = task.Result;
+                return new ValueTask<object>(Deserialize(bytes, size));
+            }
+
+            return FinishDeserializeAsync(task);
+
+            object Deserialize(byte[] bytes, int size)
+            {
+                Span<byte> span = new Span<byte>(bytes, 0, size);
+                object result = Cbor.Deserialize(objectType, span, options);
+                ArrayPool<byte>.Shared.Return(bytes);
+                return result;
+            }
+
+            async ValueTask<object> FinishDeserializeAsync(ValueTask<(byte[], int)> localTask)
             {
                 (byte[] bytes, int size) = await localTask.ConfigureAwait(false);
                 return Deserialize(bytes, size);
@@ -63,19 +102,62 @@ namespace Dahomey.Cbor
             }
 
             reader.AdvanceTo(result.Buffer.Start);
-            return ReadAsync<T>(reader, options);
+
+            ValueTask<ReadOnlySequence<byte>> task = ReadAsync(reader);
+
+            if (task.IsCompletedSuccessfully)
+            {
+                ReadOnlySequence<byte> sequence = task.Result;
+                return new ValueTask<T>(Deserialize<T>(sequence.GetSpan(), options));
+            }
+
+            return FinishDeserializeAsync(task);
+
+            async ValueTask<T> FinishDeserializeAsync(ValueTask<ReadOnlySequence<byte>> localTask)
+            {
+                ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
+                return Deserialize<T>(sequence.GetSpan(), options);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static async ValueTask<T> ReadAsync<T>(PipeReader reader, CborOptions options = null)
+        public static ValueTask<object> DeserializeAsync(Type objectType, PipeReader reader, CborOptions options = null)
+        {
+            if (reader.TryRead(out ReadResult result) && result.IsCompleted)
+            {
+                object obj = Deserialize(objectType, result.Buffer.GetSpan(), options);
+                reader.AdvanceTo(result.Buffer.End);
+                return new ValueTask<object>(obj);
+            }
+
+            reader.AdvanceTo(result.Buffer.Start);
+
+            ValueTask<ReadOnlySequence<byte>> task = ReadAsync(reader);
+
+            if (task.IsCompletedSuccessfully)
+            {
+                ReadOnlySequence<byte> sequence = task.Result;
+                return new ValueTask<object>(Deserialize(objectType, sequence.GetSpan(), options));
+            }
+
+            return FinishDeserializeAsync(task);
+
+            async ValueTask<object> FinishDeserializeAsync(ValueTask<ReadOnlySequence<byte>> localTask)
+            {
+                ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
+                return Deserialize(objectType, sequence.GetSpan(), options);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static async ValueTask<ReadOnlySequence<byte>> ReadAsync(PipeReader reader)
         {
             while (true)
             {
                 ReadResult result = await reader.ReadAsync();
                 if (result.IsCompleted)
                 {
-                    ReadOnlySequence<byte> sequence = result.Buffer;
-                    return Deserialize<T>(sequence.GetSpan(), options);
+                    return result.Buffer;
                 }
 
                 reader.AdvanceTo(result.Buffer.Start);
@@ -93,8 +175,20 @@ namespace Dahomey.Cbor
             return converter.Read(ref reader);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static object Deserialize(
+            Type objectType, 
+            ReadOnlySpan<byte> buffer,
+            CborOptions options = null)
+        {
+            options = options ?? CborOptions.Default;
+            CborReader reader = new CborReader(buffer, options);
+            ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
+            return cborConverter.Read(ref reader);
+        }
+
         /// <summary>
-        /// Deserializes the JSON to the given anonymous type.
+        /// Deserializes the CBOR buffer to the given anonymous type.
         /// </summary>
         /// <typeparam name="T">The anonymous type to deserialize to. This can't be specified directly and will be inferred from the anonymous type passed as a parameter.</typeparam>
         /// <param name="buffer">The CBOR buffer to deserialize.</param>
@@ -122,11 +216,34 @@ namespace Dahomey.Cbor
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Task SerializeAsync(
+            object input,
+            Type inputType,
+            Stream stream,
+            CborOptions options = null)
+        {
+            using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
+            {
+                Serialize(input, inputType, bufferWriter, options);
+                return bufferWriter.CopyToAsync(stream);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Serialize<T>(T input, in IBufferWriter<byte> buffer, CborOptions options = null)
         {
             options = options ?? CborOptions.Default;
             CborWriter writer = new CborWriter(buffer, options);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
+            converter.Write(ref writer, input);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Serialize(object input, Type inputType, in IBufferWriter<byte> buffer, CborOptions options = null)
+        {
+            options = options ?? CborOptions.Default;
+            CborWriter writer = new CborWriter(buffer, options);
+            ICborConverter converter = options.Registry.ConverterRegistry.Lookup(inputType);
             converter.Write(ref writer, input);
         }
 
