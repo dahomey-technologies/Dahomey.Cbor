@@ -14,11 +14,10 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     {
         private readonly DiscriminatorConventionRegistry _discriminatorConventionRegistry;
         private readonly IObjectMapping _objectMapping;
-        private readonly Lazy<string> _memberName;
 
         public MemberInfo MemberInfo => null;
         public Type MemberType => null;
-        public string MemberName => _memberName.Value;
+        public string MemberName { get; private set; }
         public ICborConverter Converter => null;
         public bool CanBeDeserialized => false;
         public bool CanBeSerialized => true;
@@ -33,15 +32,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             _discriminatorConventionRegistry = discriminatorConventionRegistry;
             _objectMapping = objectMapping;
-            _memberName = new Lazy<string>(GetMemberName);
         }
 
         public void Initialize()
         {
-        }
-
-        public void PostInitialize()
-        {
+            IDiscriminatorConvention discriminatorConvention = _discriminatorConventionRegistry.GetConvention(_objectMapping.ObjectType);
+            if (discriminatorConvention != null)
+            {
+                MemberName = Encoding.UTF8.GetString(discriminatorConvention.MemberName);
+            }
         }
 
         public IMemberConverter GenerateMemberConverter()
@@ -52,12 +51,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 discriminatorConvention, _objectMapping.DiscriminatorPolicy);
 
             return memberConverter;
-        }
-
-        private string GetMemberName()
-        {
-            IDiscriminatorConvention discriminatorConvention = _discriminatorConventionRegistry.GetConvention(_objectMapping.ObjectType);
-            return Encoding.UTF8.GetString(discriminatorConvention.MemberName);
         }
     }
 }

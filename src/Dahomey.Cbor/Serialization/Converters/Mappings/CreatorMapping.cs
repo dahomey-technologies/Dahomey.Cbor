@@ -131,9 +131,5 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 }
             }
         }
-
-        public void PostInitialize()
-        {
-        }
     }
 }

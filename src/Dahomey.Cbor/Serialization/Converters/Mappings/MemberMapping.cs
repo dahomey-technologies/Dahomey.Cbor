@@ -83,10 +83,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             ValidateDefaultValue();
         }
 
-        public void PostInitialize()
-        {
-        }
-
         public IMemberConverter GenerateMemberConverter()
         {
             IMemberConverter memberConverter = (IMemberConverter)Activator.CreateInstance(

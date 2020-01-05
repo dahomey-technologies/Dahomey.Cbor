@@ -16,6 +16,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     public class ObjectMapping<T> : IObjectMapping
         where T : class
     {
+        private bool _isInitialized = false;
         private readonly SerializationRegistry _registry;
         private List<IMemberMapping> _memberMappings = new List<IMemberMapping>();
         private ICreatorMapping _creatorMapping = null;
@@ -31,7 +32,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public Delegate OnDeserializingMethod { get; private set; }
         public Delegate OnDeserializedMethod { get; private set; }
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; private set; }
-        public string Discriminator { get; private set; }
+        public object Discriminator { get; private set; }
         public LengthMode LengthMode { get; private set; }
 
         public ObjectMapping(SerializationRegistry registry)
@@ -58,7 +59,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return this;
         }
 
-        public ObjectMapping<T> SetDiscriminator(string discriminator)
+        public ObjectMapping<T> SetDiscriminator(object discriminator)
         {
             Discriminator = discriminator;
             return this;
@@ -245,36 +246,31 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public void Initialize()
         {
-            foreach(IMemberMapping mapping in _memberMappings)
+            if (!_isInitialized)
             {
-                if (mapping is IMappingInitialization memberInitialization)
+                lock (this)
                 {
-                    memberInitialization.Initialize();
+                    if (!_isInitialized)
+                    {
+                        _isInitialized = true;
+
+                        foreach (IMemberMapping mapping in _memberMappings)
+                        {
+                            if (mapping is IMappingInitialization memberInitialization)
+                            {
+                                memberInitialization.Initialize();
+                            }
+                        }
+
+                        if (CreatorMapping != null && CreatorMapping is IMappingInitialization creatorInitialization)
+                        {
+                            creatorInitialization.Initialize();
+                        }
+
+                        _orderByAction?.Invoke();
+                    }
                 }
             }
-
-            if (CreatorMapping != null && CreatorMapping is IMappingInitialization creatorInitialization)
-            {
-                creatorInitialization.Initialize();
-            }
-        }
-
-        public void PostInitialize()
-        {
-            foreach (IMemberMapping mapping in _memberMappings)
-            {
-                if (mapping is IMappingInitialization memberInitialization)
-                {
-                    memberInitialization.PostInitialize();
-                }
-            }
-
-            if (CreatorMapping != null && CreatorMapping is IMappingInitialization creatorInitialization)
-            {
-                creatorInitialization.PostInitialize();
-            }
-
-            _orderByAction?.Invoke();
         }
 
         private static (MemberInfo, Type) GetMemberInfoFromLambda<TM>(Expression<Func<T, TM>> memberLambda)

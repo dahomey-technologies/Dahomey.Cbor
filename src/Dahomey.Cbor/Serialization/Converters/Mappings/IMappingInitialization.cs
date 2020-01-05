@@ -3,6 +3,5 @@
     public interface IMappingInitialization
     {
         void Initialize();
-        void PostInitialize();
     }
 }

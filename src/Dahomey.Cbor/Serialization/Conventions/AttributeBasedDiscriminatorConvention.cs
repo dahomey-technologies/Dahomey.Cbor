@@ -3,6 +3,7 @@ using System;
 using System.Text;
 using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Serialization.Converters;
+using System.Collections.Concurrent;
 
 namespace Dahomey.Cbor.Serialization.Conventions
 {
@@ -10,8 +11,8 @@ namespace Dahomey.Cbor.Serialization.Conventions
     {
         private readonly SerializationRegistry _serializationRegistry;
         private readonly ReadOnlyMemory<byte> _memberName;
-        private readonly Dictionary<T, Type> _typesByDiscriminator = new Dictionary<T, Type>();
-        private readonly Dictionary<Type, T> _discriminatorsByType = new Dictionary<Type, T>();
+        private readonly ConcurrentDictionary<T, Type> _typesByDiscriminator = new ConcurrentDictionary<T, Type>();
+        private readonly ConcurrentDictionary<Type, T> _discriminatorsByType = new ConcurrentDictionary<Type, T>();
         private readonly ICborConverter<T> _converter;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
@@ -37,8 +38,8 @@ namespace Dahomey.Cbor.Serialization.Conventions
                 return false;
             }
 
-            _discriminatorsByType[type] = discriminator;
-            _typesByDiscriminator.Add(discriminator, type);
+            _discriminatorsByType.TryAdd(type, discriminator);
+            _typesByDiscriminator.TryAdd(discriminator, type);
             return true;
         }
 

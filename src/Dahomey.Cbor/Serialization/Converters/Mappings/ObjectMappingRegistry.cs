@@ -16,23 +16,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public void Register(IObjectMapping objectMapping)
         {
+            _objectMappings.AddOrUpdate(objectMapping.ObjectType, objectMapping,
+                (type, existingObjectMapping) => objectMapping);
+
             IMappingInitialization mappingInitialization = objectMapping as IMappingInitialization;
             if (mappingInitialization != null)
             {
                 mappingInitialization.Initialize();
             }
 
-            _objectMappings.AddOrUpdate(objectMapping.ObjectType, objectMapping,
-                (type, existingObjectMapping) => objectMapping);
-
-            if (!string.IsNullOrEmpty(objectMapping.Discriminator))
+            if (objectMapping.Discriminator != null)
             {
                 _registry.DiscriminatorConventionRegistry.RegisterType(objectMapping.ObjectType);
-            }
-
-            if (mappingInitialization != null)
-            {
-                mappingInitialization.PostInitialize();
             }
         }
 
@@ -56,7 +51,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public IObjectMapping Lookup(Type type)
         {
-            return _objectMappings.GetOrAdd(type, t => CreateDefaultObjectMapping(type));
+            IObjectMapping objectMapping = _objectMappings.GetOrAdd(type, t => CreateDefaultObjectMapping(type));
+
+            if (objectMapping is IMappingInitialization mappingInitialization)
+            {
+                mappingInitialization.Initialize();
+            }
+
+            return objectMapping;
         }
 
         private IObjectMapping CreateDefaultObjectMapping(Type type)
@@ -65,12 +67,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 (IObjectMapping)Activator.CreateInstance(typeof(ObjectMapping<>).MakeGenericType(type), _registry);
 
             objectMapping.AutoMap();
-
-            if (objectMapping is IMappingInitialization mappingInitialization)
-            {
-                mappingInitialization.Initialize();
-                mappingInitialization.PostInitialize();
-            }
 
             return objectMapping;
         }
