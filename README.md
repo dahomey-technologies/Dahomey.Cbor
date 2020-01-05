@@ -14,7 +14,7 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Custom converters for not supported types
 * [.Net standard 2.0](https://github.com/dotnet/standard/blob/master/docs/versions/netstandard2.0.md) support
 * Can require properties or fields with different policies (CborRequiredAttribute)
-* Conditional Property Serialization support based on the existence of a method ShouldSerialize[PropertyName]()
+* Conditional Property Serialization support based on the existence of a method ShouldSerialize\[PropertyName\]()
 * Support for interfaces and abstract classes
 * Support for non default constructors, factories and more advanced creator mappings
 * Can ignore default values
