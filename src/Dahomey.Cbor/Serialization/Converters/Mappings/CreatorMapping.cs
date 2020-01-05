@@ -93,6 +93,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 if (createMemberNames)
                 {
                     memberMapping = memberMappings
+                        .Where(m => !(m is IDiscriminatorMapping))
                         .FirstOrDefault(m => string.Compare(m.MemberName, parameter.Name, ignoreCase: true) == 0);
 
                     if (memberMapping == null)

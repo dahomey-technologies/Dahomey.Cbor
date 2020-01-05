@@ -6,14 +6,19 @@ using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
-    public class DiscriminatorMapping<T> : IMemberMapping where T : class
+    public interface IDiscriminatorMapping : IMemberMapping
+    {
+    }
+
+    public class DiscriminatorMapping<T> : IDiscriminatorMapping where T : class
     {
         private readonly DiscriminatorConventionRegistry _discriminatorConventionRegistry;
         private readonly IObjectMapping _objectMapping;
+        private readonly Lazy<string> _memberName;
 
         public MemberInfo MemberInfo => null;
         public Type MemberType => null;
-        public string MemberName { get; private set; }
+        public string MemberName => _memberName.Value;
         public ICborConverter Converter => null;
         public bool CanBeDeserialized => false;
         public bool CanBeSerialized => true;
@@ -28,6 +33,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             _discriminatorConventionRegistry = discriminatorConventionRegistry;
             _objectMapping = objectMapping;
+            _memberName = new Lazy<string>(GetMemberName);
         }
 
         public void Initialize()
@@ -36,8 +42,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public void PostInitialize()
         {
-            IDiscriminatorConvention discriminatorConvention = _discriminatorConventionRegistry.GetConvention(_objectMapping.ObjectType);
-            MemberName = Encoding.UTF8.GetString(discriminatorConvention.MemberName);
         }
 
         public IMemberConverter GenerateMemberConverter()
@@ -48,6 +52,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 discriminatorConvention, _objectMapping.DiscriminatorPolicy);
 
             return memberConverter;
+        }
+
+        private string GetMemberName()
+        {
+            IDiscriminatorConvention discriminatorConvention = _discriminatorConventionRegistry.GetConvention(_objectMapping.ObjectType);
+            return Encoding.UTF8.GetString(discriminatorConvention.MemberName);
         }
     }
 }
