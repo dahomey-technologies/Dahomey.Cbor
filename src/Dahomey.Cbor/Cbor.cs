@@ -96,7 +96,9 @@ namespace Dahomey.Cbor
             if (task.IsCompletedSuccessfully)
             {
                 ReadOnlySequence<byte> sequence = task.Result;
-                return new ValueTask<T>(Deserialize<T>(sequence.GetSpan(), options));
+                T result = Deserialize<T>(sequence.GetSpan(), options);
+                reader.AdvanceTo(sequence.End);
+                return new ValueTask<T>(result);
             }
 
             return FinishDeserializeAsync(task);
@@ -104,7 +106,9 @@ namespace Dahomey.Cbor
             async ValueTask<T> FinishDeserializeAsync(ValueTask<ReadOnlySequence<byte>> localTask)
             {
                 ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
-                return Deserialize<T>(sequence.GetSpan(), options);
+                T result = Deserialize<T>(sequence.GetSpan(), options);
+                reader.AdvanceTo(sequence.End);
+                return result;
             }
         }
 
@@ -120,7 +124,9 @@ namespace Dahomey.Cbor
             if (task.IsCompletedSuccessfully)
             {
                 ReadOnlySequence<byte> sequence = task.Result;
-                return new ValueTask<object>(Deserialize(objectType, sequence.GetSpan(), options));
+                object result = Cbor.Deserialize(objectType, sequence.GetSpan(), options);
+                reader.AdvanceTo(sequence.End);
+                return new ValueTask<object>(result);
             }
 
             return FinishDeserializeAsync(task);
@@ -128,7 +134,9 @@ namespace Dahomey.Cbor
             async ValueTask<object> FinishDeserializeAsync(ValueTask<ReadOnlySequence<byte>> localTask)
             {
                 ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
-                return Deserialize(objectType, sequence.GetSpan(), options);
+                object result = Cbor.Deserialize(objectType, sequence.GetSpan(), options);
+                reader.AdvanceTo(sequence.End);
+                return result;
             }
         }
 

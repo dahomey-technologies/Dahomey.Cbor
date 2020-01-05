@@ -11,7 +11,6 @@ namespace System.IO.Pipelines
             // Attempts to synchronously read data first
             if (reader.TryRead(out ReadResult result) && result.IsCompleted)
             {
-                reader.AdvanceTo(result.Buffer.End);
                 return new ValueTask<ReadOnlySequence<byte>>(result.Buffer);
             }
 
