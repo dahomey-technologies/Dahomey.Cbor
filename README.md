@@ -23,6 +23,7 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Support for anonymous types
 * Support for Nullables
 * Support for collection interfaces: IList<>, ICollection<>, IEnumerable<>, IReadOnlyList<>, IReadOnlyCollection<>
+* Support for dynamics
 
 ## Installation
 ### NuGet
