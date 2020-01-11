@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Dynamic;
 
 namespace Dahomey.Cbor.ObjectModel
 {
-    public abstract class CborValue : IComparable<CborValue>, IEquatable<CborValue>
+    public abstract class CborValue : DynamicObject, IComparable<CborValue>, IEquatable<CborValue>
     {
         public abstract CborValueType Type { get; }
 
