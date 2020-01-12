@@ -17,17 +17,12 @@ namespace Dahomey.Cbor.ObjectModel
 
         public override T Value<T>()
         {
-            if (typeof(T) == typeof(string))
-            {
-                return (T)(object)_value;
-            }
-
-            return base.Value<T>();
+            return Primitive<string, T>.Converter(_value);
         }
 
-        public void SetValue(string value)
+        public void SetValue<T>(T value)
         {
-            _value = value;
+            _value = Primitive<T, string>.Converter(value);
         }
 
         public static implicit operator CborString(string value)

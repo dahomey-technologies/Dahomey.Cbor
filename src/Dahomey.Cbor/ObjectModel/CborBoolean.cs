@@ -18,17 +18,12 @@ namespace Dahomey.Cbor.ObjectModel
 
         public override T Value<T>()
         {
-            if (typeof(T) == typeof(bool))
-            {
-                return (T)(object)_value;
-            }
-
-            return base.Value<T>();
+            return Primitive<bool, T>.Converter(_value);
         }
 
-        public void SetValue(bool value)
+        public void SetValue<T>(T value)
         {
-            _value = value;
+            _value = Primitive<T, bool>.Converter(value);
         }
 
         public static implicit operator CborBoolean(bool value)

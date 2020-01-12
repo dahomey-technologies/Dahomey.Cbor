@@ -31,18 +31,12 @@ namespace Dahomey.Cbor.ObjectModel
 
         public override T Value<T>()
         {
-            return (T)Convert.ChangeType(_value, typeof(T));
+            return Primitive<long, T>.Converter(_value);
         }
 
         public void SetValue<T>(T value)
         {
-            object convertedValue = Convert.ChangeType(value, typeof(double));
-            if (convertedValue == null)
-            {
-                throw new NullReferenceException();
-            }
-
-            _value = (long)convertedValue;
+            _value = Primitive<T, long>.Converter(value);
         }
 
         public static implicit operator CborNegative(long value)

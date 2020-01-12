@@ -26,18 +26,12 @@ namespace Dahomey.Cbor.ObjectModel
 
         public override T Value<T>()
         {
-            return (T)Convert.ChangeType(_value, typeof(T));
+            return Primitive<ulong, T>.Converter(_value);
         }
 
         public void SetValue<T>(T value)
         {
-            object convertedValue = Convert.ChangeType(value, typeof(ulong));
-            if (convertedValue == null)
-            {
-                throw new NullReferenceException();
-            }
-
-            _value = (ulong)convertedValue;
+            _value = Primitive<T, ulong>.Converter(value);
         }
 
         public static implicit operator CborPositive(ulong value)

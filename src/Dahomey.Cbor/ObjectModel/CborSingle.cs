@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
@@ -26,18 +27,12 @@ namespace Dahomey.Cbor.ObjectModel
 
         public override T Value<T>()
         {
-            return (T)Convert.ChangeType(_value, typeof(T));
+            return Primitive<float, T>.Converter(_value);
         }
 
         public void SetValue<T>(T value)
         {
-            object convertedValue = Convert.ChangeType(value, typeof(double));
-            if (convertedValue == null)
-            {
-                throw new NullReferenceException();
-            }
-
-            _value = (float)convertedValue;
+            _value = Primitive<T, float>.Converter(value);
         }
 
         public static implicit operator CborSingle(float value)
