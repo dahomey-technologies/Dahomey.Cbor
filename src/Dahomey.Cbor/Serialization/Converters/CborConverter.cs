@@ -2,7 +2,7 @@
 {
     public interface ICborConverter
     {
-        object Read(ref CborReader reader);
+        object? Read(ref CborReader reader);
         void Write(ref CborWriter writer, object value);
     }
 
@@ -15,7 +15,7 @@
 
     public abstract class CborConverterBase<T> : ICborConverter<T>
     {
-        object ICborConverter.Read(ref CborReader reader)
+        object? ICborConverter.Read(ref CborReader reader)
         {
             return Read(ref reader);
         }

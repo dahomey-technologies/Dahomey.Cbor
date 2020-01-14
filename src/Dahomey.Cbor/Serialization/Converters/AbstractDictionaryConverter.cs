@@ -6,7 +6,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         CborConverterBase<TC>, 
         ICborMapReader<AbstractDictionaryConverter<TC, TK, TV>.ReaderContext>,
         ICborMapWriter<AbstractDictionaryConverter<TC, TK, TV>.WriterContext>
-        where TC : IDictionary<TK, TV>
+        where TC : notnull, IDictionary<TK, TV>
+        where TK : notnull
     {
         public struct ReaderContext
         {
@@ -36,7 +37,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (reader.ReadNull())
             {
-                return default;
+                return default!;
             }
 
             ReaderContext context = new ReaderContext();

@@ -4,6 +4,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public class InterfaceDictionaryConverter<TK, TV> :
         AbstractDictionaryConverter<IDictionary<TK, TV>, TK, TV>
+        where TK : notnull
     {
         public InterfaceDictionaryConverter(SerializationRegistry registry)
             : base(registry)

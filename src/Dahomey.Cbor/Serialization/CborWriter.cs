@@ -27,7 +27,7 @@ namespace Dahomey.Cbor.Serialization
 
         public CborOptions Options { get; }
 
-        public CborWriter(IBufferWriter<byte> bufferWriter, CborOptions options = null)
+        public CborWriter(IBufferWriter<byte> bufferWriter, CborOptions? options = null)
         {
             _bufferWriter = bufferWriter;
             Options = options ?? CborOptions.Default;
@@ -147,7 +147,7 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void WriteString(string value)
+        public void WriteString(string? value)
         {
             if (value == null)
             {

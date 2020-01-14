@@ -35,7 +35,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (reader.ReadNull())
             {
-                return default;
+                return default!;
             }
 
             ReaderContext context = new ReaderContext();

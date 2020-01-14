@@ -11,7 +11,7 @@ namespace Dahomey.Cbor.Util
 
         public static RawString Empty = new RawString(new ReadOnlyMemory<byte>());
 
-        public RawString(string str, Encoding encoding = null)
+        public RawString(string str, Encoding? encoding = null)
         {
             _buffer = (encoding ?? Encoding.UTF8).GetBytes(str);
         }
@@ -26,7 +26,7 @@ namespace Dahomey.Cbor.Util
             _buffer = new ReadOnlyMemory<byte>(buffer.ToArray());
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             if (obj == null || !(obj is RawString rawString))
             {

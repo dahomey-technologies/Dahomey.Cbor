@@ -14,10 +14,22 @@ namespace Dahomey.Cbor.Serialization.Converters
         public ImmutableCollectionConverter(SerializationRegistry registry)
             : base(registry)
         {
-            string typeFullName = typeof(TC).GetGenericTypeDefinition().FullName;
+            string? typeFullName = typeof(TC).GetGenericTypeDefinition().FullName;
+
+            if (typeFullName == null)
+            {
+                throw new CborException($"Cannot find {typeof(TC)} full name");
+            }
+
             string staticTypeFullName = typeFullName.Substring(0, typeFullName.Length - 2);
             Assembly assembly = typeof(TC).Assembly;
-            Type type = assembly.GetType(staticTypeFullName);
+            Type? type = assembly.GetType(staticTypeFullName);
+
+            if (type == null)
+            {
+                throw new CborException($"Cannot find type from {staticTypeFullName}");
+            }
+
             MethodInfo methodInfo = type.GetMethods(BindingFlags.Static | BindingFlags.Public)
                 .First(m => m.IsGenericMethod && m.GetGenericMethodDefinition().Name == "CreateRange")
                 .MakeGenericMethod(typeof(TI));

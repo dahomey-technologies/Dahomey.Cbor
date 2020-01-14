@@ -34,7 +34,13 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
         public Type ReadDiscriminator(ref CborReader reader)
         {
-            string discriminator = reader.ReadString();
+            string? discriminator = reader.ReadString();
+
+            if (discriminator == null)
+            {
+                throw reader.BuildException("Discrimnator cannot be null or empty");
+            }
+
             Type type = _typesByDiscriminator.GetOrAdd(discriminator, NameToType);
             return type;
         }
@@ -54,7 +60,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
         {
             string[] parts = name.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-            string assemblyName;
+            string? assemblyName;
             string typeName;
 
             switch (parts.Length)
@@ -77,11 +83,10 @@ namespace Dahomey.Cbor.Serialization.Conventions
             if (!string.IsNullOrEmpty(assemblyName))
             {
                 Assembly assembly = Assembly.Load(assemblyName);
-                Type type = assembly.GetType(typeName);
-                return type;
+                return assembly.GetType(typeName) ?? throw new CborException($"Cannot get type from {name}");
             }
 
-            return Type.GetType(typeName);
+            return Type.GetType(typeName) ?? throw new CborException($"Cannot get type from {name}");
         }
     }
 }

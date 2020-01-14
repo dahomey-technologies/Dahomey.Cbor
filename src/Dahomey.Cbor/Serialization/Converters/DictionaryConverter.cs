@@ -5,6 +5,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     public class DictionaryConverter<TC, TK, TV> :
         AbstractDictionaryConverter<TC, TK, TV>
         where TC : class, IDictionary<TK, TV>, new()
+        where TK : notnull
     {
         public DictionaryConverter(SerializationRegistry registry)
             : base(registry)

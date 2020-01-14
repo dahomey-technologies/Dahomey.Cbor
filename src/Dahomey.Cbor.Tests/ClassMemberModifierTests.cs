@@ -68,9 +68,9 @@ namespace Dahomey.Cbor.Tests
             public int Id;
 
             [CborProperty]
-            private int PrivateProp1;
+            private readonly int PrivateProp1;
 
-            private int PrivateProp2;
+            private readonly int PrivateProp2;
 
             public ObjectWithPrivateField()
             {

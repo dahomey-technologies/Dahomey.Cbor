@@ -19,20 +19,20 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private bool _isInitialized = false;
         private readonly SerializationRegistry _registry;
         private List<IMemberMapping> _memberMappings = new List<IMemberMapping>();
-        private ICreatorMapping _creatorMapping = null;
-        private Action _orderByAction = null; 
+        private ICreatorMapping? _creatorMapping = null;
+        private Action? _orderByAction = null; 
 
         public Type ObjectType { get; private set; }
 
-        public INamingConvention NamingConvention { get; private set; }
+        public INamingConvention? NamingConvention { get; private set; }
         public IReadOnlyCollection<IMemberMapping> MemberMappings => _memberMappings;
-        public ICreatorMapping CreatorMapping => _creatorMapping;
-        public Delegate OnSerializingMethod { get; private set; }
-        public Delegate OnSerializedMethod { get; private set; }
-        public Delegate OnDeserializingMethod { get; private set; }
-        public Delegate OnDeserializedMethod { get; private set; }
+        public ICreatorMapping? CreatorMapping => _creatorMapping;
+        public Delegate? OnSerializingMethod { get; private set; }
+        public Delegate? OnSerializedMethod { get; private set; }
+        public Delegate? OnDeserializingMethod { get; private set; }
+        public Delegate? OnDeserializedMethod { get; private set; }
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; private set; }
-        public object Discriminator { get; private set; }
+        public object? Discriminator { get; private set; }
         public LengthMode LengthMode { get; private set; }
 
         public ObjectMapping(SerializationRegistry registry)
@@ -40,7 +40,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _registry = registry;
             ObjectType = typeof(T);
 
-            if (!ObjectType.IsAbstract && !ObjectType.IsInterface)
+            if (!ObjectType.IsAbstract && !ObjectType.IsInterface && registry.DiscriminatorConventionRegistry.AnyConvention())
             {
                 DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(registry.DiscriminatorConventionRegistry, this);
                 _memberMappings.Add(memberMapping);
@@ -228,7 +228,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public bool IsCreatorMember(ReadOnlySpan<byte> memberName)
         {
-            if (CreatorMapping == null)
+            if (CreatorMapping == null || CreatorMapping.MemberNames == null)
             {
                 return false;
             }

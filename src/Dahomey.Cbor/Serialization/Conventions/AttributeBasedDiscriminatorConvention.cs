@@ -8,6 +8,7 @@ using System.Collections.Concurrent;
 namespace Dahomey.Cbor.Serialization.Conventions
 {
     public class AttributeBasedDiscriminatorConvention<T> : IDiscriminatorConvention
+         where T : notnull
     {
         private readonly SerializationRegistry _serializationRegistry;
         private readonly ReadOnlyMemory<byte> _memberName;
@@ -46,7 +47,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
         public Type ReadDiscriminator(ref CborReader reader)
         {
             T discriminator = _converter.Read(ref reader);
-            if (!_typesByDiscriminator.TryGetValue(discriminator, out Type type))
+            if (!_typesByDiscriminator.TryGetValue(discriminator, out Type? type))
             {
                 throw new CborException($"Unknown type discriminator: {discriminator}");
             }

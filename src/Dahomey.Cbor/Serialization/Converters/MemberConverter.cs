@@ -26,13 +26,13 @@ namespace Dahomey.Cbor.Serialization.Converters
     public class MemberConverter<T, TM> : IMemberConverter
         where T : class
     {
-        private readonly Func<T, TM> _memberGetter;
-        private readonly Action<T, TM> _memberSetter;
+        private readonly Func<T, TM>? _memberGetter;
+        private readonly Action<T, TM>? _memberSetter;
         private readonly ICborConverter<TM> _converter;
         private ReadOnlyMemory<byte> _memberName;
         private readonly TM _defaultValue;
         private readonly bool _ignoreIfDefault;
-        private readonly Func<object, bool> _shouldSerializeMethod;
+        private readonly Func<object, bool>? _shouldSerializeMethod;
         private readonly LengthMode _lengthMode;
         private readonly RequirementPolicy _requirementPolicy;
         private readonly bool _isClass = typeof(TM).IsClass;
@@ -45,11 +45,11 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             MemberInfo memberInfo = memberMapping.MemberInfo;
 
-            _memberName = Encoding.UTF8.GetBytes(memberMapping.MemberName);
+            _memberName = Encoding.UTF8.GetBytes(memberMapping.MemberName!);
             _memberGetter = GenerateGetter(memberInfo);
             _memberSetter = GenerateSetter(memberInfo);
-            _converter = (ICborConverter<TM>)memberMapping.Converter;
-            _defaultValue = (TM)memberMapping.DefaultValue;
+            _converter = (ICborConverter<TM>)memberMapping.Converter!;
+            _defaultValue = (TM)memberMapping.DefaultValue!;
             _ignoreIfDefault = memberMapping.IgnoreIfDefault;
             _shouldSerializeMethod = memberMapping.ShouldSerializeMethod;
             _lengthMode = memberMapping.LengthMode;
@@ -66,11 +66,21 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
             }
 
+            if (_memberSetter == null)
+            {
+                throw new CborException($"No member setter for '{Encoding.UTF8.GetString(_memberName.Span)}'");
+            }
+
             _memberSetter((T)obj, _converter.Read(ref reader));
         }
 
         public void Write(ref CborWriter writer, object obj)
         {
+            if (_memberGetter == null)
+            {
+                throw new CborException($"No member getter for '{Encoding.UTF8.GetString(_memberName.Span)}'");
+            }
+
             TM value = _memberGetter((T)obj);
 
             if (_isClass && value == null && (_requirementPolicy == RequirementPolicy.DisallowNull
@@ -84,16 +94,26 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public object Read(ref CborReader reader)
         {
-            return _converter.Read(ref reader);
+            return _converter.Read(ref reader)!;
         }
 
         public void Set(object obj, object value)
         {
+            if (_memberSetter == null)
+            {
+                throw new CborException($"No member setter for '{Encoding.UTF8.GetString(_memberName.Span)}'");
+            }
+
             _memberSetter((T)obj, (TM)value);
         }
 
         public bool ShouldSerialize(object obj, Type declaredType, CborOptions options)
         {
+            if (_memberGetter == null)
+            {
+                throw new CborException($"No member getter for '{Encoding.UTF8.GetString(_memberName.Span)}'");
+            }
+
             if (IgnoreIfDefault && EqualityComparer<TM>.Default.Equals(_memberGetter((T)obj), _defaultValue))
             {
                 return false;
@@ -107,12 +127,12 @@ namespace Dahomey.Cbor.Serialization.Converters
             return true;
         }
 
-        private Func<T, TM> GenerateGetter(MemberInfo memberInfo)
+        private Func<T, TM>? GenerateGetter(MemberInfo memberInfo)
         {
             switch(memberInfo)
             {
                 case PropertyInfo propertyInfo:
-                    if (propertyInfo.GetMethod.IsStatic)
+                    if (propertyInfo.GetMethod != null && propertyInfo.GetMethod.IsStatic)
                     {
                         if (!propertyInfo.CanRead)
                         {
@@ -137,12 +157,12 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        private Action<T, TM> GenerateSetter(MemberInfo memberInfo)
+        private Action<T, TM>? GenerateSetter(MemberInfo memberInfo)
         {
             switch (memberInfo)
             {
                 case PropertyInfo propertyInfo:
-                    if (!propertyInfo.CanWrite || propertyInfo.SetMethod.IsStatic)
+                    if (!propertyInfo.CanWrite || (propertyInfo.SetMethod != null && propertyInfo.SetMethod.IsStatic))
                     {
                         return null;
                     }

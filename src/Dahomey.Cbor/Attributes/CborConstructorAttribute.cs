@@ -5,7 +5,7 @@ namespace Dahomey.Cbor.Attributes
     [AttributeUsage(AttributeTargets.Constructor)]
     public class CborConstructorAttribute : Attribute
     {
-        public string[] MemberNames { get; set; } 
+        public string[]? MemberNames { get; set; }
 
         public CborConstructorAttribute()
         {

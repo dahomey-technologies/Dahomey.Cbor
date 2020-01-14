@@ -3,7 +3,7 @@
 namespace Dahomey.Cbor.Serialization.Converters
 {
     public class ArrayConverter<TI> :
-        CborConverterBase<TI[]>, 
+        CborConverterBase<TI[]?>, 
         ICborArrayReader<ArrayConverter<TI>.ReaderContext>,
         ICborArrayWriter<ArrayConverter<TI>.WriterContext>
     {
@@ -28,7 +28,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             _itemConverter = registry.ConverterRegistry.Lookup<TI>();
         }
 
-        public override TI[] Read(ref CborReader reader)
+        public override TI[]? Read(ref CborReader reader)
         {
             if (reader.ReadNull())
             {
@@ -48,19 +48,21 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public override void Write(ref CborWriter writer, TI[] value, LengthMode lengthMode)
+        public override void Write(ref CborWriter writer, TI[]? value, LengthMode lengthMode)
         {
             if (value == null)
             {
                 writer.WriteNull();
                 return;
             }
+
             WriterContext context = new WriterContext
             {
                 array = value,
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : writer.Options.ArrayLengthMode
             };
+
             writer.WriteArray(this, ref context);
         }
 

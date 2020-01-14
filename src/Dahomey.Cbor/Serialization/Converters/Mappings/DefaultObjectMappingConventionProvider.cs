@@ -6,7 +6,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     {
         private readonly DefaultObjectMappingConvention _defaultObjectMappingConvention = new DefaultObjectMappingConvention();
 
-        public IObjectMappingConvention GetConvention(Type type)
+        public IObjectMappingConvention? GetConvention(Type type)
         {
             return _defaultObjectMappingConvention;
         }

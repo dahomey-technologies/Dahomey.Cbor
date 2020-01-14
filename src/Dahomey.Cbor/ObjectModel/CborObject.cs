@@ -4,6 +4,7 @@ using Dahomey.Cbor.Util;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Dynamic;
 using System.Linq;
 using System.Text;
@@ -91,24 +92,22 @@ namespace Dahomey.Cbor.ObjectModel
                 return 1;
             }
 
-            using (var enumerator = _pairs.GetEnumerator())
-            using (var otherEnumerator = other._pairs.GetEnumerator())
+            using var enumerator = _pairs.GetEnumerator();
+            using var otherEnumerator = other._pairs.GetEnumerator();
+            while (true)
             {
-                while (true)
-                {
-                    bool hasNext = enumerator.MoveNext();
-                    bool otherHasNext = otherEnumerator.MoveNext();
-                    if (!hasNext && !otherHasNext) { return 0; }
-                    if (!hasNext) { return -1; }
-                    if (!otherHasNext) { return 1; }
+                bool hasNext = enumerator.MoveNext();
+                bool otherHasNext = otherEnumerator.MoveNext();
+                if (!hasNext && !otherHasNext) { return 0; }
+                if (!hasNext) { return -1; }
+                if (!otherHasNext) { return 1; }
 
-                    CborPair pair = enumerator.Current;
-                    CborPair otherPair = otherEnumerator.Current;
-                    int result = pair.Key.CompareTo(otherPair.Key);
-                    if (result != 0) { return result; }
-                    result = pair.Value.CompareTo(otherPair.Value);
-                    if (result != 0) { return result; }
-                }
+                CborPair pair = enumerator.Current;
+                CborPair otherPair = otherEnumerator.Current;
+                int result = pair.Key.CompareTo(otherPair.Key);
+                if (result != 0) { return result; }
+                result = pair.Value.CompareTo(otherPair.Value);
+                if (result != 0) { return result; }
             }
         }
 
@@ -117,7 +116,7 @@ namespace Dahomey.Cbor.ObjectModel
             return other != null && _pairs.SequenceEqual(other._pairs);
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             if (obj == null || !(obj is CborObject value))
             {
@@ -156,9 +155,16 @@ namespace Dahomey.Cbor.ObjectModel
             return _pairs.Remove(key);
         }
 
-        public bool TryGetValue(CborValue key, out CborValue value)
+        public bool TryGetValue(CborValue key, [MaybeNullWhen(false)] out CborValue value)
         {
-            return _pairs.TryGetValue(key, out value);
+            if (!_pairs.TryGetValue(key, out CborValue? result))
+            {
+                value = null!;
+                return false;
+            }
+
+            value = result;
+            return true;
         }
 
         public void Add(CborPair pair)
@@ -197,41 +203,37 @@ namespace Dahomey.Cbor.ObjectModel
             return ((IEnumerable)_pairs).GetEnumerator();
         }
 
-        public static CborObject FromObject<T>(T obj, CborOptions options = null)
+        public static CborObject FromObject<T>(T obj, CborOptions? options = null)
         {
-            options = options ?? CborOptions.Default;
+            options ??= CborOptions.Default;
 
-            using (ByteBufferWriter buffer = new ByteBufferWriter())
-            {
-                ICborConverter<T> objectConverter = options.Registry.ConverterRegistry.Lookup<T>();
-                CborWriter writer = new CborWriter(buffer);
-                objectConverter.Write(ref writer, obj);
+            using ByteBufferWriter buffer = new ByteBufferWriter();
+            ICborConverter<T> objectConverter = options.Registry.ConverterRegistry.Lookup<T>();
+            CborWriter writer = new CborWriter(buffer);
+            objectConverter.Write(ref writer, obj);
 
-                ICborConverter<CborObject> cborObjectConverter = options.Registry.ConverterRegistry.Lookup<CborObject>();
-                CborReader reader = new CborReader(buffer.WrittenSpan);
-                return cborObjectConverter.Read(ref reader);
-            }
+            ICborConverter<CborObject> cborObjectConverter = options.Registry.ConverterRegistry.Lookup<CborObject>();
+            CborReader reader = new CborReader(buffer.WrittenSpan);
+            return cborObjectConverter.Read(ref reader);
         }
 
-        public T ToObject<T>(CborOptions options = null)
+        public T ToObject<T>(CborOptions? options = null)
         {
-            options = options ?? CborOptions.Default;
+            options ??= CborOptions.Default;
 
-            using (ByteBufferWriter buffer = new ByteBufferWriter())
-            {
-                ICborConverter<CborObject> cborObjectConverter = options.Registry.ConverterRegistry.Lookup<CborObject>();
-                CborWriter writer = new CborWriter(buffer);
-                cborObjectConverter.Write(ref writer, this);
+            using ByteBufferWriter buffer = new ByteBufferWriter();
+            ICborConverter<CborObject> cborObjectConverter = options.Registry.ConverterRegistry.Lookup<CborObject>();
+            CborWriter writer = new CborWriter(buffer);
+            cborObjectConverter.Write(ref writer, this);
 
-                ICborConverter<T> objectConverter = options.Registry.ConverterRegistry.Lookup<T>();
-                CborReader reader = new CborReader(buffer.WrittenSpan);
-                return objectConverter.Read(ref reader);
-            }
+            ICborConverter<T> objectConverter = options.Registry.ConverterRegistry.Lookup<T>();
+            CborReader reader = new CborReader(buffer.WrittenSpan);
+            return objectConverter.Read(ref reader);
         }
 
-        public override bool TryGetMember(GetMemberBinder binder, out object result)
+        public override bool TryGetMember(GetMemberBinder binder, [MaybeNullWhen(false)] out object result)
         {
-            if (!TryGetValue(binder.Name, out CborValue value))
+            if (!TryGetValue(binder.Name, out CborValue? value))
             {
                 return base.TryGetMember(binder, out result);
             }

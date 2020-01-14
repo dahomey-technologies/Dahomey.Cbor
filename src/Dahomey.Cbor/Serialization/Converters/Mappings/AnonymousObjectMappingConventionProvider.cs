@@ -8,7 +8,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private static readonly AnonymousObjectMappingConvention _anonymousObjectMappingConvention
             = new AnonymousObjectMappingConvention();
 
-        public IObjectMappingConvention GetConvention(Type type)
+        public IObjectMappingConvention? GetConvention(Type type)
         {
             if (type.IsAnonymous())
             {

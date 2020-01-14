@@ -40,7 +40,7 @@ namespace Dahomey.Cbor.ObjectModel
             return other != null;
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             return obj != null && (obj is CborNull);
         }

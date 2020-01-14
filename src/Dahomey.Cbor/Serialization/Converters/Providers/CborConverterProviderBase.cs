@@ -5,20 +5,34 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
 {
     public abstract class CborConverterProviderBase : ICborConverterProvider
     {
-        public abstract ICborConverter GetConverter(Type type, SerializationRegistry registry);
+        public abstract ICborConverter? GetConverter(Type type, SerializationRegistry registry);
 
         protected ICborConverter CreateConverter(SerializationRegistry registry, Type converterType)
         {
-            ConstructorInfo constructorInfo = converterType.GetConstructor(new[] { typeof(SerializationRegistry) });
+            ConstructorInfo? constructorInfo = converterType.GetConstructor(new[] { typeof(SerializationRegistry) });
             if (constructorInfo != null)
             {
-                return (ICborConverter)Activator.CreateInstance(converterType, registry);
+                ICborConverter? converter = (ICborConverter?)Activator.CreateInstance(converterType, registry);
+
+                if (converter == null)
+                {
+                    throw new CborException($"Cannot instantiate {converterType}");
+                }
+
+                return converter;
             }
 
             constructorInfo = converterType.GetConstructor(new Type[0]);
             if (constructorInfo != null)
             {
-                return (ICborConverter)Activator.CreateInstance(converterType);
+                ICborConverter? converter = (ICborConverter?)Activator.CreateInstance(converterType);
+
+                if (converter == null)
+                {
+                    throw new CborException($"Cannot instantiate {converterType}");
+                }
+
+                return converter;
             }
 
             throw new MissingMethodException(

@@ -90,7 +90,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private ICborConverter CreateConverter(Type type)
         {
-            ICborConverter converter = _providers
+            ICborConverter? converter = _providers
                 .Select(provider => provider.GetConverter(type, _registry))
                 .FirstOrDefault(provider => provider != null);
 

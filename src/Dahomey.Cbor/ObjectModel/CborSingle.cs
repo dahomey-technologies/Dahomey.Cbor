@@ -81,7 +81,7 @@ namespace Dahomey.Cbor.ObjectModel
             return other != null && _value.Equals(other._value);
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             if (obj == null || !(obj is CborSingle value))
             {

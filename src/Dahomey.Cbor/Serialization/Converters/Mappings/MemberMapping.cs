@@ -12,13 +12,13 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public MemberInfo MemberInfo { get; private set; }
         public Type MemberType { get; private set; }
-        public string MemberName { get; private set; }
-        public ICborConverter Converter { get; private set; }
+        public string? MemberName { get; private set; }
+        public ICborConverter? Converter { get; private set; }
         public bool CanBeDeserialized { get; private set; }
         public bool CanBeSerialized { get; private set; }
-        public object DefaultValue { get; private set; }
+        public object? DefaultValue { get; private set; }
         public bool IgnoreIfDefault { get; private set; }
-        public Func<object, bool> ShouldSerializeMethod { get; private set; }
+        public Func<object, bool>? ShouldSerializeMethod { get; private set; }
         public LengthMode LengthMode { get; private set; }
         public RequirementPolicy RequirementPolicy { get; private set; }
 
@@ -29,6 +29,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _converterRegistry = converterRegistry;
             MemberInfo = memberInfo;
             MemberType = memberType;
+            MemberName = null;
             DefaultValue = (memberType.IsClass || memberType.IsInterface) ? null : Activator.CreateInstance(memberType);
         }
 
@@ -44,7 +45,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return this;
         }
 
-        public MemberMapping<T> SetDefaultValue(object defaultValue)
+        public MemberMapping<T> SetDefaultValue(object? defaultValue)
         {
             DefaultValue = defaultValue;
             return this;
@@ -85,9 +86,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public IMemberConverter GenerateMemberConverter()
         {
-            IMemberConverter memberConverter = (IMemberConverter)Activator.CreateInstance(
-                typeof(MemberConverter<,>).MakeGenericType(typeof(T), MemberType),
-                _converterRegistry, this);
+            Type type = typeof(MemberConverter<,>).MakeGenericType(typeof(T), MemberType);
+            IMemberConverter? memberConverter = 
+                (IMemberConverter?)Activator.CreateInstance(type, _converterRegistry, this);
+
+            if (memberConverter == null)
+            {
+                throw new CborException($"Cannot instantiate {type}");
+            }
 
             return memberConverter;
         }
@@ -96,7 +102,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             if (string.IsNullOrEmpty(MemberName))
             {
-                CborPropertyAttribute cborPropertyAttribute = MemberInfo.GetCustomAttribute<CborPropertyAttribute>();
+                CborPropertyAttribute? cborPropertyAttribute = MemberInfo.GetCustomAttribute<CborPropertyAttribute>();
                 if (cborPropertyAttribute != null && cborPropertyAttribute.PropertyName != null)
                 {
                     MemberName = cborPropertyAttribute.PropertyName;
@@ -116,13 +122,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             if (Converter == null)
             {
-                CborConverterAttribute converterAttribute = MemberInfo.GetCustomAttribute<CborConverterAttribute>();
+                CborConverterAttribute? converterAttribute = MemberInfo.GetCustomAttribute<CborConverterAttribute>();
                 if (converterAttribute != null)
                 {
                     Type converterType = converterAttribute.ConverterType;
                     VerifyMemberConverterType(converterType);
 
-                    Converter = (ICborConverter)Activator.CreateInstance(converterType);
+                    Converter = (ICborConverter?)Activator.CreateInstance(converterType);
+
+                    if (Converter == null)
+                    {
+                        throw new CborException($"Cannot instantiate {converterType}");
+                    }
                 }
                 else
                 {
@@ -140,7 +151,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             switch (MemberInfo)
             {
                 case PropertyInfo propertyInfo:
-                    CanBeDeserialized = propertyInfo.CanWrite && !propertyInfo.GetMethod.IsStatic;
+                    CanBeDeserialized = propertyInfo.CanWrite && propertyInfo.GetMethod != null && !propertyInfo.GetMethod.IsStatic;
                     break;
 
                 case FieldInfo fieldInfo:
@@ -176,7 +187,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             Type interfaceType = typeof(ICborConverter<>).MakeGenericType(MemberType);
             if (!memberConverterType.GetInterfaces().Any(i => i == interfaceType))
             {
-                throw new CborException($"Custom converter on member {MemberInfo.ReflectedType.Name}.{MemberInfo.Name} is not a ICborConverter<{MemberType.Name}>");
+                throw new CborException($"Custom converter on member {MemberInfo.ReflectedType?.Name}.{MemberInfo.Name} is not a ICborConverter<{MemberType.Name}>");
             }
         }
 
