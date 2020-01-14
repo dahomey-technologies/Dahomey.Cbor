@@ -19,7 +19,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             Type type = objectMapping.ObjectType;
             List<MemberMapping<T>> memberMappings = new List<MemberMapping<T>>();
 
-            CborDiscriminatorAttribute discriminatorAttribute = type.GetCustomAttribute<CborDiscriminatorAttribute>();
+            CborDiscriminatorAttribute? discriminatorAttribute = type.GetCustomAttribute<CborDiscriminatorAttribute>();
 
             if (discriminatorAttribute != null)
             {
@@ -27,13 +27,20 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 objectMapping.SetDiscriminatorPolicy(discriminatorAttribute.Policy);
             }
 
-            Type namingConventionType = type.GetCustomAttribute<CborNamingConventionAttribute>()?.NamingConventionType;
+            Type? namingConventionType = type.GetCustomAttribute<CborNamingConventionAttribute>()?.NamingConventionType;
             if (namingConventionType != null)
             {
-                objectMapping.SetNamingConvention((INamingConvention)Activator.CreateInstance(namingConventionType));
+                INamingConvention? namingConvention = (INamingConvention?)Activator.CreateInstance(namingConventionType);
+
+                if (namingConvention == null)
+                {
+                    throw new CborException($"Cannot instantiate naming convention {namingConventionType}");
+                }
+
+                objectMapping.SetNamingConvention(namingConvention);
             }
 
-            CborLengthModeAttribute lengthModeAttribute = type.GetCustomAttribute<CborLengthModeAttribute>();
+            CborLengthModeAttribute? lengthModeAttribute = type.GetCustomAttribute<CborLengthModeAttribute>();
             if (lengthModeAttribute != null)
             {
                 objectMapping.SetLengthMode(lengthModeAttribute.LengthMode);
@@ -49,7 +56,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     continue;
                 }
 
-                if ((propertyInfo.GetMethod.IsPrivate || propertyInfo.GetMethod.IsStatic) && !propertyInfo.IsDefined(typeof(CborPropertyAttribute)))
+                MethodInfo? getMethod = propertyInfo.GetMethod;
+
+                if (getMethod == null)
+                {
+                    continue;
+                }
+
+                if ((getMethod.IsPrivate || getMethod.IsStatic) && !propertyInfo.IsDefined(typeof(CborPropertyAttribute)))
                 {
                     continue;
                 }
@@ -94,9 +108,9 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
             if (constructorInfo != null)
             {
-                CborConstructorAttribute constructorAttribute = constructorInfo.GetCustomAttribute<CborConstructorAttribute>();
+                CborConstructorAttribute? constructorAttribute = constructorInfo.GetCustomAttribute<CborConstructorAttribute>();
                 CreatorMapping creatorMapping = objectMapping.MapCreator(constructorInfo);
-                if (constructorAttribute.MemberNames != null)
+                if (constructorAttribute != null && constructorAttribute.MemberNames != null)
                 {
                     creatorMapping.SetMemberNames(constructorAttribute.MemberNames);
                 }
@@ -147,7 +161,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         private void ProcessDefaultValue<T>(MemberInfo memberInfo, MemberMapping<T> memberMapping) where T : class
         {
-            DefaultValueAttribute defaultValueAttribute = memberInfo.GetCustomAttribute<DefaultValueAttribute>();
+            DefaultValueAttribute? defaultValueAttribute = memberInfo.GetCustomAttribute<DefaultValueAttribute>();
             if (defaultValueAttribute != null)
             {
                 memberMapping.SetDefaultValue(defaultValueAttribute.Value);
@@ -162,9 +176,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private void ProcessShouldSerializeMethod<T>(MemberMapping<T> memberMapping) where T : class
         {
             string shouldSerializeMethodName = "ShouldSerialize" + memberMapping.MemberInfo.Name;
-            Type objectType = memberMapping.MemberInfo.DeclaringType;
+            Type? objectType = memberMapping.MemberInfo.DeclaringType;
 
-            MethodInfo shouldSerializeMethodInfo = objectType.GetMethod(shouldSerializeMethodName, new Type[] { });
+            if (objectType == null)
+            {
+                return;
+            }
+
+            MethodInfo? shouldSerializeMethodInfo = objectType.GetMethod(shouldSerializeMethodName, new Type[] { });
             if (shouldSerializeMethodInfo != null &&
                 shouldSerializeMethodInfo.IsPublic &&
                 shouldSerializeMethodInfo.ReturnType == typeof(bool))
@@ -183,7 +202,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         private void ProcessLengthMode<T>(MemberInfo memberInfo, MemberMapping<T> memberMapping) where T : class
         {
-            CborLengthModeAttribute lengthModeAttribute = memberInfo.GetCustomAttribute<CborLengthModeAttribute>();
+            CborLengthModeAttribute? lengthModeAttribute = memberInfo.GetCustomAttribute<CborLengthModeAttribute>();
             if (lengthModeAttribute != null)
             {
                 memberMapping.SetLengthMode(lengthModeAttribute.LengthMode);
@@ -192,7 +211,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         private void ProcessRequired<T>(MemberInfo memberInfo, MemberMapping<T> memberMapping) where T : class
         {
-            CborRequiredAttribute jsonRequiredAttribute = memberInfo.GetCustomAttribute<CborRequiredAttribute>();
+            CborRequiredAttribute? jsonRequiredAttribute = memberInfo.GetCustomAttribute<CborRequiredAttribute>();
             if (jsonRequiredAttribute != null)
             {
                 memberMapping.SetRequired(jsonRequiredAttribute.Policy);

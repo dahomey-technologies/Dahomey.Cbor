@@ -7,11 +7,17 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
 {
     public class CollectionConverterProvider : CborConverterProviderBase
     {
-        public override ICborConverter GetConverter(Type type, SerializationRegistry registry)
+        public override ICborConverter? GetConverter(Type type, SerializationRegistry registry)
         {
             if (type.IsArray)
             {
-                Type itemType = type.GetElementType();
+                Type? itemType = type.GetElementType();
+
+                if (itemType == null)
+                {
+                    throw new CborException("Unexpected");
+                }
+
                 return CreateGenericConverter(
                     registry,
                     typeof(ArrayConverter<>), itemType);

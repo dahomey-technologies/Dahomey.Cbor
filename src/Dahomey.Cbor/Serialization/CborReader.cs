@@ -76,7 +76,7 @@ namespace Dahomey.Cbor.Serialization
 
         public CborOptions Options { get; }
 
-        public CborReader(ReadOnlySpan<byte> buffer, CborOptions options = null)
+        public CborReader(ReadOnlySpan<byte> buffer, CborOptions? options = null)
         {
             _buffer = buffer;
             Options = options ?? CborOptions.Default;
@@ -273,7 +273,7 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public string ReadString()
+        public string? ReadString()
         {
             if (ReadNull())
             {

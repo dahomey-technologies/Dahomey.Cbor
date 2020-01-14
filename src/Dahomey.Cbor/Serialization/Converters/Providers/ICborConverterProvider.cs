@@ -15,6 +15,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
         /// <returns>
         /// A converter
         /// </returns>
-        ICborConverter GetConverter(Type type, SerializationRegistry registry);
+        ICborConverter? GetConverter(Type type, SerializationRegistry registry);
     }
 }

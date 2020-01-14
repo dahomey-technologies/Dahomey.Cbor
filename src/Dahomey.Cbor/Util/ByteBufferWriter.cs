@@ -33,7 +33,6 @@ namespace Dahomey.Cbor.Util
                 ArrayPool<byte>.Shared.Return(_buffer);
             }
 
-            _buffer = null;
             _size = 0;
         }
 

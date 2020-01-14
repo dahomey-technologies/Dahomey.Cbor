@@ -9,8 +9,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public class EnumConverter<T> : CborConverterBase<T> where T : struct
     {
-        private ByteBufferDictionary<T> names2Values = new ByteBufferDictionary<T>();
-        private Dictionary<T, ReadOnlyMemory<byte>> values2Names;
+        private readonly ByteBufferDictionary<T> names2Values = new ByteBufferDictionary<T>();
+        private readonly Dictionary<T, ReadOnlyMemory<byte>> values2Names;
 
         public EnumConverter()
         {

@@ -25,9 +25,9 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
             [typeof(byte[])] = typeof(ByteArrayConverter),
         };
 
-        public override ICborConverter GetConverter(Type type, SerializationRegistry registry)
+        public override ICborConverter? GetConverter(Type type, SerializationRegistry registry)
         {
-            if (_converterTypes.TryGetValue(type, out Type converterType))
+            if (_converterTypes.TryGetValue(type, out Type? converterType))
             {
                 return CreateConverter(registry, converterType);
             }

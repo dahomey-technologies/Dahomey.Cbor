@@ -14,7 +14,7 @@ namespace Dahomey.Cbor.ObjectModel
                 string.Format("type {0} not supported in {1}", typeof(T).Name, GetType().Name));
         }
 
-        public static implicit operator CborValue(string value)
+        public static implicit operator CborValue(string? value)
         {
             return value == null ? (CborValue)Null : (CborString)value;
         }
@@ -118,7 +118,7 @@ namespace Dahomey.Cbor.ObjectModel
         }
 
         public abstract int CompareTo(CborValue other);
-        public abstract override bool Equals(object obj);
+        public abstract override bool Equals(object? obj);
         public abstract override int GetHashCode();
     }
 }

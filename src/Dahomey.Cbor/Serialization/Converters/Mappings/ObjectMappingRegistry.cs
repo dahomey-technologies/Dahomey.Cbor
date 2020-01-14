@@ -63,8 +63,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         private IObjectMapping CreateDefaultObjectMapping(Type type)
         {
-            IObjectMapping objectMapping =
-                (IObjectMapping)Activator.CreateInstance(typeof(ObjectMapping<>).MakeGenericType(type), _registry);
+            Type objectMappingType = typeof(ObjectMapping<>).MakeGenericType(type);
+
+            IObjectMapping? objectMapping =
+                (IObjectMapping?)Activator.CreateInstance(objectMappingType, _registry);
+
+            if (objectMapping == null)
+            {
+                throw new CborException($"Cannot instantiate {objectMappingType}");
+            }
 
             objectMapping.AutoMap();
 

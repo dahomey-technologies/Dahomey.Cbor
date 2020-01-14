@@ -10,7 +10,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
     {
         private readonly SerializationRegistry _serializationRegistry;
         private readonly ConcurrentStack<IDiscriminatorConvention> _conventions = new ConcurrentStack<IDiscriminatorConvention>();
-        private readonly ConcurrentDictionary<Type, IDiscriminatorConvention> _conventionsByType = new ConcurrentDictionary<Type, IDiscriminatorConvention>();
+        private readonly ConcurrentDictionary<Type, IDiscriminatorConvention?> _conventionsByType = new ConcurrentDictionary<Type, IDiscriminatorConvention?>();
 
         public DiscriminatorConventionRegistry(SerializationRegistry serializationRegistry)
         {
@@ -18,6 +18,11 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
             // order matters. It's in reverse order of how they'll get consumed
             RegisterConvention(new DefaultDiscriminatorConvention(_serializationRegistry));
+        }
+
+        public bool AnyConvention()
+        {
+            return _conventions.Count != 0;
         }
 
         /// <summary>
@@ -41,7 +46,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
             _conventions.Clear();
         }
 
-        public IDiscriminatorConvention GetConvention(Type type)
+        public IDiscriminatorConvention? GetConvention(Type type)
         {
             return _conventionsByType.GetOrAdd(type, t => InternalGetConvention(t));
         }
@@ -54,14 +59,14 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
         public void RegisterType<T>() where T : class => RegisterType(typeof(T));
 
-        private IDiscriminatorConvention InternalGetConvention(Type type)
+        private IDiscriminatorConvention? InternalGetConvention(Type type)
         {
             IDiscriminatorConvention convention = _conventions.FirstOrDefault(c => c.TryRegisterType(type));
 
             if (convention != null)
             {
                 // setup discriminator for all base types
-                for (Type currentType = type.BaseType; currentType != null && currentType != typeof(object); currentType = currentType.BaseType)
+                for (Type? currentType = type.BaseType; currentType != null && currentType != typeof(object); currentType = currentType.BaseType)
                 {
                     _conventionsByType.TryAdd(currentType, convention);
                 }

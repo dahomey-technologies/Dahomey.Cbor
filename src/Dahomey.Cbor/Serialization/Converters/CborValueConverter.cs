@@ -6,8 +6,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public class CborValueConverter :
         CborConverterBase<CborValue>,
-        ICborConverter<CborObject>,
-        ICborConverter<CborArray>,
+        ICborConverter<CborObject?>,
+        ICborConverter<CborArray?>,
         ICborMapReader<CborValueConverter.MapReaderContext>,
         ICborMapWriter<CborValueConverter.MapWriterContext>,
         ICborArrayReader<CborValueConverter.ArrayReaderContext>,
@@ -181,7 +181,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             return context.index < context.array.Count;
         }
 
-        CborObject ICborConverter<CborObject>.Read(ref CborReader reader)
+        CborObject? ICborConverter<CborObject?>.Read(ref CborReader reader)
         {
             if (reader.ReadNull())
             {
@@ -193,13 +193,25 @@ namespace Dahomey.Cbor.Serialization.Converters
             return mapContext.obj;
         }
 
-        void ICborConverter<CborObject>.Write(ref CborWriter writer, CborObject value)
+        void ICborConverter<CborObject?>.Write(ref CborWriter writer, CborObject? value)
         {
+            if (value == null)
+            {
+                writer.WriteNull();
+                return;
+            }
+
             Write(ref writer, value, LengthMode.Default);
         }
 
-        void ICborConverter<CborObject>.Write(ref CborWriter writer, CborObject value, LengthMode lengthMode)
+        void ICborConverter<CborObject?>.Write(ref CborWriter writer, CborObject? value, LengthMode lengthMode)
         {
+            if (value == null)
+            {
+                writer.WriteNull();
+                return;
+            }
+
             MapWriterContext mapWriterContext = new MapWriterContext
             {
                 obj = value,
@@ -210,7 +222,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             writer.WriteMap(this, ref mapWriterContext);
         }
 
-        CborArray ICborConverter<CborArray>.Read(ref CborReader reader)
+        CborArray? ICborConverter<CborArray?>.Read(ref CborReader reader)
         {
             if (reader.ReadNull())
             {
@@ -222,13 +234,25 @@ namespace Dahomey.Cbor.Serialization.Converters
             return arrayContext.array;
         }
 
-        void ICborConverter<CborArray>.Write(ref CborWriter writer, CborArray value)
+        void ICborConverter<CborArray?>.Write(ref CborWriter writer, CborArray? value)
         {
+            if (value == null)
+            {
+                writer.WriteNull();
+                return;
+            }
+
             Write(ref writer, value, LengthMode.Default);
         }
 
-        void ICborConverter<CborArray>.Write(ref CborWriter writer, CborArray value, LengthMode lengthMode)
+        void ICborConverter<CborArray?>.Write(ref CborWriter writer, CborArray? value, LengthMode lengthMode)
         {
+            if (value == null)
+            {
+                writer.WriteNull();
+                return;
+            }
+
             ArrayWriterContext arrayWriterContext = new ArrayWriterContext
             {
                 array = value,

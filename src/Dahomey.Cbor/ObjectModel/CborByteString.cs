@@ -53,7 +53,7 @@ namespace Dahomey.Cbor.ObjectModel
             return _value.Span.SequenceCompareTo(other._value.Span);
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             if (obj == null || !(obj is CborByteString value))
             {

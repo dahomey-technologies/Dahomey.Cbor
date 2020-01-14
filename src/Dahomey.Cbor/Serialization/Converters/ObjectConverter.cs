@@ -4,6 +4,7 @@ using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -13,7 +14,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     public interface IObjectConverter
     {
         void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers);
-        bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers, out object value);
+        bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers, [MaybeNullWhen(false)] out object value);
         IReadOnlyList<IMemberConverter> MemberConvertersForWrite { get; }
         IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead { get; }
     }
@@ -25,7 +26,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     }
 
     public class ObjectConverter<T> :
-        CborConverterBase<T>,
+        CborConverterBase<T?>,
         IObjectConverter<T>,
         ICborMapReader<ObjectConverter<T>.MapReaderContext>,
         ICborMapWriter<ObjectConverter<T>.MapWriterContext>
@@ -35,9 +36,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             public T obj;
             public IObjectConverter<T> converter;
-            public Dictionary<RawString, object> creatorValues;
-            public Dictionary<RawString, object> regularValues;
-            public HashSet<IMemberConverter> readMembers;
+            public Dictionary<RawString, object>? creatorValues;
+            public Dictionary<RawString, object>? regularValues;
+            public HashSet<IMemberConverter>? readMembers;
         }
 
         public struct MapWriterContext
@@ -54,9 +55,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly List<IMemberConverter> _memberConvertersForWrite;
         private readonly SerializationRegistry _registry;
         private readonly IObjectMapping _objectMapping;
-        private readonly Func<T> _constructor;
+        private readonly Func<T>? _constructor;
         private readonly bool _isInterfaceOrAbstract;
-        private IDiscriminatorConvention _discriminatorConvention = null;
+        private readonly IDiscriminatorConvention? _discriminatorConvention = null;
 
         public IReadOnlyList<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
         public IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead => _requiredMemberConvertersForRead;
@@ -93,7 +94,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             if (!_isInterfaceOrAbstract && _objectMapping.CreatorMapping == null)
             {
-                ConstructorInfo defaultConstructorInfo = typeof(T).GetConstructor(
+                ConstructorInfo? defaultConstructorInfo = typeof(T).GetConstructor(
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
                     null,
                     Type.EmptyTypes,
@@ -112,7 +113,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public T CreateInstance()
         {
-            if (_isInterfaceOrAbstract)
+            if (_isInterfaceOrAbstract || _constructor == null)
             {
                 throw new CborException("A CreatorMapping should be defined for interfaces or abstract classes");
             }
@@ -120,7 +121,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             return _constructor();
         }
 
-        public override T Read(ref CborReader reader)
+        public override T? Read(ref CborReader reader)
         {
             if (reader.ReadNull())
             {
@@ -136,17 +137,17 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             reader.ReadMap(this, ref context);
 
-            if (context.creatorValues != null)
+            if (_objectMapping.CreatorMapping != null)
             {
-                context.obj = (T)_objectMapping.CreatorMapping.CreateInstance(context.creatorValues);
+                context.obj = (T)_objectMapping.CreatorMapping.CreateInstance(context.creatorValues!);
                 if (_objectMapping.OnDeserializingMethod != null)
                 {
                     ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
                 }
 
-                foreach (KeyValuePair<RawString, object> value in context.regularValues)
+                foreach (KeyValuePair<RawString, object> value in context.regularValues!)
                 {
-                    if (!_memberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter memberConverter))
+                    if (!_memberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter? memberConverter))
                     {
                         // should not happen
                         throw new CborException("Unexpected error");
@@ -184,7 +185,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             T value = (T)obj;
 
-            if (!_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter memberConverter))
+            if (!_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter? memberConverter))
             {
                 HandleUnknownName(ref reader, typeof(T), memberName);
                 reader.SkipDataItem();
@@ -199,13 +200,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers, out object value)
+        public bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers, [MaybeNullWhen(false)] out object value)
         {
-            if (!_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter memberConverter))
+            if (!_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter? memberConverter))
             {
                 HandleUnknownName(ref reader, typeof(T), memberName);
                 reader.SkipDataItem();
-                value = default;
+                value = default!;
                 return false;
             }
             else
@@ -219,7 +220,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public override void Write(ref CborWriter writer, T value, LengthMode lengthMode)
+        public override void Write(ref CborWriter writer, T? value, LengthMode lengthMode)
         {
             if (value == null)
             {
@@ -305,9 +306,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                         ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
                     }
 
-                    context.converter.ReadValue(ref reader, context.obj, memberName, context.readMembers);
+                    context.converter.ReadValue(ref reader, context.obj, memberName, context.readMembers!);
                 }
-                else if (context.converter.ReadValue(ref reader, memberName, context.readMembers, out object value))
+                else if (context.converter.ReadValue(ref reader, memberName, context.readMembers!, out object? value))
                 {
                     if (_objectMapping.IsCreatorMember(memberName))
                     {
@@ -315,14 +316,14 @@ namespace Dahomey.Cbor.Serialization.Converters
                     }
                     else
                     {
-                        context.regularValues.Add(new RawString(memberName), value);
+                        context.regularValues!.Add(new RawString(memberName), value);
                     }
                 }
             }
             else
             {
                 ReadOnlySpan<byte> memberName = reader.ReadRawString();
-                context.converter.ReadValue(ref reader, context.obj, memberName, context.readMembers);
+                context.converter.ReadValue(ref reader, context.obj, memberName, context.readMembers!);
             }
         }
 

@@ -9,10 +9,6 @@ namespace Dahomey.Cbor.Attributes
     {
         public Type ConverterType { get; }
 
-        public CborConverterAttribute()
-        {
-        }
-
         public CborConverterAttribute(Type converterType)
         {
             ConverterType = converterType;

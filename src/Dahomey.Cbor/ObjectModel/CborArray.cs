@@ -128,22 +128,20 @@ namespace Dahomey.Cbor.ObjectModel
                 return 1;
             }
 
-            using (var enumerator = GetEnumerator())
-            using (var otherEnumerator = other.GetEnumerator())
+            using var enumerator = GetEnumerator();
+            using var otherEnumerator = other.GetEnumerator();
+            while (true)
             {
-                while (true)
-                {
-                    var hasNext = enumerator.MoveNext();
-                    var otherHasNext = otherEnumerator.MoveNext();
-                    if (!hasNext && !otherHasNext) { return 0; }
-                    if (!hasNext) { return -1; }
-                    if (!otherHasNext) { return 1; }
+                var hasNext = enumerator.MoveNext();
+                var otherHasNext = otherEnumerator.MoveNext();
+                if (!hasNext && !otherHasNext) { return 0; }
+                if (!hasNext) { return -1; }
+                if (!otherHasNext) { return 1; }
 
-                    var value = enumerator.Current;
-                    var otherValue = otherEnumerator.Current;
-                    var result = value.CompareTo(otherValue);
-                    if (result != 0) { return result; }
-                }
+                var value = enumerator.Current;
+                var otherValue = otherEnumerator.Current;
+                var result = value.CompareTo(otherValue);
+                if (result != 0) { return result; }
             }
         }
 
@@ -152,7 +150,7 @@ namespace Dahomey.Cbor.ObjectModel
             return _values.SequenceEqual(other._values);
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             if (obj == null || !(obj is CborArray value))
             {
@@ -175,38 +173,34 @@ namespace Dahomey.Cbor.ObjectModel
             return hash;
         }
 
-        public static CborArray FromCollection<T>(T collection, CborOptions options = null)
+        public static CborArray FromCollection<T>(T collection, CborOptions? options = null)
             where T : ICollection
         {
-            options = options ?? CborOptions.Default;
+            options ??= CborOptions.Default;
 
-            using (ByteBufferWriter buffer = new ByteBufferWriter())
-            {
-                ICborConverter<T> listConverter = options.Registry.ConverterRegistry.Lookup<T>();
-                CborWriter writer = new CborWriter(buffer);
-                listConverter.Write(ref writer, collection);
+            using ByteBufferWriter buffer = new ByteBufferWriter();
+            ICborConverter<T> listConverter = options.Registry.ConverterRegistry.Lookup<T>();
+            CborWriter writer = new CborWriter(buffer);
+            listConverter.Write(ref writer, collection);
 
-                ICborConverter<CborArray> cborArrayConverter = options.Registry.ConverterRegistry.Lookup<CborArray>();
-                CborReader reader = new CborReader(buffer.WrittenSpan);
-                return cborArrayConverter.Read(ref reader);
-            }
+            ICborConverter<CborArray> cborArrayConverter = options.Registry.ConverterRegistry.Lookup<CborArray>();
+            CborReader reader = new CborReader(buffer.WrittenSpan);
+            return cborArrayConverter.Read(ref reader);
         }
 
-        public T ToCollection<T>(CborOptions options = null) 
+        public T ToCollection<T>(CborOptions? options = null) 
             where T : ICollection
         {
-            options = options ?? CborOptions.Default;
+            options ??= CborOptions.Default;
 
-            using (ByteBufferWriter buffer = new ByteBufferWriter())
-            {
-                ICborConverter<CborArray> cborArrayConverter = options.Registry.ConverterRegistry.Lookup<CborArray>();
-                CborWriter writer = new CborWriter(buffer);
-                cborArrayConverter.Write(ref writer, this);
+            using ByteBufferWriter buffer = new ByteBufferWriter();
+            ICborConverter<CborArray> cborArrayConverter = options.Registry.ConverterRegistry.Lookup<CborArray>();
+            CborWriter writer = new CborWriter(buffer);
+            cborArrayConverter.Write(ref writer, this);
 
-                ICborConverter<T> objectConverter = options.Registry.ConverterRegistry.Lookup<T>();
-                CborReader reader = new CborReader(buffer.WrittenSpan);
-                return objectConverter.Read(ref reader);
-            }
+            ICborConverter<T> objectConverter = options.Registry.ConverterRegistry.Lookup<T>();
+            CborReader reader = new CborReader(buffer.WrittenSpan);
+            return objectConverter.Read(ref reader);
         }
     }
 }

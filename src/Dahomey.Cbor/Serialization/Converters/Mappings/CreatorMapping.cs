@@ -12,10 +12,10 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private readonly IObjectMapping _objectMapping;
         private readonly Delegate _delegate;
         private readonly ParameterInfo[] _parameters;
-        private List<RawString> _memberNames = null;
-        private List<object> _defaultValues = null;
+        private List<RawString>? _memberNames = null;
+        private List<object?>? _defaultValues = null;
 
-        public IReadOnlyCollection<RawString> MemberNames => _memberNames;
+        public IReadOnlyCollection<RawString>? MemberNames => _memberNames;
 
         public CreatorMapping(IObjectMapping objectMapping, ConstructorInfo constructorInfo)
         {
@@ -52,11 +52,16 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         object ICreatorMapping.CreateInstance(Dictionary<RawString, object> values)
         {
-            object[] args = new object[_memberNames.Count];
+            if (_memberNames == null || _defaultValues == null)
+            {
+                throw new CborException("Initialize has not been called");
+            }
+
+            object?[] args = new object[_memberNames.Count];
 
             for (int i = 0; i < _memberNames.Count; i++)
             {
-                if (values.TryGetValue(_memberNames[i], out object value))
+                if (values.TryGetValue(_memberNames[i], out object? value))
                 {
                     args[i] = value;
                 }
@@ -66,7 +71,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 }
             }
 
-            return _delegate.DynamicInvoke(args);
+            return _delegate.DynamicInvoke(args) ?? throw new InvalidOperationException("Cannot instantiate type");
         }
 
         public void Initialize()
@@ -74,7 +79,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             bool createMemberNames = _memberNames == null;
 
             IReadOnlyCollection<IMemberMapping> memberMappings = _objectMapping.MemberMappings;
-            if (createMemberNames)
+            if (_memberNames == null)
             {
                 _memberNames = new List<RawString>(_parameters.Length);
             }
@@ -83,7 +88,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 throw new CborException($"Size mismatch between creator parameters and member names");
             }
 
-            _defaultValues = new List<object>(_parameters.Length);
+            _defaultValues = new List<object?>(_parameters.Length);
 
             for (int i = 0; i < _parameters.Length; i++)
             {
@@ -96,7 +101,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                         .Where(m => !(m is IDiscriminatorMapping))
                         .FirstOrDefault(m => string.Compare(m.MemberName, parameter.Name, ignoreCase: true) == 0);
 
-                    if (memberMapping == null)
+                    if (memberMapping == null || memberMapping.MemberName == null)
                     {
                         _memberNames.Add(RawString.Empty);
                     }
