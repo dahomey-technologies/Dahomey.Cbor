@@ -15,7 +15,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private readonly DiscriminatorConventionRegistry _discriminatorConventionRegistry;
         private readonly IObjectMapping _objectMapping;
 
-        public MemberInfo MemberInfo => throw new NotSupportedException();
+        public MemberInfo? MemberInfo => null;
         public Type MemberType => throw new NotSupportedException();
         public string? MemberName { get; private set; }
         public ICborConverter Converter => throw new NotSupportedException();

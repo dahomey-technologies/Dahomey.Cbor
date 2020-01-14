@@ -6,7 +6,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
     public interface IMemberMapping : IMappingInitialization
     {
-        MemberInfo MemberInfo { get; }
+        MemberInfo? MemberInfo { get; }
         Type MemberType { get; }
         string? MemberName { get; }
         ICborConverter? Converter { get; }

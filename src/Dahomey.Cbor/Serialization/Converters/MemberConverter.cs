@@ -43,7 +43,12 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public MemberConverter(CborConverterRegistry registry, IMemberMapping memberMapping)
         {
-            MemberInfo memberInfo = memberMapping.MemberInfo;
+            MemberInfo? memberInfo = memberMapping.MemberInfo;
+
+            if (memberInfo == null)
+            {
+                throw new CborException("MemberInfo must not be null");
+            }
 
             _memberName = Encoding.UTF8.GetBytes(memberMapping.MemberName!);
             _memberGetter = GenerateGetter(memberInfo);
