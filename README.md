@@ -31,10 +31,6 @@ https://www.nuget.org/packages/Dahomey.Cbor/
 
 `Install-Package Dahomey.Cbor`
 
-https://www.nuget.org/packages/Dahomey.Cbor.AspNetCore/
-
-`Install-Package Dahomey.Cbor.AspNetCore`
-
 ### Compilation from source
   1. `dotnet restore`
   2. `dotnet pack -c Release`
