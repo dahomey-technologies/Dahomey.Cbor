@@ -54,7 +54,7 @@ namespace System.IO
             int read;
             buffer = MemoryPool<byte>.Shared.Rent(sizeHint);
 
-            while ((read = await stream.ReadAsync(buffer.Memory, cancellationToken)) > 0)
+            while ((read = await stream.ReadAsync(buffer.Memory.Slice(totalSize), cancellationToken)) > 0)
             {
                 if (totalSize + read == buffer.Memory.Length)
                 {
