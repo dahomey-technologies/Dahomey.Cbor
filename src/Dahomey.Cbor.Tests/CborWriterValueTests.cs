@@ -62,9 +62,9 @@ namespace Dahomey.Cbor.Tests
 
         [Theory]
         [InlineData("FA4141EB85", 12.12f, null)]
-        [InlineData("FAFFC00000", float.NaN, null)]
-        [InlineData("FA7F800000", float.PositiveInfinity, null)]
-        [InlineData("FAFF800000", float.NegativeInfinity, null)]
+        [InlineData("F97E00", float.NaN, null)]
+        [InlineData("F97C00", float.PositiveInfinity, null)]
+        [InlineData("F9FC00", float.NegativeInfinity, null)]
         public void WriteSingle(string hexBuffer, float value, Type expectedExceptionType)
         {
             Helper.TestWrite(value, hexBuffer, expectedExceptionType);
@@ -72,9 +72,9 @@ namespace Dahomey.Cbor.Tests
 
         [Theory]
         [InlineData("FB40283D70A3D70A3D", 12.12, null)]
-        [InlineData("FBFFF8000000000000", double.NaN, null)]
-        [InlineData("FB7FF0000000000000", double.PositiveInfinity, null)]
-        [InlineData("FBFFF0000000000000", double.NegativeInfinity, null)]
+        [InlineData("F97E00", double.NaN, null)]
+        [InlineData("F97C00", double.PositiveInfinity, null)]
+        [InlineData("F9FC00", double.NegativeInfinity, null)]
         public void WriteDouble(string hexBuffer, double value, Type expectedExceptionType)
         {
             Helper.TestWrite(value, hexBuffer, expectedExceptionType);

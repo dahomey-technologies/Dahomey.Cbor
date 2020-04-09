@@ -5,7 +5,6 @@ using System;
 
 namespace Dahomey.Cbor.Tests
 {
-
     public class CborWriterTests
     {
         static CborWriterTests()
