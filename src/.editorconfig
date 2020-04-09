@@ -1,4 +1,0 @@
-﻿[*.cs]
-
-# CA1034: Nested types should not be visible
-dotnet_diagnostic.CA1034.severity = silent
