@@ -22,7 +22,7 @@ namespace System.IO
                 byte[] sharedBuffer = ArrayPool<byte>.Shared.Rent(buffer.Length);
                 return FinishReadAsync(stream.ReadAsync(sharedBuffer, 0, buffer.Length, cancellationToken), sharedBuffer, buffer);
 
-                async ValueTask<int> FinishReadAsync(Task<int> readTask, byte[] localBuffer, Memory<byte> localDestination)
+                static async ValueTask<int> FinishReadAsync(Task<int> readTask, byte[] localBuffer, Memory<byte> localDestination)
                 {
                     try
                     {
@@ -58,11 +58,9 @@ namespace System.IO
             {
                 if (totalSize + read == buffer.Memory.Length)
                 {
-                    using (IMemoryOwner<byte> oldBuffer = buffer)
-                    {
-                        buffer = MemoryPool<byte>.Shared.Rent(oldBuffer.Memory.Length * 2);
-                        oldBuffer.Memory.CopyTo(buffer.Memory);
-                    }
+                    using IMemoryOwner<byte> oldBuffer = buffer;
+                    buffer = MemoryPool<byte>.Shared.Rent(oldBuffer.Memory.Length * 2);
+                    oldBuffer.Memory.CopyTo(buffer.Memory);
                 }
 
                 totalSize += read;

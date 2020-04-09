@@ -1,6 +1,7 @@
 using Dahomey.Cbor.Serialization;
 using Xunit;
 using System;
+using Dahomey.Cbor.Util;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -141,6 +142,38 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Theory]
+        [InlineData("F9E3D0", -1000f, null)]
+        [InlineData("F90000", 0f, null)]
+        [InlineData("F98000", -0f, null)]
+        [InlineData("F93C00", 1f, null)]
+        [InlineData("F93E00", 1.5f, null)]
+        [InlineData("F97BFF", 65504f, null)]
+        [InlineData("F90001", 5.960464477539063e-8f, null)]
+        [InlineData("F90400", 0.00006103515625f, null)]
+        [InlineData("F9C400", -4f, null)]
+        [InlineData("F97E00", float.NaN, null)]
+        [InlineData("F97C00", float.PositiveInfinity, null)]
+        [InlineData("F9FC00", float.NegativeInfinity, null)]
+        public void ReadHalf(string hexBuffer, float expectedValue, Type expectedExceptionType)
+        {
+            Helper.TestRead(nameof(CborReader.ReadHalf), hexBuffer, (Half)expectedValue, expectedExceptionType);
+        }
+
+        [Theory]
+        // half
+        [InlineData("F9E3D0", -1000f, null)]
+        [InlineData("F90000", 0f, null)]
+        [InlineData("F98000", -0f, null)]
+        [InlineData("F93C00", 1f, null)]
+        [InlineData("F93E00", 1.5f, null)]
+        [InlineData("F97BFF", 65504f, null)]
+        [InlineData("F90001", 5.960464477539063e-8f, null)]
+        [InlineData("F90400", 0.00006103515625f, null)]
+        [InlineData("F9C400", -4f, null)]
+        [InlineData("F97E00", float.NaN, null)]
+        [InlineData("F97C00", float.PositiveInfinity, null)]
+        [InlineData("F9FC00", float.NegativeInfinity, null)]
+        // single
         [InlineData("FA4141EB85", 12.12f, null)]
         [InlineData("FAFFC00000", float.NaN, null)]
         [InlineData("FA7F800000", float.PositiveInfinity, null)]
@@ -151,6 +184,25 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Theory]
+        // half
+        [InlineData("F9E3D0", -1000.0, null)]
+        [InlineData("F90000", 0.0, null)]
+        [InlineData("F98000", -0.0, null)]
+        [InlineData("F93C00", 1.0, null)]
+        [InlineData("F93E00", 1.5, null)]
+        [InlineData("F97BFF", 65504.0, null)]
+        [InlineData("F90001", 5.960464477539063e-8, null)]
+        [InlineData("F90400", 0.00006103515625, null)]
+        [InlineData("F9C400", -4.0, null)]
+        [InlineData("F97E00", double.NaN, null)]
+        [InlineData("F97C00", double.PositiveInfinity, null)]
+        [InlineData("F9FC00", double.NegativeInfinity, null)]
+        // single
+        [InlineData("FA4141EB85", 12.119999885559082, null)]
+        [InlineData("FAFFC00000", double.NaN, null)]
+        [InlineData("FA7F800000", double.PositiveInfinity, null)]
+        [InlineData("FAFF800000", double.NegativeInfinity, null)]
+        // double
         [InlineData("FB40283D70A3D70A3D", 12.12, null)]
         [InlineData("FBFFF8000000000000", double.NaN, null)]
         [InlineData("FB7FF0000000000000", double.PositiveInfinity, null)]

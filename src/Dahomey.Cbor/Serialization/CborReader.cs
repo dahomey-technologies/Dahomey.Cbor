@@ -305,43 +305,114 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Half ReadHalf()
+        {
+            SkipSemanticTag();
+            CborReaderHeader header = GetHeader();
+
+            switch (header.MajorType)
+            {
+                case CborMajorType.PositiveInteger:
+                    return ReadInteger();
+
+                case CborMajorType.NegativeInteger:
+                    return -1L - (long)ReadInteger();
+
+                case CborMajorType.Primitive:
+                    {
+                        switch (header.Primitive)
+                        {
+                            case CborPrimitive.HalfFloat:
+                                return InternalReadHalf();
+
+                            case CborPrimitive.SingleFloat:
+                                return (Half)InternalReadSingle();
+
+                            case CborPrimitive.DoubleFloat:
+                                return (Half)InternalReadDouble();
+
+                            default:
+                                throw new CborException($"Invalid primitive {header.Primitive}");
+                        }
+                    }
+
+                default:
+                    throw new CborException($"Invalid major type {header.MajorType}");
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public float ReadSingle()
         {
             SkipSemanticTag();
-            Expect(CborMajorType.Primitive);
+            CborReaderHeader header = GetHeader();
 
-            if (Accept(CborPrimitive.SingleFloat))
+            switch (header.MajorType)
             {
-                return InternalReadSingle();
-            }
+                case CborMajorType.PositiveInteger:
+                    return ReadInteger();
 
-            if (Accept(CborPrimitive.HalfFloat))
-            {
-                return (float)InternalReadHalfFloat();
-            }
+                case CborMajorType.NegativeInteger:
+                    return -1L - (long)ReadInteger();
 
-            Expect(CborPrimitive.DoubleFloat);
-            return (float)InternalReadDouble();
+                case CborMajorType.Primitive:
+                    {
+                        switch(header.Primitive)
+                        {
+                            case CborPrimitive.HalfFloat:
+                                return (float)InternalReadHalf();
+
+                            case CborPrimitive.SingleFloat:
+                                return InternalReadSingle();
+
+                            case CborPrimitive.DoubleFloat:
+                                return (float)InternalReadDouble();
+
+                            default:
+                                throw new CborException($"Invalid primitive {header.Primitive}");
+                        }
+                    }
+
+                default:
+                    throw new CborException($"Invalid major type {header.MajorType}");
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public double ReadDouble()
         {
             SkipSemanticTag();
-            Expect(CborMajorType.Primitive);
+            CborReaderHeader header = GetHeader();
 
-            if (Accept(CborPrimitive.DoubleFloat))
+            switch (header.MajorType)
             {
-                return InternalReadDouble();
-            }
+                case CborMajorType.PositiveInteger:
+                    return ReadInteger();
 
-            if (Accept(CborPrimitive.HalfFloat))
-            {
-                throw BuildException("Half precision floats are not supported");
-            }
+                case CborMajorType.NegativeInteger:
+                    return -1L - (long)ReadInteger();
 
-            Expect(CborPrimitive.SingleFloat);
-            return InternalReadSingle();
+                case CborMajorType.Primitive:
+                    {
+                        switch (header.Primitive)
+                        {
+                            case CborPrimitive.HalfFloat:
+                                return InternalReadHalf();
+
+                            case CborPrimitive.SingleFloat:
+                                return InternalReadSingle();
+
+                            case CborPrimitive.DoubleFloat:
+                                return InternalReadDouble();
+
+                            default:
+                                throw new CborException($"Invalid primitive {header.Primitive}");
+                        }
+                    }
+
+                default:
+                    throw new CborException($"Invalid major type {header.MajorType}");
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -487,27 +558,10 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private double InternalReadHalfFloat()
+        private Half InternalReadHalf()
         {
             ReadOnlySpan<byte> bytes = ReadBytes(2);
-
-            int half = (bytes[0] << 8) + bytes[1];
-            int exp = (half >> 10) & 0x1f;
-            int mant = half & 0x3ff;
-            double val;
-            if (exp == 0)
-            {
-                val = MathUtil.LdExp(mant, -24);
-            }
-            else if (exp != 31)
-            {
-                val = MathUtil.LdExp(mant + 1024, exp - 25);
-            }
-            else
-            {
-                val = mant == 0 ? double.PositiveInfinity : double.NaN;
-            }
-            return (half & 0x8000) != 0 ? -val : val;
+            return Half.ToHalf(bytes);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

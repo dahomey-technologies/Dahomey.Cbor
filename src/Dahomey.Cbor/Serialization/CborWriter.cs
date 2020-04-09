@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Dahomey.Cbor.Util;
+using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
@@ -99,51 +100,74 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void WriteHalf(Half value)
+        {
+            InternalWriteHalf(value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteSingle(float value)
         {
-            WritePrimitive(CborPrimitive.SingleFloat);
-
-            Span<byte> bytes = _bufferWriter.GetSpan(4);
-
-            if (BitConverter.IsLittleEndian)
+            if (float.IsNaN(value))
             {
-                uint uintValue;
-                unsafe
-                {
-                    uintValue = *(uint*)(&value);
-                }
-                BinaryPrimitives.WriteUInt32BigEndian(bytes, uintValue);
+                InternalWriteHalf(Half.NaN);
+                return;
             }
-            else
+            else if (float.IsNegativeInfinity(value))
             {
-                MemoryMarshal.Write(bytes, ref value);
+                InternalWriteHalf(Half.NegativeInfinity);
+                return;
+            }
+            else if (float.IsPositiveInfinity(value))
+            {
+                InternalWriteHalf(Half.PositiveInfinity);
+                return;
             }
 
-            _bufferWriter.Advance(4);
+            Half half = (Half)value; 
+            if (half == value)
+            {
+                InternalWriteHalf(half);
+                return;
+            }
+
+            InternalWriteSingle(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteDouble(double value)
         {
-            WritePrimitive(CborPrimitive.DoubleFloat);
-
-            Span<byte> bytes = _bufferWriter.GetSpan(8);
-
-            if (BitConverter.IsLittleEndian)
+            if (double.IsNaN(value))
             {
-                ulong ulongValue;
-                unsafe
-                {
-                    ulongValue = *(ulong*)(&value);
-                }
-                BinaryPrimitives.WriteUInt64BigEndian(bytes, ulongValue);
+                InternalWriteHalf(Half.NaN);
+                return;
             }
-            else
+            else if (double.IsNegativeInfinity(value))
             {
-                MemoryMarshal.Write(bytes, ref value);
+                InternalWriteHalf(Half.NegativeInfinity);
+                return;
+            }
+            else if (double.IsPositiveInfinity(value))
+            {
+                InternalWriteHalf(Half.PositiveInfinity);
+                return;
             }
 
-            _bufferWriter.Advance(8);
+            Half half = (Half)value;
+            if (half == value)
+            {
+                InternalWriteHalf(half);
+                return;
+            }
+
+            float single = (float)value;
+            if (single == value)
+            {
+                InternalWriteSingle(single);
+                return;
+            }
+
+            InternalWriteDouble(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -295,6 +319,69 @@ namespace Dahomey.Cbor.Serialization
                 BinaryPrimitives.WriteUInt64BigEndian(bytes, value);
                 _bufferWriter.Advance(8);
             }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InternalWriteHalf(Half value)
+        {
+            if (value.IsNaN)
+            {
+                value = Half.ToHalf(0x7e00);
+            }
+
+            WritePrimitive(CborPrimitive.HalfFloat);
+
+            Span<byte> bytes = _bufferWriter.GetSpan(2);
+            value.GetBytes(bytes);
+            _bufferWriter.Advance(2);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InternalWriteSingle(float value)
+        {
+            WritePrimitive(CborPrimitive.SingleFloat);
+
+            Span<byte> bytes = _bufferWriter.GetSpan(4);
+
+            if (BitConverter.IsLittleEndian)
+            {
+                uint uintValue;
+                unsafe
+                {
+                    uintValue = *(uint*)(&value);
+                }
+                BinaryPrimitives.WriteUInt32BigEndian(bytes, uintValue);
+            }
+            else
+            {
+                MemoryMarshal.Write(bytes, ref value);
+            }
+
+            _bufferWriter.Advance(4);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InternalWriteDouble(double value)
+        {
+            WritePrimitive(CborPrimitive.DoubleFloat);
+
+            Span<byte> bytes = _bufferWriter.GetSpan(8);
+
+            if (BitConverter.IsLittleEndian)
+            {
+                ulong ulongValue;
+                unsafe
+                {
+                    ulongValue = *(ulong*)(&value);
+                }
+                BinaryPrimitives.WriteUInt64BigEndian(bytes, ulongValue);
+            }
+            else
+            {
+                MemoryMarshal.Write(bytes, ref value);
+            }
+
+            _bufferWriter.Advance(8);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
