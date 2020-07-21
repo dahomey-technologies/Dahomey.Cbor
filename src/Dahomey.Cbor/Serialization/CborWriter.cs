@@ -171,6 +171,12 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void WriteDecimal(decimal value)
+        {
+            InternalWriteDecimal(value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteString(string? value)
         {
             if (value == null)
@@ -382,6 +388,31 @@ namespace Dahomey.Cbor.Serialization
             }
 
             _bufferWriter.Advance(8);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void InternalWriteDecimal(decimal value)
+        {
+            WritePrimitive(CborPrimitive.DecimalFloat);
+
+            Span<byte> bytes = _bufferWriter.GetSpan(16);
+            var span = _bufferWriter.GetSpan(16);
+
+            if (BitConverter.IsLittleEndian)
+            {
+                int[] bits = decimal.GetBits(value);
+
+                BinaryPrimitives.WriteInt32BigEndian(span.Slice(0, 4), bits[1]);
+                BinaryPrimitives.WriteInt32BigEndian(span.Slice(4, 4), bits[0]);
+                BinaryPrimitives.WriteInt32BigEndian(span.Slice(8, 4), bits[2]);
+                BinaryPrimitives.WriteInt32BigEndian(span.Slice(12, 4), bits[3]);
+            }
+            else
+            {
+                MemoryMarshal.Write(span, ref value);
+            }
+
+            _bufferWriter.Advance(16);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
