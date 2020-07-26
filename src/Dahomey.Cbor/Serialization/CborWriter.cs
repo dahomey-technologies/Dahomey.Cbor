@@ -1,10 +1,14 @@
-﻿using Dahomey.Cbor.Util;
-using System;
+﻿using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+#if NET5_0
+using Half = System.Half;
+#else
+using Half = Dahomey.Cbor.Util.Half;
+#endif
 
 namespace Dahomey.Cbor.Serialization
 {
@@ -126,7 +130,7 @@ namespace Dahomey.Cbor.Serialization
             }
 
             Half half = (Half)value; 
-            if (half == value)
+            if ((float)half == value)
             {
                 InternalWriteHalf(half);
                 return;
@@ -155,7 +159,7 @@ namespace Dahomey.Cbor.Serialization
             }
 
             Half half = (Half)value;
-            if (half == value)
+            if ((float)half == value)
             {
                 InternalWriteHalf(half);
                 return;

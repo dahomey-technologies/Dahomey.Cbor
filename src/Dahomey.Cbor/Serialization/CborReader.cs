@@ -1,9 +1,13 @@
-﻿using Dahomey.Cbor.Util;
-using System;
+﻿using System;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+#if NET5_0
+using Half = System.Half;
+#else
+using Half = Dahomey.Cbor.Util.Half;
+#endif
 
 namespace Dahomey.Cbor.Serialization
 {
@@ -314,10 +318,10 @@ namespace Dahomey.Cbor.Serialization
             switch (header.MajorType)
             {
                 case CborMajorType.PositiveInteger:
-                    return ReadInteger();
+                    return (Half)ReadInteger();
 
                 case CborMajorType.NegativeInteger:
-                    return -1L - (long)ReadInteger();
+                    return (Half)(- 1L - (long)ReadInteger());
 
                 case CborMajorType.Primitive:
                     {
@@ -398,7 +402,7 @@ namespace Dahomey.Cbor.Serialization
                         switch (header.Primitive)
                         {
                             case CborPrimitive.HalfFloat:
-                                return InternalReadHalf();
+                                return (double)InternalReadHalf();
 
                             case CborPrimitive.SingleFloat:
                                 return InternalReadSingle();
@@ -562,6 +566,7 @@ namespace Dahomey.Cbor.Serialization
         private Half InternalReadHalf()
         {
             ReadOnlySpan<byte> bytes = ReadBytes(2);
+            return Half.Parse(bytes);
             return Half.ToHalf(bytes);
         }
 
