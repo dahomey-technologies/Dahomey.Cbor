@@ -75,6 +75,7 @@ namespace Dahomey.Cbor.Serialization
         private int _remainingItemCount;
 
         public CborOptions Options { get; }
+        public ReadOnlySpan<byte> Buffer => _buffer;
 
         public CborReader(ReadOnlySpan<byte> buffer, CborOptions? options = null)
         {

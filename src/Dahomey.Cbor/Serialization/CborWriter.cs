@@ -27,6 +27,7 @@ namespace Dahomey.Cbor.Serialization
         private IBufferWriter<byte> _bufferWriter;
 
         public CborOptions Options { get; }
+        public IBufferWriter<byte> BufferWriter => _bufferWriter;
 
         public CborWriter(IBufferWriter<byte> bufferWriter, CborOptions? options = null)
         {
