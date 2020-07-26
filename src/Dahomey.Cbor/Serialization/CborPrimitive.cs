@@ -10,6 +10,7 @@
         HalfFloat = 25,
         SingleFloat = 26,
         DoubleFloat = 27,
+        DecimalFloat = 28,
         Break = 31
     }
 }

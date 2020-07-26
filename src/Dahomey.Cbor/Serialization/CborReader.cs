@@ -23,7 +23,9 @@ namespace Dahomey.Cbor.Serialization
         ByteString,
         Array,
         Map,
-        Break
+        Break,
+
+        Decimal
     }
 
     public interface ICborMapReader<TC>
@@ -152,6 +154,9 @@ namespace Dahomey.Cbor.Serialization
 
                         case CborPrimitive.DoubleFloat:
                             return CborDataItemType.Double;
+
+                        case CborPrimitive.DecimalFloat:
+                            return CborDataItemType.Decimal;
 
                         case CborPrimitive.Break:
                             return CborDataItemType.Break;
@@ -421,6 +426,46 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public decimal ReadDecimal()
+        {
+            SkipSemanticTag();
+            CborReaderHeader header = GetHeader();
+
+            switch (header.MajorType)
+            {
+                case CborMajorType.PositiveInteger:
+                    return ReadInteger();
+
+                case CborMajorType.NegativeInteger:
+                    return -1L - (long)ReadInteger();
+
+                case CborMajorType.Primitive:
+                    {
+                        switch (header.Primitive)
+                        {
+                            case CborPrimitive.HalfFloat:
+                                return (decimal)InternalReadHalf();
+
+                            case CborPrimitive.SingleFloat:
+                                return Convert.ToDecimal(InternalReadSingle());
+
+                            case CborPrimitive.DoubleFloat:
+                                return Convert.ToDecimal(InternalReadDouble());
+
+                            case CborPrimitive.DecimalFloat:
+                                return InternalReadDecimal();
+
+                            default:
+                                throw new CborException($"Invalid primitive {header.Primitive}");
+                        }
+                    }
+
+                default:
+                    throw new CborException($"Invalid major type {header.MajorType}");
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadSize()
         {
             if (GetHeader().AdditionalValue == INDEFINITE_LENGTH)
@@ -609,6 +654,26 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private decimal InternalReadDecimal()
+        {
+            ReadOnlySpan<byte> bytes = ReadBytes(16);
+
+            if (BitConverter.IsLittleEndian)
+            {
+                int i1 = BinaryPrimitives.ReadInt32BigEndian(bytes.Slice(0, 4));
+                int i0 = BinaryPrimitives.ReadInt32BigEndian(bytes.Slice(4, 4));
+                int i2 = BinaryPrimitives.ReadInt32BigEndian(bytes.Slice(8, 4));
+                int i3 = BinaryPrimitives.ReadInt32BigEndian(bytes.Slice(12, 4));
+
+                return new decimal(new int[] { i0, i1, i2, i3 });
+            }
+            else
+            {
+                return MemoryMarshal.Read<decimal>(bytes);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ReadOnlySpan<byte> ReadSizeAndBytes()
         {
             int size = ReadSize();
@@ -731,6 +796,10 @@ namespace Dahomey.Cbor.Serialization
 
                         case CborPrimitive.DoubleFloat:
                             Advance(8);
+                            break;
+
+                        case CborPrimitive.DecimalFloat:
+                            Advance(16);
                             break;
                     }
                     break;

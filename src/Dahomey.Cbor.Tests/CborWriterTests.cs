@@ -209,6 +209,24 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Theory]
+        [InlineData("FC00013D2B9C2D125A0000000000080000", 3487324.89798234, null)]
+        public void WriteDecimal(string hexBuffer, decimal value, Type expectedExceptionType)
+        {
+            Helper.TestWrite(nameof(CborWriter.WriteDecimal), value, hexBuffer, expectedExceptionType);
+        }
+
+        [Theory]
+        [InlineData("FC0DED017037E8D1950000000000100000", "100.3459873459458453", null)]
+        [InlineData("FCFFFFFFFFFFFFFFFFFFFFFFFF80000000", "-79228162514264337593543950335", null)]
+        [InlineData("FCFFFFFFFFFFFFFFFFFFFFFFFF00000000", "79228162514264337593543950335", null)]
+        public void WriteDecimal2(string hexBuffer, string value, Type expectedExceptionType)
+        {
+            if (!decimal.TryParse(value, out decimal decimalValue)) throw new InvalidCastException("Specified string cannot be cast to a decimal value");
+
+            Helper.TestWrite(nameof(CborWriter.WriteDecimal), decimalValue, hexBuffer, expectedExceptionType);
+        }
+
+        [Theory]
         [InlineData("63666F6F", "foo", null)]
         [InlineData("F6", null, null)]
         [InlineData("60", "", null)]
