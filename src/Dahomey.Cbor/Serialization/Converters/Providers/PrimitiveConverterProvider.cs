@@ -19,6 +19,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
             [typeof(ulong)] = typeof(UInt64Converter),
             [typeof(float)] = typeof(SingleConverter),
             [typeof(double)] = typeof(DoubleConverter),
+            [typeof(decimal)] = typeof(DecimalConverter),
             [typeof(string)] = typeof(StringConverter),
             [typeof(DateTime)] = typeof(DateTimeConverter),
             [typeof(ReadOnlyMemory<byte>)] = typeof(ReadOnlyMemoryConverter),

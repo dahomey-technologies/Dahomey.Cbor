@@ -213,6 +213,25 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Theory]
+        [InlineData("FC00013D2B9C2D125A0000000000080000", 3487324.89798234, null)]
+        public void ReadDecimal(string hexBuffer, decimal expectedValue, Type expectedExceptionType)
+        {
+            Helper.TestRead(nameof(CborReader.ReadDecimal), hexBuffer, expectedValue, expectedExceptionType);
+        }
+
+        [Theory]
+        [InlineData("FC0DED017037E8D1950000000000100000", "100.3459873459458453", null)]
+        [InlineData("FCFFFFFFFFFFFFFFFFFFFFFFFF80000000", "-79228162514264337593543950335", null)]
+        [InlineData("FCFFFFFFFFFFFFFFFFFFFFFFFF00000000", "79228162514264337593543950335", null)]
+        public void ReadDecimal2(string hexBuffer, string expectedValue, Type expectedExceptionType)
+        {
+            if (!decimal.TryParse(expectedValue, out decimal decimalValue)) throw new InvalidCastException("Specified string cannot be cast to a decimal value");
+
+            Helper.TestRead(nameof(CborReader.ReadDecimal), hexBuffer, decimalValue, expectedExceptionType);
+        }
+
+
+        [Theory]
         [InlineData("63666F6F", "foo", null)]
         [InlineData("7F6166616F616FFF", "foo", typeof(NotSupportedException))]
         [InlineData("F6", null, null)]
