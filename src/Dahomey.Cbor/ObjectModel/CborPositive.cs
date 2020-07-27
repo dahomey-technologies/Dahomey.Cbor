@@ -49,7 +49,7 @@ namespace Dahomey.Cbor.ObjectModel
             return _value.ToString(CultureInfo.InvariantCulture);
         }
 
-        public override int CompareTo(CborValue other)
+        public override int CompareTo(CborValue? other)
         {
             if (other == null)
             {
@@ -64,7 +64,7 @@ namespace Dahomey.Cbor.ObjectModel
             return CompareTypeTo(other);
         }
 
-        public int CompareTo(CborPositive other)
+        public int CompareTo(CborPositive? other)
         {
             if (other == null)
             {
@@ -74,7 +74,7 @@ namespace Dahomey.Cbor.ObjectModel
             return _value.CompareTo(other._value);
         }
 
-        public bool Equals(CborPositive other)
+        public bool Equals(CborPositive? other)
         {
             return other != null && _value == other._value;
         }

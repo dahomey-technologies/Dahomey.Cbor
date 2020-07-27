@@ -106,7 +106,7 @@ namespace Dahomey.Cbor.ObjectModel
             return _values.GetEnumerator();
         }
 
-        public override int CompareTo(CborValue other)
+        public override int CompareTo(CborValue? other)
         {
             if (other == null)
             {
@@ -121,7 +121,7 @@ namespace Dahomey.Cbor.ObjectModel
             return CompareTypeTo(other);
         }
 
-        public int CompareTo(CborArray other)
+        public int CompareTo(CborArray? other)
         {
             if (other == null)
             {
@@ -145,8 +145,12 @@ namespace Dahomey.Cbor.ObjectModel
             }
         }
 
-        public bool Equals(CborArray other)
+        public bool Equals(CborArray? other)
         {
+            if (other == null)
+            {
+                throw new ArgumentNullException(nameof(other));
+            }
             return _values.SequenceEqual(other._values);
         }
 

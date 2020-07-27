@@ -45,7 +45,7 @@ namespace Dahomey.Cbor.ObjectModel
             return string.Format("\"{0}\"", _value);
         }
 
-        public override int CompareTo(CborValue other)
+        public override int CompareTo(CborValue? other)
         {
             if (other == null)
             {
@@ -60,7 +60,7 @@ namespace Dahomey.Cbor.ObjectModel
             return CompareTypeTo(other);
         }
 
-        public int CompareTo(CborString other)
+        public int CompareTo(CborString? other)
         {
             if (other == null)
             {
@@ -70,7 +70,7 @@ namespace Dahomey.Cbor.ObjectModel
             return _value.CompareTo(other._value);
         }
 
-        public bool Equals(CborString other)
+        public bool Equals(CborString? other)
         {
             return other != null && _value == other._value;
         }

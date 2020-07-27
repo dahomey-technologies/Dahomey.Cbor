@@ -70,7 +70,7 @@ namespace Dahomey.Cbor.ObjectModel
             return sb.ToString();
         }
 
-        public override int CompareTo(CborValue other)
+        public override int CompareTo(CborValue? other)
         {
             if (other == null)
             {
@@ -85,7 +85,7 @@ namespace Dahomey.Cbor.ObjectModel
             return CompareTypeTo(other);
         }
 
-        public int CompareTo(CborObject other)
+        public int CompareTo(CborObject? other)
         {
             if (other == null)
             {
@@ -111,7 +111,7 @@ namespace Dahomey.Cbor.ObjectModel
             }
         }
 
-        public bool Equals(CborObject other)
+        public bool Equals(CborObject? other)
         {
             return other != null && _pairs.SequenceEqual(other._pairs);
         }
@@ -155,7 +155,11 @@ namespace Dahomey.Cbor.ObjectModel
             return _pairs.Remove(key);
         }
 
-        public bool TryGetValue(CborValue key, [MaybeNullWhen(false)] out CborValue value)
+#if NETSTANDARD2_0
+        public bool TryGetValue(CborValue key, [NotNullWhen(true)] out CborValue value)
+#else
+        public bool TryGetValue(CborValue key, [NotNullWhen(true)] out CborValue? value)
+#endif
         {
             if (!_pairs.TryGetValue(key, out CborValue? result))
             {
@@ -231,7 +235,7 @@ namespace Dahomey.Cbor.ObjectModel
             return objectConverter.Read(ref reader);
         }
 
-        public override bool TryGetMember(GetMemberBinder binder, [MaybeNullWhen(false)] out object result)
+        public override bool TryGetMember(GetMemberBinder binder, [MaybeNullWhen(false)] out object? result)
         {
             if (!TryGetValue(binder.Name, out CborValue? value))
             {
@@ -242,7 +246,7 @@ namespace Dahomey.Cbor.ObjectModel
             return true;
         }
 
-        public override bool TrySetMember(SetMemberBinder binder, object value)
+        public override bool TrySetMember(SetMemberBinder binder, object? value)
         {
             if (value == null)
             {

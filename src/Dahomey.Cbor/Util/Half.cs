@@ -1,755 +1,297 @@
-﻿/// from https://gist.github.com/vermorel/1d5c0212752b3e611faf84771ad4ff0d
-/// ================ Half.cs ====================
-/// The code is free to use for any reason without any restrictions.
-/// Ladislav Lang (2009), Joannes Vermorel (2017)
+﻿// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
 
-using System;
-using System.Buffers.Binary;
+using Dahomey.Cbor.Util;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Runtime.CompilerServices;
+using System.Numerics;
 using System.Runtime.InteropServices;
 
-namespace Dahomey.Cbor.Util
+#if !NET5_0
+
+namespace System
 {
+    // Portions of the code implemented below are based on the 'Berkeley SoftFloat Release 3e' algorithms.
+
     /// <summary>
-    /// Represents a half-precision floating point number. 
+    /// An IEEE 754 compliant float16 type.
     /// </summary>
-    /// <remarks>
-    /// Note:
-    ///     Half is not fast enought and precision is also very bad, 
-    ///     so is should not be used for mathematical computation (use Single instead).
-    ///     The main advantage of Half type is lower memory cost: two bytes per number. 
-    ///     Half is typically used in graphical applications.
-    ///     
-    /// Note: 
-    ///     All functions, where is used conversion half->float/float->half, 
-    ///     are approx. ten times slower than float->double/double->float, i.e. ~3ns on 2GHz CPU.
-    ///
-    /// References:
-    ///     - Code retrieved from http://sourceforge.net/p/csharp-half/code/HEAD/tree/ on 2015-12-04
-    ///     - Fast Half Float Conversions, Jeroen van der Zijp, link: http://www.fox-toolkit.org/ftp/fasthalffloatconversion.pdf
-    ///     - IEEE 754 revision, link: http://grouper.ieee.org/groups/754/
-    /// </remarks>
-    [Serializable]
-    public struct Half : IComparable, IFormattable, IConvertible, IComparable<Half>, IEquatable<Half>
+    [StructLayout(LayoutKind.Sequential)]
+    public readonly struct Half : IComparable, IFormattable, IComparable<Half>, IEquatable<Half>
     {
-        /// <summary>
-        /// Internal representation of the half-precision floating-point number.
-        /// </summary>
-        [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-        internal ushort Value;
+        private const NumberStyles DefaultParseStyle = NumberStyles.Float | NumberStyles.AllowThousands;
 
-        #region Constants
-        /// <summary>
-        /// Represents the smallest positive System.Half value greater than zero. This field is constant.
-        /// </summary>
-        public static readonly Half Epsilon = ToHalf(0x0001);
-        /// <summary>
-        /// Represents the largest possible value of System.Half. This field is constant.
-        /// </summary>
-        public static readonly Half MaxValue = ToHalf(0x7bff);
-        /// <summary>
-        /// Represents the smallest possible value of System.Half. This field is constant.
-        /// </summary>
-        public static readonly Half MinValue = ToHalf(0xfbff);
-        /// <summary>
-        /// Represents not a number (NaN). This field is constant.
-        /// </summary>
-        public static readonly Half NaN = ToHalf(0xfe00);
-        /// <summary>
-        /// Represents negative infinity. This field is constant.
-        /// </summary>
-        public static readonly Half NegativeInfinity = ToHalf(0xfc00);
-        /// <summary>
-        /// Represents positive infinity. This field is constant.
-        /// </summary>
-        public static readonly Half PositiveInfinity = ToHalf(0x7c00);
-        #endregion
+        // Constants for manipulating the private bit-representation
 
-        #region Constructors
-        /// <summary>
-        /// Initializes a new instance of System.Half to the value of the specified single-precision floating-point number.
-        /// </summary>
-        /// <param name="value">The value to represent as a System.Half.</param>
-        public Half(float value) { this = HalfHelper.SingleToHalf(value); }
-        /// <summary>
-        /// Initializes a new instance of System.Half to the value of the specified 32-bit signed integer.
-        /// </summary>
-        /// <param name="value">The value to represent as a System.Half.</param>
-        public Half(int value) : this((float)value) { }
-        /// <summary>
-        /// Initializes a new instance of System.Half to the value of the specified 64-bit signed integer.
-        /// </summary>
-        /// <param name="value">The value to represent as a System.Half.</param>
-        public Half(long value) : this((float)value) { }
-        /// <summary>
-        /// Initializes a new instance of System.Half to the value of the specified double-precision floating-point number.
-        /// </summary>
-        /// <param name="value">The value to represent as a System.Half.</param>
-        public Half(double value) : this((float)value) { }
-        /// <summary>
-        /// Initializes a new instance of System.Half to the value of the specified decimal number.
-        /// </summary>
-        /// <param name="value">The value to represent as a System.Half.</param>
-        public Half(decimal value) : this((float)value) { }
-        /// <summary>
-        /// Initializes a new instance of System.Half to the value of the specified 32-bit unsigned integer.
-        /// </summary>
-        /// <param name="value">The value to represent as a System.Half.</param>
-        public Half(uint value) : this((float)value) { }
-        /// <summary>
-        /// Initializes a new instance of System.Half to the value of the specified 64-bit unsigned integer.
-        /// </summary>
-        /// <param name="value">The value to represent as a System.Half.</param>
-        public Half(ulong value) : this((float)value) { }
-        #endregion
+        private const ulong DoubleSignMask = 0x8000_0000_0000_0000;
+        private const int DoubleSignShift = 63;
+        private const int DoubleShiftedSignMask = (int)(DoubleSignMask >> DoubleSignShift);
 
-        #region Numeric operators
+        private const ulong DoubleExponentMask = 0x7FF0_0000_0000_0000;
+        private const int DoubleExponentShift = 52;
+        private const int DoubleShiftedExponentMask = (int)(DoubleExponentMask >> DoubleExponentShift);
 
-        /// <summary>
-        /// Returns the result of multiplying the specified System.Half value by negative one.
-        /// </summary>
-        /// <param name="half">A System.Half.</param>
-        /// <returns>A System.Half with the value of half, but the opposite sign. -or- Zero, if half is zero.</returns>
-        public static Half Negate(Half half) { return -half; }
-        /// <summary>
-        /// Adds two specified System.Half values.
-        /// </summary>
-        /// <param name="half1">A System.Half.</param>
-        /// <param name="half2">A System.Half.</param>
-        /// <returns>A System.Half value that is the sum of half1 and half2.</returns>
-        public static Half Add(Half half1, Half half2) { return half1 + half2; }
-        /// <summary>
-        /// Subtracts one specified System.Half value from another.
-        /// </summary>
-        /// <param name="half1">A System.Half (the minuend).</param>
-        /// <param name="half2">A System.Half (the subtrahend).</param>
-        /// <returns>The System.Half result of subtracting half2 from half1.</returns>
-        public static Half Subtract(Half half1, Half half2) { return half1 - half2; }
-        /// <summary>
-        /// Multiplies two specified System.Half values.
-        /// </summary>
-        /// <param name="half1">A System.Half (the multiplicand).</param>
-        /// <param name="half2">A System.Half (the multiplier).</param>
-        /// <returns>A System.Half that is the result of multiplying half1 and half2.</returns>
-        public static Half Multiply(Half half1, Half half2) { return half1 * half2; }
-        /// <summary>
-        /// Divides two specified System.Half values.
-        /// </summary>
-        /// <param name="half1">A System.Half (the dividend).</param>
-        /// <param name="half2">A System.Half (the divisor).</param>
-        /// <returns>The System.Half that is the result of dividing half1 by half2.</returns>
-        /// <exception cref="System.DivideByZeroException">half2 is zero.</exception>
-        public static Half Divide(Half half1, Half half2) { return half1 / half2; }
+        private const ulong DoubleSignificandMask = 0x000F_FFFF_FFFF_FFFF;
 
-        /// <summary>
-        /// Returns the value of the System.Half operand (the sign of the operand is unchanged).
-        /// </summary>
-        /// <param name="half">The System.Half operand.</param>
-        /// <returns>The value of the operand, half.</returns>
-        public static Half operator +(Half half) { return half; }
-        /// <summary>
-        /// Negates the value of the specified System.Half operand.
-        /// </summary>
-        /// <param name="half">The System.Half operand.</param>
-        /// <returns>The result of half multiplied by negative one (-1).</returns>
-        public static Half operator -(Half half) { return HalfHelper.Negate(half); }
-        /// <summary>
-        /// Increments the System.Half operand by 1.
-        /// </summary>
-        /// <param name="half">The System.Half operand.</param>
-        /// <returns>The value of half incremented by 1.</returns>
-        public static Half operator ++(Half half) { return (Half)(half + 1f); }
-        /// <summary>
-        /// Decrements the System.Half operand by one.
-        /// </summary>
-        /// <param name="half">The System.Half operand.</param>
-        /// <returns>The value of half decremented by 1.</returns>
-        public static Half operator --(Half half) { return (Half)(half - 1f); }
-        /// <summary>
-        /// Adds two specified System.Half values.
-        /// </summary>
-        /// <param name="half1">A System.Half.</param>
-        /// <param name="half2">A System.Half.</param>
-        /// <returns>The System.Half result of adding half1 and half2.</returns>
-        public static Half operator +(Half half1, Half half2) { return (Half)(half1 + (float)half2); }
-        /// <summary>
-        /// Subtracts two specified System.Half values.
-        /// </summary>
-        /// <param name="half1">A System.Half.</param>
-        /// <param name="half2">A System.Half.</param>
-        /// <returns>The System.Half result of subtracting half1 and half2.</returns>        
-        public static Half operator -(Half half1, Half half2) { return (Half)(half1 - (float)half2); }
-        /// <summary>
-        /// Multiplies two specified System.Half values.
-        /// </summary>
-        /// <param name="half1">A System.Half.</param>
-        /// <param name="half2">A System.Half.</param>
-        /// <returns>The System.Half result of multiplying half1 by half2.</returns>
-        public static Half operator *(Half half1, Half half2) { return (Half)(half1 * (float)half2); }
-        /// <summary>
-        /// Divides two specified System.Half values.
-        /// </summary>
-        /// <param name="half1">A System.Half (the dividend).</param>
-        /// <param name="half2">A System.Half (the divisor).</param>
-        /// <returns>The System.Half result of half1 by half2.</returns>
-        public static Half operator /(Half half1, Half half2) { return (Half)(half1 / (float)half2); }
-        /// <summary>
-        /// Returns a value indicating whether two instances of System.Half are equal.
-        /// </summary>
-        /// <param name="half1">A System.Half.</param>
-        /// <param name="half2">A System.Half.</param>
-        /// <returns>true if half1 and half2 are equal; otherwise, false.</returns>
-        public static bool operator ==(Half half1, Half half2) { return (!half1.IsNaN && (half1.Value == half2.Value)); }
-        /// <summary>
-        /// Returns a value indicating whether two instances of System.Half are not equal.
-        /// </summary>
-        /// <param name="half1">A System.Half.</param>
-        /// <param name="half2">A System.Half.</param>
-        /// <returns>true if half1 and half2 are not equal; otherwise, false.</returns>
-        public static bool operator !=(Half half1, Half half2) { return half1.Value != half2.Value; }
-        /// <summary>
-        /// Returns a value indicating whether a specified System.Half is less than another specified System.Half.
-        /// </summary>
-        /// <param name="half1">A System.Half.</param>
-        /// <param name="half2">A System.Half.</param>
-        /// <returns>true if half1 is less than half1; otherwise, false.</returns>
-        public static bool operator <(Half half1, Half half2) { return half1 < (float)half2; }
-        /// <summary>
-        /// Returns a value indicating whether a specified System.Half is greater than another specified System.Half.
-        /// </summary>
-        /// <param name="half1">A System.Half.</param>
-        /// <param name="half2">A System.Half.</param>
-        /// <returns>true if half1 is greater than half2; otherwise, false.</returns>
-        public static bool operator >(Half half1, Half half2) { return half1 > (float)half2; }
-        /// <summary>
-        /// Returns a value indicating whether a specified System.Half is less than or equal to another specified System.Half.
-        /// </summary>
-        /// <param name="half1">A System.Half.</param>
-        /// <param name="half2">A System.Half.</param>
-        /// <returns>true if half1 is less than or equal to half2; otherwise, false.</returns>
-        public static bool operator <=(Half half1, Half half2) { return (half1 == half2) || (half1 < half2); }
-        /// <summary>
-        /// Returns a value indicating whether a specified System.Half is greater than or equal to another specified System.Half.
-        /// </summary>
-        /// <param name="half1">A System.Half.</param>
-        /// <param name="half2">A System.Half.</param>
-        /// <returns>true if half1 is greater than or equal to half2; otherwise, false.</returns>
-        public static bool operator >=(Half half1, Half half2) { return (half1 == half2) || (half1 > half2); }
-        #endregion
+        private const uint FloatSignMask = 0x8000_0000;
+        private const int FloatSignShift = 31;
+        private const int FloatShiftedSignMask = (int)(FloatSignMask >> FloatSignShift);
 
-        #region Type casting operators
-        /// <summary>
-        /// Converts an 8-bit unsigned integer to a System.Half.
-        /// </summary>
-        /// <param name="value">An 8-bit unsigned integer.</param>
-        /// <returns>A System.Half that represents the converted 8-bit unsigned integer.</returns>
-        public static implicit operator Half(byte value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a 16-bit signed integer to a System.Half.
-        /// </summary>
-        /// <param name="value">A 16-bit signed integer.</param>
-        /// <returns>A System.Half that represents the converted 16-bit signed integer.</returns>
-        public static implicit operator Half(short value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a Unicode character to a System.Half.
-        /// </summary>
-        /// <param name="value">A Unicode character.</param>
-        /// <returns>A System.Half that represents the converted Unicode character.</returns>
-        public static implicit operator Half(char value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a 32-bit signed integer to a System.Half.
-        /// </summary>
-        /// <param name="value">A 32-bit signed integer.</param>
-        /// <returns>A System.Half that represents the converted 32-bit signed integer.</returns>
-        public static implicit operator Half(int value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a 64-bit signed integer to a System.Half.
-        /// </summary>
-        /// <param name="value">A 64-bit signed integer.</param>
-        /// <returns>A System.Half that represents the converted 64-bit signed integer.</returns>
-        public static implicit operator Half(long value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a single-precision floating-point number to a System.Half.
-        /// </summary>
-        /// <param name="value">A single-precision floating-point number.</param>
-        /// <returns>A System.Half that represents the converted single-precision floating point number.</returns>
-        public static explicit operator Half(float value) { return new Half(value); }
-        /// <summary>
-        /// Converts a double-precision floating-point number to a System.Half.
-        /// </summary>
-        /// <param name="value">A double-precision floating-point number.</param>
-        /// <returns>A System.Half that represents the converted double-precision floating point number.</returns>
-        public static explicit operator Half(double value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a decimal number to a System.Half.
-        /// </summary>
-        /// <param name="value">decimal number</param>
-        /// <returns>A System.Half that represents the converted decimal number.</returns>
-        public static explicit operator Half(decimal value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a System.Half to an 8-bit unsigned integer.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>An 8-bit unsigned integer that represents the converted System.Half.</returns>
-        public static explicit operator byte(Half value) { return (byte)(float)value; }
-        /// <summary>
-        /// Converts a System.Half to a Unicode character.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>A Unicode character that represents the converted System.Half.</returns>
-        public static explicit operator char(Half value) { return (char)(float)value; }
-        /// <summary>
-        /// Converts a System.Half to a 16-bit signed integer.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>A 16-bit signed integer that represents the converted System.Half.</returns>
-        public static explicit operator short(Half value) { return (short)(float)value; }
-        /// <summary>
-        /// Converts a System.Half to a 32-bit signed integer.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>A 32-bit signed integer that represents the converted System.Half.</returns>
-        public static explicit operator int(Half value) { return (int)(float)value; }
-        /// <summary>
-        /// Converts a System.Half to a 64-bit signed integer.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>A 64-bit signed integer that represents the converted System.Half.</returns>
-        public static explicit operator long(Half value) { return (long)(float)value; }
-        /// <summary>
-        /// Converts a System.Half to a single-precision floating-point number.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>A single-precision floating-point number that represents the converted System.Half.</returns>
-        public static implicit operator float(Half value) { return HalfHelper.HalfToSingle(value); }
-        /// <summary>
-        /// Converts a System.Half to a double-precision floating-point number.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>A double-precision floating-point number that represents the converted System.Half.</returns>
-        public static implicit operator double(Half value) { return (float)value; }
-        /// <summary>
-        /// Converts a System.Half to a decimal number.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>A decimal number that represents the converted System.Half.</returns>
-        public static explicit operator decimal(Half value) { return (decimal)(float)value; }
-        /// <summary>
-        /// Converts an 8-bit signed integer to a System.Half.
-        /// </summary>
-        /// <param name="value">An 8-bit signed integer.</param>
-        /// <returns>A System.Half that represents the converted 8-bit signed integer.</returns>
-        public static implicit operator Half(sbyte value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a 16-bit unsigned integer to a System.Half.
-        /// </summary>
-        /// <param name="value">A 16-bit unsigned integer.</param>
-        /// <returns>A System.Half that represents the converted 16-bit unsigned integer.</returns>
-        public static implicit operator Half(ushort value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a 32-bit unsigned integer to a System.Half.
-        /// </summary>
-        /// <param name="value">A 32-bit unsigned integer.</param>
-        /// <returns>A System.Half that represents the converted 32-bit unsigned integer.</returns>
-        public static implicit operator Half(uint value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a 64-bit unsigned integer to a System.Half.
-        /// </summary>
-        /// <param name="value">A 64-bit unsigned integer.</param>
-        /// <returns>A System.Half that represents the converted 64-bit unsigned integer.</returns>
-        public static implicit operator Half(ulong value) { return new Half((float)value); }
-        /// <summary>
-        /// Converts a System.Half to an 8-bit signed integer.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>An 8-bit signed integer that represents the converted System.Half.</returns>
-        public static explicit operator sbyte(Half value) { return (sbyte)(float)value; }
-        /// <summary>
-        /// Converts a System.Half to a 16-bit unsigned integer.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>A 16-bit unsigned integer that represents the converted System.Half.</returns>
-        public static explicit operator ushort(Half value) { return (ushort)(float)value; }
-        /// <summary>
-        /// Converts a System.Half to a 32-bit unsigned integer.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>A 32-bit unsigned integer that represents the converted System.Half.</returns>
-        public static explicit operator uint(Half value) { return (uint)(float)value; }
-        /// <summary>
-        /// Converts a System.Half to a 64-bit unsigned integer.
-        /// </summary>
-        /// <param name="value">A System.Half to convert.</param>
-        /// <returns>A 64-bit unsigned integer that represents the converted System.Half.</returns>
-        public static explicit operator ulong(Half value) { return (ulong)(float)value; }
-        #endregion
+        private const uint FloatExponentMask = 0x7F80_0000;
+        private const int FloatExponentShift = 23;
+        private const int FloatShiftedExponentMask = (int)(FloatExponentMask >> FloatExponentShift);
 
-        /// <summary>
-        /// Compares this instance to a specified System.Half object.
-        /// </summary>
-        /// <param name="other">A System.Half object.</param>
-        /// <returns>
-        /// A signed number indicating the relative values of this instance and value.
-        /// Return Value Meaning Less than zero This instance is less than value. Zero
-        /// This instance is equal to value. Greater than zero This instance is greater than value.
-        /// </returns>
-        public int CompareTo(Half other)
+        private const uint FloatSignificandMask = 0x007F_FFFF;
+
+        private const ushort SignMask = 0x8000;
+        private const ushort SignShift = 15;
+
+        private const ushort ExponentMask = 0x7C00;
+        private const ushort ExponentShift = 10;
+
+        private const ushort SignificandMask = 0x03FF;
+        private const ushort SignificandShift = 0;
+
+        private const ushort MinSign = 0;
+        private const ushort MaxSign = 1;
+
+        private const ushort MinExponent = 0x00;
+        private const ushort MaxExponent = 0x1F;
+
+        private const ushort MinSignificand = 0x0000;
+        private const ushort MaxSignificand = 0x03FF;
+
+        // Constants representing the private bit-representation for various default values
+
+        private const ushort PositiveZeroBits = 0x0000;
+        private const ushort NegativeZeroBits = 0x8000;
+
+        private const ushort EpsilonBits = 0x0001;
+
+        private const ushort PositiveInfinityBits = 0x7C00;
+        private const ushort NegativeInfinityBits = 0xFC00;
+
+        private const ushort PositiveQNaNBits = 0x7E00;
+        private const ushort NegativeQNaNBits = 0xFE00;
+
+        private const ushort MinValueBits = 0xFBFF;
+        private const ushort MaxValueBits = 0x7BFF;
+
+        // Well-defined and commonly used values
+
+        public static Half Epsilon =>  new Half(EpsilonBits);                        //  5.9604645E-08
+
+        public static Half PositiveInfinity => new Half(PositiveInfinityBits);      //  1.0 / 0.0;
+
+        public static Half NegativeInfinity => new Half(NegativeInfinityBits);      // -1.0 / 0.0
+
+        public static Half NaN => new Half(NegativeQNaNBits);                       //  0.0 / 0.0
+
+        public static Half MinValue => new Half(MinValueBits);                      // -65504
+
+        public static Half MaxValue => new Half(MaxValueBits);                      //  65504
+
+        // We use these explicit definitions to avoid the confusion between 0.0 and -0.0.
+        private static readonly Half PositiveZero = new Half(PositiveZeroBits);            //  0.0
+        private static readonly Half NegativeZero = new Half(NegativeZeroBits);            // -0.0
+
+        private readonly ushort _value;
+
+        internal Half(ushort value)
         {
-            int result = 0;
-            if (this < other)
-            {
-                result = -1;
-            }
-            else if (this > other)
-            {
-                result = 1;
-            }
-            else if (this != other)
-            {
-                if (!IsNaN)
-                {
-                    result = 1;
-                }
-                else if (!IsNaN)
-                {
-                    result = -1;
-                }
-            }
-
-            return result;
-        }
-        /// <summary>
-        /// Compares this instance to a specified System.Object.
-        /// </summary>
-        /// <param name="obj">An System.Object or null.</param>
-        /// <returns>
-        /// A signed number indicating the relative values of this instance and value.
-        /// Return Value Meaning Less than zero This instance is less than value. Zero
-        /// This instance is equal to value. Greater than zero This instance is greater
-        /// than value. -or- value is null.
-        /// </returns>
-        /// <exception cref="System.ArgumentException">value is not a System.Half</exception>
-        public int CompareTo(object? obj)
-        {
-            int result = 0;
-            if (obj == null)
-            {
-                result = 1;
-            }
-            else
-            {
-                if (obj is Half)
-                {
-                    result = CompareTo((Half)obj);
-                }
-                else
-                {
-                    throw new ArgumentException("Object must be of type Half.");
-                }
-            }
-
-            return result;
-        }
-        /// <summary>
-        /// Returns a value indicating whether this instance and a specified System.Half object represent the same value.
-        /// </summary>
-        /// <param name="other">A System.Half object to compare to this instance.</param>
-        /// <returns>true if value is equal to this instance; otherwise, false.</returns>
-        public bool Equals(Half other)
-        {
-            return ((other == this) || (other.IsNaN && IsNaN));
-        }
-        /// <summary>
-        /// Returns a value indicating whether this instance and a specified System.Object
-        /// represent the same type and value.
-        /// </summary>
-        /// <param name="obj">An System.Object.</param>
-        /// <returns>true if value is a System.Half and equal to this instance; otherwise, false.</returns>
-        public override bool Equals(object? obj)
-        {
-            bool result = false;
-            if (obj is Half)
-            {
-                Half half = (Half)obj;
-                if ((half == this) || (half.IsNaN && IsNaN))
-                {
-                    result = true;
-                }
-            }
-
-            return result;
-        }
-        /// <summary>
-        /// Returns the hash code for this instance.
-        /// </summary>
-        /// <returns>A 32-bit signed integer hash code.</returns>
-        public override int GetHashCode() => Value.GetHashCode();
-        /// <summary>
-        /// Returns the System.TypeCode for value type System.Half.
-        /// </summary>
-        /// <returns>The enumerated constant (TypeCode)255.</returns>
-        public TypeCode GetTypeCode()
-        {
-            return (TypeCode)255;
+            _value = value;
         }
 
-        #region BitConverter & Math methods for Half
+        private Half(bool sign, ushort exp, ushort sig)
+            => _value = (ushort)(((sign ? 1 : 0) << SignShift) + (exp << ExponentShift) + sig);
 
-        /// <summary>
-        /// Fills a buffer with the specified half-precision floating point value.
-        /// </summary>
-        /// <param name="value">The buffer to fill.</param>
-        public void GetBytes(Span<byte> bytes)
+        private sbyte Exponent
         {
-            if (BitConverter.IsLittleEndian)
+            get
             {
-                BinaryPrimitives.WriteUInt16BigEndian(bytes, Value);
-            }
-            else
-            {
-                MemoryMarshal.Write(bytes, ref Value);
+                return (sbyte)((_value & ExponentMask) >> ExponentShift);
             }
         }
 
-        /// <summary>
-        /// Returns the specified half-precision floating point value as an array of bytes.
-        /// </summary>
-        /// <returns>An array of bytes with length 2.</returns>
-        public byte[] GetBytes()
+        private ushort Significand
         {
-            return BitConverter.GetBytes(Value);
-        }
-        /// <summary>
-        /// Converts the value of a specified instance of System.Half to its equivalent binary representation.
-        /// </summary>
-        /// <returns>A 16-bit unsigned integer that contain the binary representation of value.</returns>        
-        public ushort GetBits()
-        {
-            return Value;
-        }
-        /// <summary>
-        /// Returns a half-precision floating point number converted from two bytes
-        /// at a specified position in a byte array.
-        /// </summary>
-        /// <param name="value">An array of bytes.</param>
-        /// <param name="startIndex">The starting position within value.</param>
-        /// <returns>A half-precision floating point number formed by two bytes beginning at startIndex.</returns>
-        /// <exception cref="System.ArgumentException">
-        /// startIndex is greater than or equal to the length of value minus 1, and is
-        /// less than or equal to the length of value minus 1.
-        /// </exception>
-        /// <exception cref="System.ArgumentNullException">value is null.</exception>
-        /// <exception cref="System.ArgumentOutOfRangeException">startIndex is less than zero or greater than the length of value minus 1.</exception>
-        public static Half ToHalf(byte[] value, int startIndex)
-        {
-            return ToHalf((ushort)BitConverter.ToInt16(value, startIndex));
-        }
-        /// <summary>
-        /// Returns a half-precision floating point number converted from its binary representation.
-        /// </summary>
-        /// <param name="bits">Binary representation of System.Half value</param>
-        /// <returns>A half-precision floating point number formed by its binary representation.</returns>
-        public static Half ToHalf(ushort bits)
-        {
-            return new Half { Value = bits };
-        }
-
-        /// <summary>
-        /// Returns a half-precision floating point number converted from its binary representation.
-        /// </summary>
-        /// <param name="buffer">Binary representation of System.Half value</param>
-        /// <returns>A half-precision floating point number formed by its binary representation.</returns>
-        public static Half ToHalf(ReadOnlySpan<byte> buffer)
-        {
-            if (BitConverter.IsLittleEndian)
+            get
             {
-                ushort value = BinaryPrimitives.ReadUInt16BigEndian(buffer);
-                return ToHalf(value);
-            }
-            else
-            {
-                return MemoryMarshal.Read<ushort>(buffer);
+                return (ushort)((_value & SignificandMask) >> SignificandShift);
             }
         }
 
-        /// <summary>
-        /// Returns a value indicating the sign of a half-precision floating-point number.
-        /// </summary>
-        /// <returns>
-        /// A number indicating the sign of value. Number Description -1 value is less
-        /// than zero. 0 value is equal to zero. 1 value is greater than zero.
-        /// </returns>
-        /// <exception cref="System.ArithmeticException">value is equal to System.Half.NaN.</exception>
-        public int Sign()
+        public static bool operator <(Half left, Half right)
         {
-            float floatValue = this;
-
-            if (floatValue < 0f)
+            if (IsNaN(left) || IsNaN(right))
             {
-                return -1;
-            }
-            else if (floatValue > 0f)
-            {
-                return 1;
-            }
-            else
-            {
-                if (floatValue != 0f)
-                {
-                    throw new ArithmeticException("Function does not accept floating point Not-a-Number values.");
-                }
+                // IEEE defines that NaN is unordered with respect to everything, including itself.
+                return false;
             }
 
-            return 0;
+            bool leftIsNegative = IsNegative(left);
+
+            if (leftIsNegative != IsNegative(right))
+            {
+                // When the signs of left and right differ, we know that left is less than right if it is
+                // the negative value. The exception to this is if both values are zero, in which case IEEE
+                // says they should be equal, even if the signs differ.
+                return leftIsNegative && !AreZero(left, right);
+            }
+            return (short)(left._value) < (short)(right._value);
         }
-        /// <summary>
-        /// Returns the absolute value of a half-precision floating-point number.
-        /// </summary>
-        /// <returns>A half-precision floating-point number, x, such that 0 ≤ x ≤System.Half.MaxValue.</returns>
-        public Half Abs()
+
+        public static bool operator >(Half left, Half right)
         {
-            return HalfHelper.Abs(this);
+            return right < left;
         }
-        /// <summary>
-        /// Returns the larger of two half-precision floating-point numbers.
-        /// </summary>
-        /// <param name="value1">The first of two half-precision floating-point numbers to compare.</param>
-        /// <param name="value2">The second of two half-precision floating-point numbers to compare.</param>
-        /// <returns>
-        /// Parameter value1 or value2, whichever is larger. If value1, or value2, or both val1
-        /// and value2 are equal to System.Half.NaN, System.Half.NaN is returned.
-        /// </returns>
-        public static Half Max(Half value1, Half value2)
+
+        public static bool operator <=(Half left, Half right)
         {
-            return (value1 < value2) ? value2 : value1;
+            if (IsNaN(left) || IsNaN(right))
+            {
+                // IEEE defines that NaN is unordered with respect to everything, including itself.
+                return false;
+            }
+
+            bool leftIsNegative = IsNegative(left);
+
+            if (leftIsNegative != IsNegative(right))
+            {
+                // When the signs of left and right differ, we know that left is less than right if it is
+                // the negative value. The exception to this is if both values are zero, in which case IEEE
+                // says they should be equal, even if the signs differ.
+                return leftIsNegative || AreZero(left, right);
+            }
+            return (short)(left._value) <= (short)(right._value);
         }
-        /// <summary>
-        /// Returns the smaller of two half-precision floating-point numbers.
-        /// </summary>
-        /// <param name="value1">The first of two half-precision floating-point numbers to compare.</param>
-        /// <param name="value2">The second of two half-precision floating-point numbers to compare.</param>
-        /// <returns>
-        /// Parameter value1 or value2, whichever is smaller. If value1, or value2, or both val1
-        /// and value2 are equal to System.Half.NaN, System.Half.NaN is returned.
-        /// </returns>
-        public static Half Min(Half value1, Half value2)
+
+        public static bool operator >=(Half left, Half right)
         {
-            return (value1 < value2) ? value1 : value2;
+            return right <= left;
         }
-        #endregion
+
+        public static bool operator ==(Half left, Half right)
+        {
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(Half left, Half right)
+        {
+            return !(left.Equals(right));
+        }
+
+        /// <summary>Determines whether the specified value is finite (zero, subnormal, or normal).</summary>
+        public static bool IsFinite(Half value)
+        {
+            return StripSign(value) < PositiveInfinityBits;
+        }
+
+        /// <summary>Determines whether the specified value is infinite.</summary>
+        public static bool IsInfinity(Half value)
+        {
+            return StripSign(value) == PositiveInfinityBits;
+        }
+
+        /// <summary>Determines whether the specified value is NaN.</summary>
+        public static bool IsNaN(Half value)
+        {
+            return StripSign(value) > PositiveInfinityBits;
+        }
+
+        /// <summary>Determines whether the specified value is negative.</summary>
+        public static bool IsNegative(Half value)
+        {
+            return (short)(value._value) < 0;
+        }
+
+        /// <summary>Determines whether the specified value is negative infinity.</summary>
+        public static bool IsNegativeInfinity(Half value)
+        {
+            return value._value == NegativeInfinityBits;
+        }
+
+        /// <summary>Determines whether the specified value is normal.</summary>
+        // This is probably not worth inlining, it has branches and should be rarely called
+        public static bool IsNormal(Half value)
+        {
+            uint absValue = StripSign(value);
+            return (absValue < PositiveInfinityBits)    // is finite
+                && (absValue != 0)                      // is not zero
+                && ((absValue & ExponentMask) != 0);    // is not subnormal (has a non-zero exponent)
+        }
+
+        /// <summary>Determines whether the specified value is positive infinity.</summary>
+        public static bool IsPositiveInfinity(Half value)
+        {
+            return value._value == PositiveInfinityBits;
+        }
+
+        /// <summary>Determines whether the specified value is subnormal.</summary>
+        // This is probably not worth inlining, it has branches and should be rarely called
+        public static bool IsSubnormal(Half value)
+        {
+            uint absValue = StripSign(value);
+            return (absValue < PositiveInfinityBits)    // is finite
+                && (absValue != 0)                      // is not zero
+                && ((absValue & ExponentMask) == 0);    // is subnormal (has a zero exponent)
+        }
 
         /// <summary>
-        /// Returns a value indicating whether the specified number evaluates to not a number (System.Half.NaN).
+        /// Parses a <see cref="Half"/> from a <see cref="string"/> in the default parse style.
         /// </summary>
-        /// <returns>true if value evaluates to not a number (System.Half.NaN); otherwise, false.</returns>
-        public bool IsNaN => HalfHelper.IsNaN(this);
-        /// <summary>
-        /// Returns a value indicating whether the specified number evaluates to negative or positive infinity.
-        /// </summary>
-        /// <param name="half">A half-precision floating-point number.</param>
-        /// <returns>true if half evaluates to System.Half.PositiveInfinity or System.Half.NegativeInfinity; otherwise, false.</returns>
-        public bool IsInfinity => HalfHelper.IsInfinity(this);
-        /// <summary>
-        /// Returns a value indicating whether the specified number evaluates to negative infinity.
-        /// </summary>
-        /// <returns>true if half evaluates to System.Half.NegativeInfinity; otherwise, false.</returns>
-        public bool IsNegativeInfinity => HalfHelper.IsNegativeInfinity(this);
-        /// <summary>
-        /// Returns a value indicating whether the specified number evaluates to positive infinity.
-        /// </summary>
-        /// <returns>true if half evaluates to System.Half.PositiveInfinity; otherwise, false.</returns>
-        public bool IsPositiveInfinity => HalfHelper.IsPositiveInfinity(this);
+        /// <param name="s">The input to be parsed.</param>
+        /// <returns>The equivalent <see cref="Half"/> value representing the input string. If the input exceeds Half's range, a <see cref="Half.PositiveInfinity"/> or <see cref="Half.NegativeInfinity"/> is returned. </returns>
+        public static Half Parse(string s)
+        {
+            return (Half)float.Parse(s, CultureInfo.InvariantCulture);
+        }
 
-        #region String operations (Parse and ToString)
         /// <summary>
-        /// Converts the string representation of a number to its System.Half equivalent.
+        /// Parses a <see cref="Half"/> from a <see cref="string"/> in the given <see cref="NumberStyles"/>.
         /// </summary>
-        /// <param name="value">The string representation of the number to convert.</param>
-        /// <returns>The System.Half number equivalent to the number contained in value.</returns>
-        /// <exception cref="System.ArgumentNullException">value is null.</exception>
-        /// <exception cref="System.FormatException">value is not in the correct format.</exception>
-        /// <exception cref="System.OverflowException">value represents a number less than System.Half.MinValue or greater than System.Half.MaxValue.</exception>
-        public static Half Parse(string value)
+        /// <param name="s">The input to be parsed.</param>
+        /// <param name="style">The <see cref="NumberStyles"/> used to parse the input.</param>
+        /// <returns>The equivalent <see cref="Half"/> value representing the input string. If the input exceeds Half's range, a <see cref="Half.PositiveInfinity"/> or <see cref="Half.NegativeInfinity"/> is returned. </returns>
+        public static Half Parse(string s, NumberStyles style)
         {
-            return (Half)float.Parse(value, CultureInfo.InvariantCulture);
+            return (Half)float.Parse(s, style, CultureInfo.InvariantCulture);
         }
+
         /// <summary>
-        /// Converts the string representation of a number to its System.Half equivalent 
-        /// using the specified culture-specific format information.
+        /// Parses a <see cref="Half"/> from a <see cref="string"/> and <see cref="IFormatProvider"/>.
         /// </summary>
-        /// <param name="value">The string representation of the number to convert.</param>
-        /// <param name="provider">An System.IFormatProvider that supplies culture-specific parsing information about value.</param>
-        /// <returns>The System.Half number equivalent to the number contained in s as specified by provider.</returns>
-        /// <exception cref="System.ArgumentNullException">value is null.</exception>
-        /// <exception cref="System.FormatException">value is not in the correct format.</exception>
-        /// <exception cref="System.OverflowException">value represents a number less than System.Half.MinValue or greater than System.Half.MaxValue.</exception>
-        public static Half Parse(string value, IFormatProvider provider)
+        /// <param name="s">The input to be parsed.</param>
+        /// <param name="provider">A format provider.</param>
+        /// <returns>The equivalent <see cref="Half"/> value representing the input string. If the input exceeds Half's range, a <see cref="Half.PositiveInfinity"/> or <see cref="Half.NegativeInfinity"/> is returned. </returns>
+        public static Half Parse(string s, IFormatProvider? provider)
         {
-            return (Half)float.Parse(value, provider);
+            return (Half)float.Parse(s, provider);
         }
+
         /// <summary>
-        /// Converts the string representation of a number in a specified style to its System.Half equivalent.
+        /// Parses a <see cref="Half"/> from a <see cref="string"/> with the given <see cref="NumberStyles"/> and <see cref="IFormatProvider"/>.
         /// </summary>
-        /// <param name="value">The string representation of the number to convert.</param>
-        /// <param name="style">
-        /// A bitwise combination of System.Globalization.NumberStyles values that indicates
-        /// the style elements that can be present in value. A typical value to specify is
-        /// System.Globalization.NumberStyles.Number.
-        /// </param>
-        /// <returns>The System.Half number equivalent to the number contained in s as specified by style.</returns>
-        /// <exception cref="System.ArgumentNullException">value is null.</exception>
-        /// <exception cref="System.ArgumentException">
-        /// style is not a System.Globalization.NumberStyles value. -or- style is the
-        /// System.Globalization.NumberStyles.AllowHexSpecifier value.
-        /// </exception>
-        /// <exception cref="System.FormatException">value is not in the correct format.</exception>
-        /// <exception cref="System.OverflowException">value represents a number less than System.Half.MinValue or greater than System.Half.MaxValue.</exception>
-        public static Half Parse(string value, NumberStyles style)
+        /// <param name="s">The input to be parsed.</param>
+        /// <param name="style">The <see cref="NumberStyles"/> used to parse the input.</param>
+        /// <param name="provider">A format provider.</param>
+        /// <returns>The equivalent <see cref="Half"/> value representing the input string. If the input exceeds Half's range, a <see cref="Half.PositiveInfinity"/> or <see cref="Half.NegativeInfinity"/> is returned. </returns>
+        public static Half Parse(string s, NumberStyles style = DefaultParseStyle, IFormatProvider? provider = null)
         {
-            return (Half)float.Parse(value, style, CultureInfo.InvariantCulture);
+            return (Half)float.Parse(s, style, provider);
         }
+
         /// <summary>
-        /// Converts the string representation of a number to its System.Half equivalent 
-        /// using the specified style and culture-specific format.
+        /// Tries to parses a <see cref="Half"/> from a <see cref="string"/> in the default parse style.
         /// </summary>
-        /// <param name="value">The string representation of the number to convert.</param>
-        /// <param name="style">
-        /// A bitwise combination of System.Globalization.NumberStyles values that indicates
-        /// the style elements that can be present in value. A typical value to specify is 
-        /// System.Globalization.NumberStyles.Number.
-        /// </param>
-        /// <param name="provider">An System.IFormatProvider object that supplies culture-specific information about the format of value.</param>
-        /// <returns>The System.Half number equivalent to the number contained in s as specified by style and provider.</returns>
-        /// <exception cref="System.ArgumentNullException">value is null.</exception>
-        /// <exception cref="System.ArgumentException">
-        /// style is not a System.Globalization.NumberStyles value. -or- style is the
-        /// System.Globalization.NumberStyles.AllowHexSpecifier value.
-        /// </exception>
-        /// <exception cref="System.FormatException">value is not in the correct format.</exception>
-        /// <exception cref="System.OverflowException">value represents a number less than System.Half.MinValue or greater than System.Half.MaxValue.</exception>
-        public static Half Parse(string value, NumberStyles style, IFormatProvider provider)
-        {
-            return (Half)float.Parse(value, style, provider);
-        }
-        /// <summary>
-        /// Converts the string representation of a number to its System.Half equivalent.
-        /// A return value indicates whether the conversion succeeded or failed.
-        /// </summary>
-        /// <param name="value">The string representation of the number to convert.</param>
-        /// <param name="result">
-        /// When this method returns, contains the System.Half number that is equivalent
-        /// to the numeric value contained in value, if the conversion succeeded, or is zero
-        /// if the conversion failed. The conversion fails if the s parameter is null,
-        /// is not a number in a valid format, or represents a number less than System.Half.MinValue
-        /// or greater than System.Half.MaxValue. This parameter is passed uninitialized.
-        /// </param>
-        /// <returns>true if s was converted successfully; otherwise, false.</returns>
-        public static bool TryParse(string value, out Half result)
+        /// <param name="s">The input to be parsed.</param>
+        /// <param name="result">The equivalent <see cref="Half"/> value representing the input string if the parse was successful. If the input exceeds Half's range, a <see cref="Half.PositiveInfinity"/> or <see cref="Half.NegativeInfinity"/> is returned. If the parse was unsuccessful, a default <see cref="Half"/> value is returned.</param>
+        /// <returns><see langword="true" /> if the parse was successful, <see langword="false" /> otherwise.</returns>
+        public static bool TryParse([NotNullWhen(true)] string? s, out Half result)
         {
             float f;
-            if (float.TryParse(value, out f))
+            if (float.TryParse(s, out f))
             {
                 result = (Half)f;
                 return true;
@@ -758,34 +300,20 @@ namespace Dahomey.Cbor.Util
             result = new Half();
             return false;
         }
+
         /// <summary>
-        /// Converts the string representation of a number to its System.Half equivalent
-        /// using the specified style and culture-specific format. A return value indicates
-        /// whether the conversion succeeded or failed.
+        /// Tries to parse a <see cref="Half"/> from a <see cref="string"/> with the given <see cref="NumberStyles"/> and <see cref="IFormatProvider"/>.
         /// </summary>
-        /// <param name="value">The string representation of the number to convert.</param>
-        /// <param name="style">
-        /// A bitwise combination of System.Globalization.NumberStyles values that indicates
-        /// the permitted format of value. A typical value to specify is System.Globalization.NumberStyles.Number.
-        /// </param>
-        /// <param name="provider">An System.IFormatProvider object that supplies culture-specific parsing information about value.</param>
-        /// <param name="result">
-        /// When this method returns, contains the System.Half number that is equivalent
-        /// to the numeric value contained in value, if the conversion succeeded, or is zero
-        /// if the conversion failed. The conversion fails if the s parameter is null,
-        /// is not in a format compliant with style, or represents a number less than
-        /// System.Half.MinValue or greater than System.Half.MaxValue. This parameter is passed uninitialized.
-        /// </param>
-        /// <returns>true if s was converted successfully; otherwise, false.</returns>
-        /// <exception cref="System.ArgumentException">
-        /// style is not a System.Globalization.NumberStyles value. -or- style 
-        /// is the System.Globalization.NumberStyles.AllowHexSpecifier value.
-        /// </exception>
-        public static bool TryParse(string value, NumberStyles style, IFormatProvider provider, out Half result)
+        /// <param name="s">The input to be parsed.</param>
+        /// <param name="style">The <see cref="NumberStyles"/> used to parse the input.</param>
+        /// <param name="provider">A format provider. </param>
+        /// <param name="result">The equivalent <see cref="Half"/> value representing the input string if the parse was successful. If the input exceeds Half's range, a <see cref="Half.PositiveInfinity"/> or <see cref="Half.NegativeInfinity"/> is returned. If the parse was unsuccessful, a default <see cref="Half"/> value is returned.</param>
+        /// <returns><see langword="true" /> if the parse was successful, <see langword="false" /> otherwise.</returns>
+        public static bool TryParse([NotNullWhen(true)] string? s, NumberStyles style, IFormatProvider? provider, out Half result)
         {
             bool parseResult = false;
             float f;
-            if (float.TryParse(value, style, provider, out f))
+            if (float.TryParse(s, style, provider, out f))
             {
                 result = (Half)f;
                 parseResult = true;
@@ -797,310 +325,342 @@ namespace Dahomey.Cbor.Util
 
             return parseResult;
         }
+
+        private static bool AreZero(Half left, Half right)
+        {
+            // IEEE defines that positive and negative zero are equal, this gives us a quick equality check
+            // for two values by or'ing the private bits together and stripping the sign. They are both zero,
+            // and therefore equivalent, if the resulting value is still zero.
+            return (ushort)((left._value | right._value) & ~SignMask) == 0;
+        }
+
+        private static bool IsNaNOrZero(Half value)
+        {
+            return ((value._value - 1) & ~SignMask) >= PositiveInfinityBits;
+        }
+
+        private static uint StripSign(Half value)
+        {
+            return (ushort)(value._value & ~SignMask);
+        }
+
         /// <summary>
-        /// Converts the numeric value of this instance to its equivalent string representation.
+        /// Compares this object to another object, returning an integer that indicates the relationship.
         /// </summary>
-        /// <returns>A string that represents the value of this instance.</returns>
+        /// <returns>A value less than zero if this is less than <paramref name="obj"/>, zero if this is equal to <paramref name="obj"/>, or a value greater than zero if this is greater than <paramref name="obj"/>.</returns>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="obj"/> is not of type <see cref="Half"/>.</exception>
+        public int CompareTo(object? obj)
+        {
+            if (!(obj is Half))
+            {
+                return (obj is null) ? 1 : throw new ArgumentException("argument must be half");
+            }
+            return CompareTo((Half)(obj));
+        }
+
+        /// <summary>
+        /// Compares this object to another object, returning an integer that indicates the relationship.
+        /// </summary>
+        /// <returns>A value less than zero if this is less than <paramref name="other"/>, zero if this is equal to <paramref name="other"/>, or a value greater than zero if this is greater than <paramref name="other"/>.</returns>
+        public int CompareTo(Half other)
+        {
+            if (this < other)
+            {
+                return -1;
+            }
+
+            if (this > other)
+            {
+                return 1;
+            }
+
+            if (this == other)
+            {
+                return 0;
+            }
+
+            if (IsNaN(this))
+            {
+                return IsNaN(other) ? 0 : -1;
+            }
+
+            Debug.Assert(IsNaN(other));
+            return 1;
+        }
+
+        /// <summary>
+        /// Returns a value that indicates whether this instance is equal to a specified <paramref name="obj"/>.
+        /// </summary>
+        public override bool Equals(object? obj)
+        {
+            return (obj is Half other) && Equals(other);
+        }
+
+        /// <summary>
+        /// Returns a value that indicates whether this instance is equal to a specified <paramref name="other"/> value.
+        /// </summary>
+        public bool Equals(Half other)
+        {
+            if (IsNaN(this) || IsNaN(other))
+            {
+                // IEEE defines that NaN is not equal to anything, including itself.
+                return false;
+            }
+
+            // IEEE defines that positive and negative zero are equivalent.
+            return (_value == other._value) || AreZero(this, other);
+        }
+
+        /// <summary>
+        /// Serves as the default hash function.
+        /// </summary>
+        public override int GetHashCode()
+        {
+            if (IsNaNOrZero(this))
+            {
+                // All NaNs should have the same hash code, as should both Zeros.
+                return _value & PositiveInfinityBits;
+            }
+            return _value;
+        }
+
+        /// <summary>
+        /// Returns a string representation of the current value.
+        /// </summary>
         public override string ToString()
         {
             return ((float)this).ToString(CultureInfo.InvariantCulture);
         }
+
         /// <summary>
-        /// Converts the numeric value of this instance to its equivalent string representation
-        /// using the specified culture-specific format information.
+        /// Returns a string representation of the current value using the specified <paramref name="format"/>.
         /// </summary>
-        /// <param name="formatProvider">An System.IFormatProvider that supplies culture-specific formatting information.</param>
-        /// <returns>The string representation of the value of this instance as specified by provider.</returns>
-        public string ToString(IFormatProvider formatProvider)
-        {
-            return ((float)this).ToString(formatProvider);
-        }
-        /// <summary>
-        /// Converts the numeric value of this instance to its equivalent string representation, using the specified format.
-        /// </summary>
-        /// <param name="format">A numeric format string.</param>
-        /// <returns>The string representation of the value of this instance as specified by format.</returns>
-        public string ToString(string format)
+        public string ToString(string? format)
         {
             return ((float)this).ToString(format, CultureInfo.InvariantCulture);
         }
+
         /// <summary>
-        /// Converts the numeric value of this instance to its equivalent string representation 
-        /// using the specified format and culture-specific format information.
+        /// Returns a string representation of the current value with the specified <paramref name="provider"/>.
         /// </summary>
-        /// <param name="format">A numeric format string.</param>
-        /// <param name="formatProvider">An System.IFormatProvider that supplies culture-specific formatting information.</param>
-        /// <returns>The string representation of the value of this instance as specified by format and provider.</returns>
-        /// <exception cref="System.FormatException">format is invalid.</exception>
-        public string ToString(string? format, IFormatProvider? formatProvider)
+        public string ToString(IFormatProvider? provider)
         {
-            return ((float)this).ToString(format, formatProvider);
+            return ((float)this).ToString(provider);
         }
+
+        /// <summary>
+        /// Returns a string representation of the current value using the specified <paramref name="format"/> and <paramref name="provider"/>.
+        /// </summary>
+        public string ToString(string? format, IFormatProvider? provider)
+        {
+            return ((float)this).ToString(format, provider);
+        }
+
+        // -----------------------Start of to-half conversions-------------------------
+
+        public static explicit operator Half(float value)
+        {
+            const int SingleMaxExponent = 0xFF;
+
+            uint floatInt = (uint)HalfHelpers.SingleToInt32Bits(value);
+            bool sign = (floatInt & FloatSignMask) >> FloatSignShift != 0;
+            int exp = (int)(floatInt & FloatExponentMask) >> FloatExponentShift;
+            uint sig = floatInt & FloatSignificandMask;
+
+            if (exp == SingleMaxExponent)
+            {
+                if (sig != 0) // NaN
+                {
+                    return CreateHalfNaN(sign, (ulong)sig << 41); // Shift the significand bits to the left end
+                }
+                return sign ? NegativeInfinity : PositiveInfinity;
+            }
+
+            uint sigHalf = sig >> 9 | ((sig & 0x1FFU) != 0 ? 1U : 0U); // RightShiftJam
+
+            if ((exp | (int)sigHalf) == 0)
+            {
+                return new Half(sign, 0, 0);
+            }
+
+            return new Half(RoundPackToHalf(sign, (short)(exp - 0x71), (ushort)(sigHalf | 0x4000)));
+        }
+
+        public static explicit operator Half(double value)
+        {
+            const int DoubleMaxExponent = 0x7FF;
+
+            ulong doubleInt = (ulong)BitConverter.DoubleToInt64Bits(value);
+            bool sign = (doubleInt & DoubleSignMask) >> DoubleSignShift != 0;
+            int exp = (int)((doubleInt & DoubleExponentMask) >> DoubleExponentShift);
+            ulong sig = doubleInt & DoubleSignificandMask;
+
+            if (exp == DoubleMaxExponent)
+            {
+                if (sig != 0) // NaN
+                {
+                    return CreateHalfNaN(sign, sig << 12); // Shift the significand bits to the left end
+                }
+                return sign ? NegativeInfinity : PositiveInfinity;
+            }
+
+            uint sigHalf = (uint)ShiftRightJam(sig, 38);
+            if ((exp | (int)sigHalf) == 0)
+            {
+                return new Half(sign, 0, 0);
+            }
+            return new Half(RoundPackToHalf(sign, (short)(exp - 0x3F1), (ushort)(sigHalf | 0x4000)));
+        }
+
+        // -----------------------Start of from-half conversions-------------------------
+        public static explicit operator float(Half value)
+        {
+            bool sign = IsNegative(value);
+            int exp = value.Exponent;
+            uint sig = value.Significand;
+
+            if (exp == MaxExponent)
+            {
+                if (sig != 0)
+                {
+                    return CreateSingleNaN(sign, (ulong)sig << 54);
+                }
+                return sign ? float.NegativeInfinity : float.PositiveInfinity;
+            }
+
+            if (exp == 0)
+            {
+                if (sig == 0)
+                {
+                    return HalfHelpers.Int32BitsToSingle((int)(sign ? FloatSignMask : 0)); // Positive / Negative zero
+                }
+                (exp, sig) = NormSubnormalF16Sig(sig);
+                exp -= 1;
+            }
+
+            return CreateSingle(sign, (byte)(exp + 0x70), sig << 13);
+        }
+
+        public static explicit operator double(Half value)
+        {
+            bool sign = IsNegative(value);
+            int exp = value.Exponent;
+            uint sig = value.Significand;
+
+            if (exp == MaxExponent)
+            {
+                if (sig != 0)
+                {
+                    return CreateDoubleNaN(sign, (ulong)sig << 54);
+                }
+                return sign ? double.NegativeInfinity : double.PositiveInfinity;
+            }
+
+            if (exp == 0)
+            {
+                if (sig == 0)
+                {
+                    return BitConverter.Int64BitsToDouble((long)(sign ? DoubleSignMask : 0)); // Positive / Negative zero
+                }
+                (exp, sig) = NormSubnormalF16Sig(sig);
+                exp -= 1;
+            }
+
+            return CreateDouble(sign, (ushort)(exp + 0x3F0), (ulong)sig << 42);
+        }
+
+        // IEEE 754 specifies NaNs to be propagated
+        internal static Half Negate(Half value)
+        {
+            return IsNaN(value) ? value : new Half((ushort)(value._value ^ SignMask));
+        }
+
+        private static (int Exp, uint Sig) NormSubnormalF16Sig(uint sig)
+        {
+            int shiftDist = HalfHelpers.LeadingZeroCount(sig) - 16 - 5;
+            return (1 - shiftDist, sig << shiftDist);
+        }
+
+        #region Utilities
+
+        // Significand bits should be shifted towards to the left end before calling these methods
+        // Creates Quiet NaN if significand == 0
+        private static Half CreateHalfNaN(bool sign, ulong significand)
+        {
+            const uint NaNBits = ExponentMask | 0x200; // Most significant significand bit
+
+            uint signInt = (sign ? 1U : 0U) << SignShift;
+            uint sigInt = (uint)(significand >> 54);
+
+            return HalfHelpers.UInt16BitsToHalf((ushort)(signInt | NaNBits | sigInt));
+        }
+
+        private static ushort RoundPackToHalf(bool sign, short exp, ushort sig)
+        {
+            const int RoundIncrement = 0x8; // Depends on rounding mode but it's always towards closest / ties to even
+            int roundBits = sig & 0xF;
+
+            if ((uint)exp >= 0x1D)
+            {
+                if (exp < 0)
+                {
+                    sig = (ushort)ShiftRightJam(sig, -exp);
+                    exp = 0;
+                }
+                else if (exp > 0x1D || sig + RoundIncrement >= 0x8000) // Overflow
+                {
+                    return sign ? NegativeInfinityBits : PositiveInfinityBits;
+                }
+            }
+
+            sig = (ushort)((sig + RoundIncrement) >> 4);
+            sig &= (ushort)~(((roundBits ^ 8) != 0 ? 0 : 1) & 1);
+
+            if (sig == 0)
+            {
+                exp = 0;
+            }
+
+            return new Half(sign, (ushort)exp, sig)._value;
+        }
+
+        // If any bits are lost by shifting, "jam" them into the LSB.
+        // if dist > bit count, Will be 1 or 0 depending on i
+        // (unlike bitwise operators that masks the lower 5 bits)
+        private static uint ShiftRightJam(uint i, int dist)
+            => dist < 31 ? (i >> dist) | (i << (-dist & 31) != 0 ? 1U : 0U) : (i != 0 ? 1U : 0U);
+
+        private static ulong ShiftRightJam(ulong l, int dist)
+            => dist < 63 ? (l >> dist) | (l << (-dist & 63) != 0 ? 1UL : 0UL) : (l != 0 ? 1UL : 0UL);
+
+        private static float CreateSingleNaN(bool sign, ulong significand)
+        {
+            const uint NaNBits = FloatExponentMask | 0x400000; // Most significant significand bit
+
+            uint signInt = (sign ? 1U : 0U) << FloatSignShift;
+            uint sigInt = (uint)(significand >> 41);
+
+            return HalfHelpers.Int32BitsToSingle((int)(signInt | NaNBits | sigInt));
+        }
+
+        private static double CreateDoubleNaN(bool sign, ulong significand)
+        {
+            const ulong NaNBits = DoubleExponentMask | 0x80000_00000000; // Most significant significand bit
+
+            ulong signInt = (sign ? 1UL : 0UL) << DoubleSignShift;
+            ulong sigInt = significand >> 12;
+
+            return BitConverter.Int64BitsToDouble((long)(signInt | NaNBits | sigInt));
+        }
+
+        private static float CreateSingle(bool sign, byte exp, uint sig)
+            => HalfHelpers.Int32BitsToSingle((int)(((sign ? 1U : 0U) << FloatSignShift) | ((uint)exp << FloatExponentShift) | sig));
+
+        private static double CreateDouble(bool sign, ushort exp, ulong sig)
+            => BitConverter.Int64BitsToDouble((long)(((sign ? 1UL : 0UL) << DoubleSignShift) | ((ulong)exp << DoubleExponentShift) | sig));
+
         #endregion
-
-        #region IConvertible Members
-        float IConvertible.ToSingle(IFormatProvider? provider)
-        {
-            return this;
-        }
-        TypeCode IConvertible.GetTypeCode()
-        {
-            return GetTypeCode();
-        }
-        bool IConvertible.ToBoolean(IFormatProvider? provider)
-        {
-            return Convert.ToBoolean(this);
-        }
-        byte IConvertible.ToByte(IFormatProvider? provider)
-        {
-            return Convert.ToByte(this);
-        }
-        char IConvertible.ToChar(IFormatProvider? provider)
-        {
-            throw new InvalidCastException(string.Format(CultureInfo.CurrentCulture, "Invalid cast from '{0}' to '{1}'.", "Half", "Char"));
-        }
-        DateTime IConvertible.ToDateTime(IFormatProvider? provider)
-        {
-            throw new InvalidCastException(string.Format(CultureInfo.CurrentCulture, "Invalid cast from '{0}' to '{1}'.", "Half", "DateTime"));
-        }
-        decimal IConvertible.ToDecimal(IFormatProvider? provider)
-        {
-            return Convert.ToDecimal(this);
-        }
-        double IConvertible.ToDouble(IFormatProvider? provider)
-        {
-            return Convert.ToDouble(this);
-        }
-        short IConvertible.ToInt16(IFormatProvider? provider)
-        {
-            return Convert.ToInt16(this);
-        }
-        int IConvertible.ToInt32(IFormatProvider? provider)
-        {
-            return Convert.ToInt32(this);
-        }
-        long IConvertible.ToInt64(IFormatProvider? provider)
-        {
-            return Convert.ToInt64(this);
-        }
-        sbyte IConvertible.ToSByte(IFormatProvider? provider)
-        {
-            return Convert.ToSByte(this);
-        }
-        string IConvertible.ToString(IFormatProvider? provider)
-        {
-            return Convert.ToString(this, CultureInfo.InvariantCulture);
-        }
-        object IConvertible.ToType(Type conversionType, IFormatProvider? provider)
-        {
-            return (((float)this) as IConvertible).ToType(conversionType, provider);
-        }
-        ushort IConvertible.ToUInt16(IFormatProvider? provider)
-        {
-            return Convert.ToUInt16(this);
-        }
-        uint IConvertible.ToUInt32(IFormatProvider? provider)
-        {
-            return Convert.ToUInt32(this);
-        }
-        ulong IConvertible.ToUInt64(IFormatProvider? provider)
-        {
-            return Convert.ToUInt64(this);
-        }
-        #endregion
-    }
-
-    /// <summary>
-    /// Helper class for Half conversions and some low level operations.
-    /// This class is internally used in the Half class.
-    /// </summary>
-    /// <remarks>
-    /// References:
-    ///     - Code retrieved from http://sourceforge.net/p/csharp-half/code/HEAD/tree/ on 2015-12-04
-    ///     - Fast Half Float Conversions, Jeroen van der Zijp, link: http://www.fox-toolkit.org/ftp/fasthalffloatconversion.pdf
-    /// </remarks>
-    internal static class HalfHelper
-    {
-        private static readonly uint[] MantissaTable = GenerateMantissaTable();
-        private static readonly uint[] ExponentTable = GenerateExponentTable();
-        private static readonly ushort[] OffsetTable = GenerateOffsetTable();
-        private static readonly ushort[] BaseTable = GenerateBaseTable();
-        private static readonly sbyte[] ShiftTable = GenerateShiftTable();
-
-        // Transforms the subnormal representation to a normalized one. 
-        private static uint ConvertMantissa(int i)
-        {
-            uint m = (uint)(i << 13); // Zero pad mantissa bits
-            uint e = 0; // Zero exponent
-
-            // While not normalized
-            while ((m & 0x00800000) == 0)
-            {
-                e -= 0x00800000; // Decrement exponent (1<<23)
-                m <<= 1; // Shift mantissa                
-            }
-            m &= unchecked((uint)~0x00800000); // Clear leading 1 bit
-            e += 0x38800000; // Adjust bias ((127-14)<<23)
-            return m | e; // Return combined number
-        }
-
-        private static uint[] GenerateMantissaTable()
-        {
-            uint[] mantissaTable = new uint[2048];
-            mantissaTable[0] = 0;
-            for (int i = 1; i < 1024; i++)
-            {
-                mantissaTable[i] = ConvertMantissa(i);
-            }
-            for (int i = 1024; i < 2048; i++)
-            {
-                mantissaTable[i] = (uint)(0x38000000 + ((i - 1024) << 13));
-            }
-
-            return mantissaTable;
-        }
-        private static uint[] GenerateExponentTable()
-        {
-            uint[] exponentTable = new uint[64];
-            exponentTable[0] = 0;
-            for (int i = 1; i < 31; i++)
-            {
-                exponentTable[i] = (uint)(i << 23);
-            }
-            exponentTable[31] = 0x47800000;
-            exponentTable[32] = 0x80000000;
-            for (int i = 33; i < 63; i++)
-            {
-                exponentTable[i] = (uint)(0x80000000 + ((i - 32) << 23));
-            }
-            exponentTable[63] = 0xc7800000;
-
-            return exponentTable;
-        }
-        private static ushort[] GenerateOffsetTable()
-        {
-            ushort[] offsetTable = new ushort[64];
-            offsetTable[0] = 0;
-            for (int i = 1; i < 32; i++)
-            {
-                offsetTable[i] = 1024;
-            }
-            offsetTable[32] = 0;
-            for (int i = 33; i < 64; i++)
-            {
-                offsetTable[i] = 1024;
-            }
-
-            return offsetTable;
-        }
-        private static ushort[] GenerateBaseTable()
-        {
-            ushort[] baseTable = new ushort[512];
-            for (int i = 0; i < 256; ++i)
-            {
-                sbyte e = (sbyte)(127 - i);
-                if (e > 24)
-                { // Very small numbers map to zero
-                    baseTable[i | 0x000] = 0x0000;
-                    baseTable[i | 0x100] = 0x8000;
-                }
-                else if (e > 14)
-                { // Small numbers map to denorms
-                    baseTable[i | 0x000] = (ushort)(0x0400 >> (18 + e));
-                    baseTable[i | 0x100] = (ushort)((0x0400 >> (18 + e)) | 0x8000);
-                }
-                else if (e >= -15)
-                { // Normal numbers just lose precision
-                    baseTable[i | 0x000] = (ushort)((15 - e) << 10);
-                    baseTable[i | 0x100] = (ushort)(((15 - e) << 10) | 0x8000);
-                }
-                else if (e > -128)
-                { // Large numbers map to Infinity
-                    baseTable[i | 0x000] = 0x7c00;
-                    baseTable[i | 0x100] = 0xfc00;
-                }
-                else
-                { // Infinity and NaN's stay Infinity and NaN's
-                    baseTable[i | 0x000] = 0x7c00;
-                    baseTable[i | 0x100] = 0xfc00;
-                }
-            }
-
-            return baseTable;
-        }
-        private static sbyte[] GenerateShiftTable()
-        {
-            sbyte[] shiftTable = new sbyte[512];
-            for (int i = 0; i < 256; ++i)
-            {
-                sbyte e = (sbyte)(127 - i);
-                if (e > 24)
-                { // Very small numbers map to zero
-                    shiftTable[i | 0x000] = 24;
-                    shiftTable[i | 0x100] = 24;
-                }
-                else if (e > 14)
-                { // Small numbers map to denorms
-                    shiftTable[i | 0x000] = (sbyte)(e - 1);
-                    shiftTable[i | 0x100] = (sbyte)(e - 1);
-                }
-                else if (e >= -15)
-                { // Normal numbers just lose precision
-                    shiftTable[i | 0x000] = 13;
-                    shiftTable[i | 0x100] = 13;
-                }
-                else if (e > -128)
-                { // Large numbers map to Infinity
-                    shiftTable[i | 0x000] = 24;
-                    shiftTable[i | 0x100] = 24;
-                }
-                else
-                { // Infinity and NaN's stay Infinity and NaN's
-                    shiftTable[i | 0x000] = 13;
-                    shiftTable[i | 0x100] = 13;
-                }
-            }
-
-            return shiftTable;
-        }
-
-        public static unsafe float HalfToSingle(Half half)
-        {
-            uint result = MantissaTable[OffsetTable[half.Value >> 10] + (half.Value & 0x3ff)] + ExponentTable[half.Value >> 10];
-            return *(float*)&result;
-        }
-        public static unsafe Half SingleToHalf(float single)
-        {
-            uint value = *(uint*)&single;
-
-            ushort result = (ushort)(BaseTable[(value >> 23) & 0x1ff] + ((value & 0x007fffff) >> ShiftTable[value >> 23]));
-            return Half.ToHalf(result);
-        }
-
-        public static Half Negate(Half half)
-        {
-            return Half.ToHalf((ushort)(half.Value ^ 0x8000));
-        }
-        public static Half Abs(Half half)
-        {
-            return Half.ToHalf((ushort)(half.Value & 0x7fff));
-        }
-
-        public static bool IsNaN(Half half)
-        {
-            return (half.Value & 0x7fff) > 0x7c00;
-        }
-        public static bool IsInfinity(Half half)
-        {
-            return (half.Value & 0x7fff) == 0x7c00;
-        }
-        public static bool IsPositiveInfinity(Half half)
-        {
-            return half.Value == 0x7c00;
-        }
-        public static bool IsNegativeInfinity(Half half)
-        {
-            return half.Value == 0xfc00;
-        }
     }
 }
+
+#endif

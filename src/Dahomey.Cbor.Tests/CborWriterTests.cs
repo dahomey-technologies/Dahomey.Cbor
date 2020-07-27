@@ -2,6 +2,7 @@ using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Util;
 using Xunit;
 using System;
+using System.Globalization;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -221,7 +222,7 @@ namespace Dahomey.Cbor.Tests
         [InlineData("FCFFFFFFFFFFFFFFFFFFFFFFFF00000000", "79228162514264337593543950335", null)]
         public void WriteDecimal2(string hexBuffer, string value, Type expectedExceptionType)
         {
-            if (!decimal.TryParse(value, out decimal decimalValue)) throw new InvalidCastException("Specified string cannot be cast to a decimal value");
+            if (!decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal decimalValue)) throw new InvalidCastException("Specified string cannot be cast to a decimal value");
 
             Helper.TestWrite(nameof(CborWriter.WriteDecimal), decimalValue, hexBuffer, expectedExceptionType);
         }
