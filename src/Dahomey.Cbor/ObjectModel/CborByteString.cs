@@ -28,7 +28,7 @@ namespace Dahomey.Cbor.ObjectModel
             return new CborByteString(value);
         }
 
-        public override int CompareTo(CborValue other)
+        public override int CompareTo(CborValue? other)
         {
             if (other == null)
             {
@@ -43,7 +43,7 @@ namespace Dahomey.Cbor.ObjectModel
             return CompareTypeTo(other);
         }
 
-        public int CompareTo(CborByteString other)
+        public int CompareTo(CborByteString? other)
         {
             if (other == null)
             {
@@ -63,8 +63,12 @@ namespace Dahomey.Cbor.ObjectModel
             return Equals(value);
         }
 
-        public bool Equals(CborByteString other)
+        public bool Equals(CborByteString? other)
         {
+            if (other == null)
+            {
+                throw new ArgumentNullException(nameof(other));
+            }
             return _value.Span.SequenceEqual(other._value.Span);
         }
 

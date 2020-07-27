@@ -2,6 +2,7 @@ using Dahomey.Cbor.Serialization;
 using Xunit;
 using System;
 using Dahomey.Cbor.Util;
+using System.Globalization;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -151,12 +152,18 @@ namespace Dahomey.Cbor.Tests
         [InlineData("F90001", 5.960464477539063e-8f, null)]
         [InlineData("F90400", 0.00006103515625f, null)]
         [InlineData("F9C400", -4f, null)]
-        [InlineData("F97E00", float.NaN, null)]
         [InlineData("F97C00", float.PositiveInfinity, null)]
         [InlineData("F9FC00", float.NegativeInfinity, null)]
         public void ReadHalf(string hexBuffer, float expectedValue, Type expectedExceptionType)
         {
             Helper.TestRead(nameof(CborReader.ReadHalf), hexBuffer, (Half)expectedValue, expectedExceptionType);
+        }
+
+        [Fact]
+        public void ReadNaNHalf()
+        {
+            Half actualValue = Helper.Read<Half>(nameof(CborReader.ReadHalf), "F97E00");
+            Assert.True(Half.IsNaN(actualValue));
         }
 
         [Theory]
@@ -225,7 +232,7 @@ namespace Dahomey.Cbor.Tests
         [InlineData("FCFFFFFFFFFFFFFFFFFFFFFFFF00000000", "79228162514264337593543950335", null)]
         public void ReadDecimal2(string hexBuffer, string expectedValue, Type expectedExceptionType)
         {
-            if (!decimal.TryParse(expectedValue, out decimal decimalValue)) throw new InvalidCastException("Specified string cannot be cast to a decimal value");
+            if (!decimal.TryParse(expectedValue, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal decimalValue)) throw new InvalidCastException("Specified string cannot be cast to a decimal value");
 
             Helper.TestRead(nameof(CborReader.ReadDecimal), hexBuffer, decimalValue, expectedExceptionType);
         }

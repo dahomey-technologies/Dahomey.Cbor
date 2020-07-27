@@ -126,7 +126,7 @@ namespace Dahomey.Cbor.Serialization
             }
 
             Half half = (Half)value; 
-            if (half == value)
+            if ((float)half == value)
             {
                 InternalWriteHalf(half);
                 return;
@@ -155,7 +155,7 @@ namespace Dahomey.Cbor.Serialization
             }
 
             Half half = (Half)value;
-            if (half == value)
+            if ((float)half == value)
             {
                 InternalWriteHalf(half);
                 return;
@@ -331,15 +331,15 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void InternalWriteHalf(Half value)
         {
-            if (value.IsNaN)
+            if (Half.IsNaN(value))
             {
-                value = Half.ToHalf(0x7e00);
+                value = HalfHelpers.UInt16BitsToHalf(0x7e00);
             }
 
             WritePrimitive(CborPrimitive.HalfFloat);
 
             Span<byte> bytes = _bufferWriter.GetSpan(2);
-            value.GetBytes(bytes);
+            HalfHelpers.WriteHalf(bytes, value);
             _bufferWriter.Advance(2);
         }
 

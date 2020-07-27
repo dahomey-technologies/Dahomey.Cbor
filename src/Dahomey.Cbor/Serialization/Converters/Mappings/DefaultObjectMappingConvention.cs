@@ -103,7 +103,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
             ConstructorInfo[] constructorInfos = type.GetConstructors(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
 
-            ConstructorInfo constructorInfo = constructorInfos
+            ConstructorInfo? constructorInfo = constructorInfos
                 .FirstOrDefault(c => c.IsDefined(typeof(CborConstructorAttribute)));
 
             if (constructorInfo != null)
@@ -122,7 +122,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 objectMapping.MapCreator(constructorInfo);
             }
 
-            MethodInfo methodInfo = type.GetMethods()
+            MethodInfo? methodInfo = type.GetMethods()
                 .FirstOrDefault(m => m.IsDefined(typeof(OnDeserializingAttribute)));
             if (methodInfo != null)
             {

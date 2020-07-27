@@ -61,7 +61,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
         private IDiscriminatorConvention? InternalGetConvention(Type type)
         {
-            IDiscriminatorConvention convention = _conventions.FirstOrDefault(c => c.TryRegisterType(type));
+            IDiscriminatorConvention? convention = _conventions.FirstOrDefault(c => c.TryRegisterType(type));
 
             if (convention != null)
             {

@@ -107,9 +107,9 @@ namespace Dahomey.Cbor.ObjectModel
             return new CborByteString(value.ToArray());
         }
 
-        public bool Equals(CborValue other)
+        public bool Equals(CborValue? other)
         {
-            return Equals((object)other);
+            return Equals((object?)other);
         }
 
         public int CompareTypeTo(CborValue other)
@@ -117,7 +117,7 @@ namespace Dahomey.Cbor.ObjectModel
             return other == null ? 1 : Type.CompareTo(other.Type);
         }
 
-        public abstract int CompareTo(CborValue other);
+        public abstract int CompareTo(CborValue? other);
         public abstract override bool Equals(object? obj);
         public abstract override int GetHashCode();
     }

@@ -19,7 +19,7 @@ on:
       - '*.*.*'        
 
 jobs:
-  build:
+  build_and_test:
 
     runs-on: ubuntu-16.04
 
@@ -35,12 +35,18 @@ jobs:
     - name: setup .net core 3.1.100
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 3.1.100
+        dotnet-version: 3.1.100        
+ 
+    - name: setup .net core 5.0.100-preview.7.20366.6
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 5.0.100-preview.7.20366.6
 
 # workaround for using multiple dotnet core installs
     - name: setup multiple sdks
       run: |
-        rsync -a ${DOTNET_ROOT/3.1.100/2.2.207}/* $DOTNET_ROOT/
+        rsync -a ${DOTNET_ROOT/5.0.100-preview.7.20366.6/2.2.207}/* $DOTNET_ROOT/
+        rsync -a ${DOTNET_ROOT/5.0.100-preview.7.20366.6/3.1.100}/* $DOTNET_ROOT/
         dotnet --info
     
     - name: build

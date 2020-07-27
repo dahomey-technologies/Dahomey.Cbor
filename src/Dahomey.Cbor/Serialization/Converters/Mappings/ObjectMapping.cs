@@ -162,7 +162,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 throw new ArgumentNullException("creatorLambda");
             }
 
-            if (creatorLambda.Body is NewExpression newExpression)
+            if (creatorLambda.Body is NewExpression newExpression && newExpression.Constructor != null)
             {
                 return MapCreator(newExpression.Constructor);
             }

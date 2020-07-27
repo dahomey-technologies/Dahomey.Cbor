@@ -15,7 +15,7 @@ namespace Dahomey.Cbor.ObjectModel
             return "null";
         }
 
-        public override int CompareTo(CborValue other)
+        public override int CompareTo(CborValue? other)
         {
             if (other == null)
             {
@@ -30,12 +30,12 @@ namespace Dahomey.Cbor.ObjectModel
             return CompareTypeTo(other);
         }
 
-        public int CompareTo(CborNull other)
+        public int CompareTo(CborNull? other)
         {
             return other == null ? 1 : 0;
         }
 
-        public bool Equals(CborNull other)
+        public bool Equals(CborNull? other)
         {
             return other != null;
         }

@@ -36,7 +36,7 @@ namespace Dahomey.Cbor.ObjectModel
             return _value ? "true" : "false";
         }
 
-        public override int CompareTo(CborValue other)
+        public override int CompareTo(CborValue? other)
         {
             if (other == null)
             {
@@ -51,7 +51,7 @@ namespace Dahomey.Cbor.ObjectModel
             return CompareTypeTo(other);
         }
 
-        public int CompareTo(CborBoolean other)
+        public int CompareTo(CborBoolean? other)
         {
             if (other == null)
             {
@@ -61,7 +61,7 @@ namespace Dahomey.Cbor.ObjectModel
             return (_value ? 1 : 0).CompareTo(other._value ? 1 : 0);
         }
 
-        public bool Equals(CborBoolean other)
+        public bool Equals(CborBoolean? other)
         {
             return other != null && _value == other._value;
         }

@@ -93,7 +93,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             for (int i = 0; i < _parameters.Length; i++)
             {
                 ParameterInfo parameter = _parameters[i];
-                IMemberMapping memberMapping;
+                IMemberMapping? memberMapping;
 
                 if (createMemberNames)
                 {

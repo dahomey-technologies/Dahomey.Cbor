@@ -319,10 +319,10 @@ namespace Dahomey.Cbor.Serialization
             switch (header.MajorType)
             {
                 case CborMajorType.PositiveInteger:
-                    return ReadInteger();
+                    return (Half)ReadInteger();
 
                 case CborMajorType.NegativeInteger:
-                    return -1L - (long)ReadInteger();
+                    return (Half)(- 1L - (long)ReadInteger());
 
                 case CborMajorType.Primitive:
                     {
@@ -403,7 +403,7 @@ namespace Dahomey.Cbor.Serialization
                         switch (header.Primitive)
                         {
                             case CborPrimitive.HalfFloat:
-                                return InternalReadHalf();
+                                return (double)InternalReadHalf();
 
                             case CborPrimitive.SingleFloat:
                                 return InternalReadSingle();
@@ -440,7 +440,7 @@ namespace Dahomey.Cbor.Serialization
                         switch (header.Primitive)
                         {
                             case CborPrimitive.HalfFloat:
-                                return (decimal)InternalReadHalf();
+                                return (decimal)(float)InternalReadHalf();
 
                             case CborPrimitive.SingleFloat:
                                 return Convert.ToDecimal(InternalReadSingle());
@@ -607,9 +607,9 @@ namespace Dahomey.Cbor.Serialization
         private Half InternalReadHalf()
         {
             ReadOnlySpan<byte> bytes = ReadBytes(2);
-            return Half.ToHalf(bytes);
+            return HalfHelpers.ReadHalf(bytes);
         }
-
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float InternalReadSingle()
         {
