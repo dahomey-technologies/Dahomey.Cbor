@@ -24,6 +24,7 @@ namespace Dahomey.Cbor.Tests
                 UInt64 = 19ul,
                 Single = 20.21f,
                 Double = 22.23,
+                Decimal = 2.71828m,
                 String = "string",
                 DateTime = new DateTime(2014, 02, 21, 19, 0, 0, DateTimeKind.Utc),
                 Enum = EnumTest.Value1
@@ -34,7 +35,7 @@ namespace Dahomey.Cbor.Tests
             Assert.NotNull(actual);
 
             // pairs
-            Assert.Equal(14, actual.Count);
+            Assert.Equal(15, actual.Count);
 
             // Boolean
             Assert.True(actual.TryGetValue("Boolean", out CborValue value));
@@ -91,6 +92,11 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(CborValueType.Double, value.Type);
             Assert.Equal(22.23, value.Value<double>());
 
+            // Decimal
+            Assert.True(actual.TryGetValue("Decimal", out value));
+            Assert.Equal(CborValueType.Decimal, value.Type);
+            Assert.Equal(2.71828m, value.Value<decimal>());
+
             // String
             Assert.True(actual.TryGetValue("String", out value));
             Assert.Equal(CborValueType.String, value.Type);
@@ -123,6 +129,7 @@ namespace Dahomey.Cbor.Tests
                 ["UInt64"] = 19,
                 ["Single"] = 20.21f,
                 ["Double"] = 22.23,
+                ["Decimal"] = 2.71828m,
                 ["String"] = "string",
                 ["DateTime"] = "2014-02-21T19:00:00Z",
                 ["Enum"] = (int)EnumTest.Value1,
@@ -142,6 +149,7 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(19ul, actual.UInt64);
             Assert.Equal(20.21f, actual.Single);
             Assert.Equal(22.23, actual.Double);
+            Assert.Equal(2.71828m, actual.Decimal);
             Assert.Equal("string", actual.String);
             Assert.Equal(new DateTime(2014, 02, 21, 19, 0, 0, DateTimeKind.Utc), actual.DateTime);
             Assert.Equal(EnumTest.Value1, actual.Enum);
@@ -163,6 +171,7 @@ namespace Dahomey.Cbor.Tests
                 ["UInt64"] = 19,
                 ["Single"] = 20.21f,
                 ["Double"] = 22.23,
+                ["Decimal"] = 2.71828m,
                 ["String"] = "string",
                 ["DateTime"] = "2014-02-21T19:00:00Z",
                 ["Enum"] = (int)EnumTest.Value1,
@@ -181,6 +190,7 @@ namespace Dahomey.Cbor.Tests
                 ["UInt64"] = 19,
                 ["Single"] = 20.21f,
                 ["Double"] = 22.23,
+                ["Decimal"] = 2.71828m,
                 ["String"] = "string",
                 ["DateTime"] = "2014-02-21T19:00:00Z",
                 ["Enum"] = (int)EnumTest.Value1,

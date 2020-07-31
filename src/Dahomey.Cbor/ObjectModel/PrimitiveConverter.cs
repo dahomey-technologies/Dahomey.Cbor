@@ -56,6 +56,7 @@ namespace Dahomey.Cbor.ObjectModel
             [(typeof(ulong), typeof(double))] = (Func<ulong, double>)(v => v),
             [(typeof(ulong), typeof(float))] = (Func<ulong, float>)(v => v),
             [(typeof(ulong), typeof(decimal))] = (Func<ulong, decimal>)(v => v),
+            [(typeof(decimal), typeof(decimal))] = (Func<decimal, decimal>)(v => v),
             [(typeof(decimal), typeof(double))] = (Func<decimal, double>)(v => (double)v),
             [(typeof(decimal), typeof(float))] = (Func<decimal, float>)(v => (float)v),
             [(typeof(double), typeof(sbyte))] = (Func<double, sbyte>)(v => (sbyte)v),
