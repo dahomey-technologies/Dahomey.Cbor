@@ -53,6 +53,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly ByteBufferDictionary<IMemberConverter> _memberConvertersForRead = new ByteBufferDictionary<IMemberConverter>();
         public List<IMemberConverter> _requiredMemberConvertersForRead = new List<IMemberConverter>();
         private readonly List<IMemberConverter> _memberConvertersForWrite;
+        private readonly CborOptions _options;
         private readonly SerializationRegistry _registry;
         private readonly IObjectMapping _objectMapping;
         private readonly Func<T>? _constructor;
@@ -62,9 +63,10 @@ namespace Dahomey.Cbor.Serialization.Converters
         public IReadOnlyList<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
         public IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead => _requiredMemberConvertersForRead;
 
-        public ObjectConverter(SerializationRegistry registry)
+        public ObjectConverter(CborOptions options)
         {
-            _registry = registry;
+            _options = options;
+            _registry = options.Registry;
             _objectMapping = registry.ObjectMappingRegistry.Lookup<T>();
 
             _memberConvertersForWrite = new List<IMemberConverter>();
@@ -235,11 +237,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             MapWriterContext context = new MapWriterContext
             {
-                options = writer.Options,
+                options = _options,
                 obj = value,
                 lengthMode = lengthMode != LengthMode.Default 
                     ? lengthMode : _objectMapping.LengthMode != LengthMode.Default 
-                        ? _objectMapping.LengthMode : writer.Options.MapLengthMode
+                        ? _objectMapping.LengthMode : _options.MapLengthMode
             };
 
             Type declaredType = typeof(T);
@@ -382,7 +384,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private void HandleUnknownName(ref CborReader reader, Type type, ReadOnlySpan<byte> rawName)
         {
-            if (reader.Options.UnhandledNameMode == UnhandledNameMode.ThrowException)
+            if (_options.UnhandledNameMode == UnhandledNameMode.ThrowException)
             {
                 throw reader.BuildException($"Unhandled name [{Encoding.ASCII.GetString(rawName)}] in class [{type.Name}] while deserializing.");
             }
