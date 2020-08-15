@@ -8,7 +8,11 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
-#if !NET5_0
+#if NET5_0
+
+[assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(System.Half))]
+
+#else
 
 namespace System
 {
