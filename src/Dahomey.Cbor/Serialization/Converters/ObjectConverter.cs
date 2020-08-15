@@ -67,7 +67,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             _options = options;
             _registry = options.Registry;
-            _objectMapping = registry.ObjectMappingRegistry.Lookup<T>();
+            _objectMapping = _registry.ObjectMappingRegistry.Lookup<T>();
 
             _memberConvertersForWrite = new List<IMemberConverter>();
 
@@ -110,7 +110,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 _constructor = defaultConstructorInfo.CreateDelegate<T>();
             }
 
-            _discriminatorConvention = registry.DiscriminatorConventionRegistry.GetConvention(typeof(T));
+            _discriminatorConvention = _registry.DiscriminatorConventionRegistry.GetConvention(typeof(T));
         }
 
         public T CreateInstance()

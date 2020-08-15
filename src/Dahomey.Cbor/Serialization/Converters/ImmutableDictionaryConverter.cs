@@ -12,8 +12,8 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly Func<IEnumerable<KeyValuePair<TK, TV>>, TC> _createRangeDelegate;
 
-        public ImmutableDictionaryConverter(SerializationRegistry registry)
-            : base(registry)
+        public ImmutableDictionaryConverter(CborOptions options)
+            : base(options)
         {
             string? typeFullName = typeof(TC).GetGenericTypeDefinition().FullName;
 

@@ -37,6 +37,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             public LengthMode lengthMode;
         }
 
+        private readonly CborOptions _options;
+
+        public CborValueConverter(CborOptions options)
+        {
+            _options = options;
+        }
+
         public override CborValue Read(ref CborReader reader)
         {
             switch (reader.GetCurrentDataItemType())
@@ -224,7 +231,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 obj = value,
                 enumerator = value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
-                    ? lengthMode : writer.Options.MapLengthMode
+                    ? lengthMode : _options.MapLengthMode
             };
             writer.WriteMap(this, ref mapWriterContext);
         }
@@ -264,7 +271,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 array = value,
                 lengthMode = lengthMode != LengthMode.Default
-                    ? lengthMode : writer.Options.ArrayLengthMode
+                    ? lengthMode : _options.ArrayLengthMode
             };
             writer.WriteArray(this, ref arrayWriterContext);
         }

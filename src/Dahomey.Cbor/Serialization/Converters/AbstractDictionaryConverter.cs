@@ -21,16 +21,18 @@ namespace Dahomey.Cbor.Serialization.Converters
             public LengthMode lengthMode;
         }
 
+        private readonly CborOptions _options;
         private readonly ICborConverter<TK> _keyConverter;
         private readonly ICborConverter<TV> _valueConverter;
 
         protected abstract IDictionary<TK, TV> InstantiateTempCollection();
         protected abstract TC InstantiateCollection(IDictionary<TK, TV> tempCollection);
 
-        public AbstractDictionaryConverter(SerializationRegistry registry)
+        public AbstractDictionaryConverter(CborOptions options)
         {
-            _keyConverter = registry.ConverterRegistry.Lookup<TK>();
-            _valueConverter = registry.ConverterRegistry.Lookup<TV>();
+            _options = options;
+            _keyConverter = options.Registry.ConverterRegistry.Lookup<TK>();
+            _valueConverter = options.Registry.ConverterRegistry.Lookup<TV>();
         }
 
         public override TC Read(ref CborReader reader)
@@ -58,7 +60,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 count = value.Count,
                 enumerator = value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
-                    ? lengthMode : writer.Options.MapLengthMode
+                    ? lengthMode : _options.MapLengthMode
             };
 
             writer.WriteMap(this, ref context);

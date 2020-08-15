@@ -21,11 +21,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             public LengthMode lengthMode;
         }
 
+        private readonly CborOptions _options;
         private readonly ICborConverter<TI> _itemConverter;
 
-        public ArrayConverter(SerializationRegistry registry)
+        public ArrayConverter(CborOptions options)
         {
-            _itemConverter = registry.ConverterRegistry.Lookup<TI>();
+            _options = options;
+            _itemConverter = options.Registry.ConverterRegistry.Lookup<TI>();
         }
 
         public override TI[]? Read(ref CborReader reader)
@@ -60,7 +62,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 array = value,
                 lengthMode = lengthMode != LengthMode.Default
-                    ? lengthMode : writer.Options.ArrayLengthMode
+                    ? lengthMode : _options.ArrayLengthMode
             };
 
             writer.WriteArray(this, ref context);

@@ -76,13 +76,11 @@ namespace Dahomey.Cbor.Serialization
         private CborReaderHeader _header;
         private int _remainingItemCount;
 
-        public CborOptions Options { get; }
         public ReadOnlySpan<byte> Buffer => _buffer;
 
-        public CborReader(ReadOnlySpan<byte> buffer, CborOptions? options = null)
+        public CborReader(ReadOnlySpan<byte> buffer)
         {
             _buffer = buffer;
-            Options = options ?? CborOptions.Default;
             _currentPos = 0;
             _state = CborReaderState.Start;
             _header = new CborReaderHeader();

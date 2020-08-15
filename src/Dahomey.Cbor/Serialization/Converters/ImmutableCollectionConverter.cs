@@ -11,8 +11,8 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly Func<IEnumerable<TI>, TC> _createRangeDelegate;
 
-        public ImmutableCollectionConverter(SerializationRegistry registry)
-            : base(registry)
+        public ImmutableCollectionConverter(CborOptions options)
+            : base(options)
         {
             string? typeFullName = typeof(TC).GetGenericTypeDefinition().FullName;
 

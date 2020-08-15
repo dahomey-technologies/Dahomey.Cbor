@@ -11,10 +11,10 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
         /// Gets a converter for a type.
         /// </summary>
         /// <param name="type">The type.</param>
-        /// <param name="registry">The serialization registry.</param>
+        /// <param name="options">The CBOR options.</param>
         /// <returns>
         /// A converter
         /// </returns>
-        ICborConverter? GetConverter(Type type, SerializationRegistry registry);
+        ICborConverter? GetConverter(Type type, CborOptions options);
     }
 }

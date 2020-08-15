@@ -21,11 +21,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             public LengthMode lengthMode;
         }
 
+        private readonly CborOptions _options;
         private readonly ICborConverter<TI> _itemConverter;
 
-        public AbstractCollectionConverter(SerializationRegistry registry)
+        public AbstractCollectionConverter(CborOptions options)
         {
-            _itemConverter = registry.ConverterRegistry.Lookup<TI>();
+            _options = options;
+            _itemConverter = options.Registry.ConverterRegistry.Lookup<TI>();
         }
 
         protected abstract ICollection<TI> InstantiateTempCollection();
@@ -57,7 +59,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 count = value.Count(),
                 enumerator = value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
-                    ? lengthMode : writer.Options.ArrayLengthMode
+                    ? lengthMode : _options.ArrayLengthMode
             };
 
             writer.WriteArray(this, ref context);

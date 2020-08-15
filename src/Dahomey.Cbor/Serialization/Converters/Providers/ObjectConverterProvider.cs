@@ -4,18 +4,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
 {
     public class ObjectConverterProvider : CborConverterProviderBase
     {
-        public override ICborConverter? GetConverter(Type type, SerializationRegistry registry)
+        public override ICborConverter? GetConverter(Type type, CborOptions options)
         {
             Type? nullableUnderlyingType = Nullable.GetUnderlyingType(type);
 
             if (nullableUnderlyingType != null)
             {
-                return CreateGenericConverter(registry, typeof(NullableConverter<>), nullableUnderlyingType);
+                return CreateGenericConverter(options, typeof(NullableConverter<>), nullableUnderlyingType);
             }
 
             if (type.IsClass || type.IsInterface)
             {
-                return CreateGenericConverter(registry, typeof(ObjectConverter<>), type);
+                return CreateGenericConverter(options, typeof(ObjectConverter<>), type);
             }
 
             return null;

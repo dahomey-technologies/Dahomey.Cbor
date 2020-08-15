@@ -4,9 +4,9 @@
     {
         private readonly ICborConverter<T> _cborConverter;
 
-        public NullableConverter(SerializationRegistry registry)
+        public NullableConverter(CborOptions options)
         {
-            this._cborConverter = registry.ConverterRegistry.Lookup<T>();
+            this._cborConverter = options.Registry.ConverterRegistry.Lookup<T>();
         }
 
         public override T? Read(ref CborReader reader)

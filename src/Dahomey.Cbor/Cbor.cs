@@ -147,7 +147,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer, options);
+            CborReader reader = new CborReader(buffer);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             return converter.Read(ref reader);
         }
@@ -159,7 +159,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer, options);
+            CborReader reader = new CborReader(buffer);
             ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
             return cborConverter.Read(ref reader);
         }
@@ -212,7 +212,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborWriter writer = new CborWriter(buffer, options);
+            CborWriter writer = new CborWriter(buffer);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             converter.Write(ref writer, input);
         }
@@ -225,7 +225,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborWriter writer = new CborWriter(buffer, options);
+            CborWriter writer = new CborWriter(buffer);
             ICborConverter converter = options.Registry.ConverterRegistry.Lookup(inputType);
             converter.Write(ref writer, input);
         }
