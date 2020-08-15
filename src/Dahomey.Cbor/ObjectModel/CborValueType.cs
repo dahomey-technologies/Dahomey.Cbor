@@ -9,6 +9,7 @@
         Negative,
         Single,
         Double,
+        Decimal,
         String,
         Boolean,
         Null,

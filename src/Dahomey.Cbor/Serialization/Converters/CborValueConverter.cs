@@ -60,6 +60,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                 case CborDataItemType.Double:
                     return reader.ReadDouble();
 
+                case CborDataItemType.Decimal:
+                    return reader.ReadDecimal();
+
                 case CborDataItemType.String:
                     return reader.ReadString();
 
@@ -103,6 +106,10 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 case CborValueType.Double:
                     writer.WriteDouble(value.Value<double>());
+                    break;
+
+                case CborValueType.Decimal:
+                    writer.WriteDecimal(value.Value<decimal>());
                     break;
 
                 case CborValueType.String:

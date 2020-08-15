@@ -53,6 +53,7 @@ namespace Dahomey.Cbor.Tests
         public string String { get; set; }
         public float Single { get; set; }
         public double Double { get; set; }
+        public decimal Decimal { get; set; }
         public DateTime DateTime { get; set; }
         public EnumTest Enum { get; set; }
     }
@@ -71,6 +72,7 @@ namespace Dahomey.Cbor.Tests
         public string String;
         public float Single;
         public double Double;
+        public decimal Decimal;
         public DateTime DateTime;
         public EnumTest Enum;
     }

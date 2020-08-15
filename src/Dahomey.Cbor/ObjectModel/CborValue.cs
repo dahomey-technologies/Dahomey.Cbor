@@ -36,7 +36,7 @@ namespace Dahomey.Cbor.ObjectModel
 
         public static implicit operator CborValue(decimal value)
         {
-            return (CborDouble)(double)value;
+            return (CborDecimal)value;
         }
 
         public static implicit operator CborValue(sbyte value)
