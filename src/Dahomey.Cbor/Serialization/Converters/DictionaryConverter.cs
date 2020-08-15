@@ -7,8 +7,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         where TC : class, IDictionary<TK, TV>, new()
         where TK : notnull
     {
-        public DictionaryConverter(SerializationRegistry registry)
-            : base(registry)
+        public DictionaryConverter(CborOptions options)
+            : base(options)
         {
         }
 

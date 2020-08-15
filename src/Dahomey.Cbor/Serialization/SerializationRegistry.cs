@@ -15,9 +15,9 @@ namespace Dahomey.Cbor.Serialization
         public ObjectMappingConventionRegistry ObjectMappingConventionRegistry { get; }
         public DiscriminatorConventionRegistry DiscriminatorConventionRegistry { get; }
 
-        public SerializationRegistry()
+        public SerializationRegistry(CborOptions options)
         {
-            ConverterRegistry = new CborConverterRegistry(this);
+            ConverterRegistry = new CborConverterRegistry(options);
             ObjectMappingRegistry = new ObjectMappingRegistry(this);
             ObjectMappingConventionRegistry = new ObjectMappingConventionRegistry();
             DiscriminatorConventionRegistry = new DiscriminatorConventionRegistry(this);

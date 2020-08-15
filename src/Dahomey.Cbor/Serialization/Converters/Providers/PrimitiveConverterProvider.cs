@@ -26,21 +26,21 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
             [typeof(byte[])] = typeof(ByteArrayConverter),
         };
 
-        public override ICborConverter? GetConverter(Type type, SerializationRegistry registry)
+        public override ICborConverter? GetConverter(Type type, CborOptions options)
         {
             if (_converterTypes.TryGetValue(type, out Type? converterType))
             {
-                return CreateConverter(registry, converterType);
+                return CreateConverter(options, converterType);
             }
 
             if (type.IsEnum)
             {
-                return CreateGenericConverter(registry, typeof(EnumConverter<>), type);
+                return CreateGenericConverter(options, typeof(EnumConverter<>), type);
             }
 
             if (typeof(CborValue).IsAssignableFrom(type))
             {
-                return CreateConverter(registry, typeof(CborValueConverter));
+                return CreateConverter(options, typeof(CborValueConverter));
             }
 
             return null;

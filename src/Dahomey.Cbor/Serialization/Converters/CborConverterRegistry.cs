@@ -7,13 +7,13 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public class CborConverterRegistry
     {
-        private readonly SerializationRegistry _registry;
+        private readonly CborOptions _options;
         private readonly ConcurrentDictionary<Type, ICborConverter> _converters = new ConcurrentDictionary<Type, ICborConverter>();
         private readonly ConcurrentStack<ICborConverterProvider> _providers = new ConcurrentStack<ICborConverterProvider>();        
 
-        public CborConverterRegistry(SerializationRegistry registry)
+        public CborConverterRegistry(CborOptions options)
         {
-            _registry = registry;
+            _options = options;
 
             // order matters. It's in reverse order of how they'll get consumed
             RegisterConverterProvider(new ObjectConverterProvider());
@@ -91,7 +91,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private ICborConverter CreateConverter(Type type)
         {
             ICborConverter? converter = _providers
-                .Select(provider => provider.GetConverter(type, _registry))
+                .Select(provider => provider.GetConverter(type, _options))
                 .FirstOrDefault(provider => provider != null);
 
             if (converter == null)

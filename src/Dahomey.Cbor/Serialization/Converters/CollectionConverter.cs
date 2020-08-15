@@ -6,8 +6,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         AbstractCollectionConverter<TC, TI>
         where TC : class, ICollection<TI>, new()
     {
-        public CollectionConverter(SerializationRegistry registry)
-            : base(registry)
+        public CollectionConverter(CborOptions options)
+            : base(options)
         {
         }
 

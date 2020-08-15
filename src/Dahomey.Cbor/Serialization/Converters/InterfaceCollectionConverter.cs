@@ -7,8 +7,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         where TInterface : IEnumerable<TItem>
         where TCollection : class, ICollection<TItem>, new()
     {
-        public InterfaceCollectionConverter(SerializationRegistry registry)
-            : base(registry)
+        public InterfaceCollectionConverter(CborOptions options)
+            : base(options)
         {
         }
 

@@ -12,8 +12,12 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly ByteBufferDictionary<T> names2Values = new ByteBufferDictionary<T>();
         private readonly Dictionary<T, ReadOnlyMemory<byte>> values2Names;
 
-        public EnumConverter()
+        private readonly CborOptions _options;
+
+        public EnumConverter(CborOptions options)
         {
+            _options = options;
+
             string[] names = Enum.GetNames(typeof(T));
             T[] values = Enum.GetValues(typeof(T)).Cast<T>().ToArray();
 
@@ -64,7 +68,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override void Write(ref CborWriter writer, T value)
         {
-            if (writer.Options.EnumFormat == ValueFormat.WriteToString)
+            if (_options.EnumFormat == ValueFormat.WriteToString)
             {
                 WriteString(ref writer, value);
             }

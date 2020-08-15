@@ -5,14 +5,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
 {
     public abstract class CborConverterProviderBase : ICborConverterProvider
     {
-        public abstract ICborConverter? GetConverter(Type type, SerializationRegistry registry);
+        public abstract ICborConverter? GetConverter(Type type, CborOptions options);
 
-        protected ICborConverter CreateConverter(SerializationRegistry registry, Type converterType)
+        protected ICborConverter CreateConverter(CborOptions options, Type converterType)
         {
-            ConstructorInfo? constructorInfo = converterType.GetConstructor(new[] { typeof(SerializationRegistry) });
+            ConstructorInfo? constructorInfo = converterType.GetConstructor(new[] { typeof(CborOptions) });
             if (constructorInfo != null)
             {
-                ICborConverter? converter = (ICborConverter?)Activator.CreateInstance(converterType, registry);
+                ICborConverter? converter = (ICborConverter?)Activator.CreateInstance(converterType, options);
 
                 if (converter == null)
                 {
@@ -39,9 +39,9 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 $"No suitable constructor found for converter type: '{converterType.FullName}'.");
         }
 
-        protected ICborConverter CreateGenericConverter(SerializationRegistry registry, Type genericType, params Type[] typeArguments)
+        protected ICborConverter CreateGenericConverter(CborOptions options, Type genericType, params Type[] typeArguments)
         {
-            return CreateConverter(registry, genericType.MakeGenericType(typeArguments));
+            return CreateConverter(options, genericType.MakeGenericType(typeArguments));
         }
     }
 }

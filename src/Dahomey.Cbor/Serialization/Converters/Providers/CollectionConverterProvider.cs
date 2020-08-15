@@ -7,7 +7,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
 {
     public class CollectionConverterProvider : CborConverterProviderBase
     {
-        public override ICborConverter? GetConverter(Type type, SerializationRegistry registry)
+        public override ICborConverter? GetConverter(Type type, CborOptions options)
         {
             if (type.IsArray)
             {
@@ -19,7 +19,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 }
 
                 return CreateGenericConverter(
-                    registry,
+                    options,
                     typeof(ArrayConverter<>), itemType);
             }
 
@@ -32,7 +32,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                     Type valueType = type.GetGenericArguments()[1];
 
                     return CreateGenericConverter(
-                        registry,
+                        options,
                         typeof(ImmutableDictionaryConverter<,,>), type, keyType, valueType);
                 }
 
@@ -42,7 +42,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                     Type keyType = type.GetGenericArguments()[0];
                     Type valueType = type.GetGenericArguments()[1];
                     return CreateGenericConverter(
-                        registry,
+                        options,
                         typeof(DictionaryConverter<,,>), type, keyType, valueType);
                 }
 
@@ -53,7 +53,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                     Type keyType = type.GetGenericArguments()[0];
                     Type valueType = type.GetGenericArguments()[1];
                     return CreateGenericConverter(
-                        registry,
+                        options,
                         typeof(InterfaceDictionaryConverter<,>),
                         keyType, valueType);
                 }
@@ -65,7 +65,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 {
                     Type itemType = type.GetGenericArguments()[0];
                     return CreateGenericConverter(
-                        registry,
+                        options,
                         typeof(ImmutableCollectionConverter<,>), type, itemType);
                 }
 
@@ -75,7 +75,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 {
                     Type itemType = type.GetGenericArguments()[0];
                     return CreateGenericConverter(
-                        registry,
+                        options,
                         typeof(InterfaceCollectionConverter<,,>),
                         typeof(HashSet<>).MakeGenericType(itemType), type, itemType);
                 }
@@ -90,7 +90,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 {
                     Type itemType = type.GetGenericArguments()[0];
                     return CreateGenericConverter(
-                        registry,
+                        options,
                         typeof(InterfaceCollectionConverter<,,>),
                         typeof(List<>).MakeGenericType(itemType), type, itemType);
                 }
@@ -100,7 +100,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 {
                     Type itemType = type.GetGenericArguments()[0];
                     return CreateGenericConverter(
-                        registry,
+                        options,
                         typeof(CollectionConverter<,>), type, itemType);
                 }
             }

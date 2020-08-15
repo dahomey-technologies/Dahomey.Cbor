@@ -6,6 +6,13 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public class DateTimeConverter : CborConverterBase<DateTime>
     {
+        private readonly CborOptions _options;
+
+        public DateTimeConverter(CborOptions options)
+        {
+            _options = options;
+        }
+
         public override DateTime Read(ref CborReader reader)
         {
             switch (reader.GetCurrentDataItemType())
@@ -216,7 +223,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override void Write(ref CborWriter writer, DateTime value)
         {
-            switch (writer.Options.DateTimeFormat)
+            switch (_options.DateTimeFormat)
             {
                 case DateTimeFormat.ISO8601:
                     writer.WriteString(value.ToString("yyyy-MM-dd'T'HH:mm:ss.FFFK"));

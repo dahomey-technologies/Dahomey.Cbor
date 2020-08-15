@@ -36,12 +36,17 @@ namespace Dahomey.Cbor
     {
         public static CborOptions Default { get; } = new CborOptions();
 
-        public SerializationRegistry Registry { get; } = new SerializationRegistry();
+        public SerializationRegistry Registry { get; private set; }
         public UnhandledNameMode UnhandledNameMode { get; set; }
         public ValueFormat EnumFormat { get; set; }
         public DateTimeFormat DateTimeFormat { get; set; }
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; set; }
         public LengthMode ArrayLengthMode { get; set; } = LengthMode.DefiniteLength;
         public LengthMode MapLengthMode { get; set; } = LengthMode.DefiniteLength;
+
+        public CborOptions()
+        {
+            Registry = new SerializationRegistry(this);
+        }
     }
 }

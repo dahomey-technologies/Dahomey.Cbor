@@ -16,7 +16,7 @@ namespace Dahomey.Cbor.Tests
         {
             options = options ?? CborOptions.Default;
             Span<byte> buffer = hexBuffer.HexToBytes();
-            CborReader reader = new CborReader(buffer, options);
+            CborReader reader = new CborReader(buffer);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             return converter.Read(ref reader);
         }
@@ -78,7 +78,7 @@ namespace Dahomey.Cbor.Tests
 
             using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
             {
-                CborWriter writer = new CborWriter(bufferWriter, options);
+                CborWriter writer = new CborWriter(bufferWriter);
                 ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
                 converter.Write(ref writer, value);
                 return BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", "");
@@ -134,7 +134,7 @@ namespace Dahomey.Cbor.Tests
         public static T Read<T>(string methodName, string hexBuffer)
         {
             Span<byte> buffer = hexBuffer.HexToBytes();
-            CborReader reader = new CborReader(buffer, null);
+            CborReader reader = new CborReader(buffer);
             MethodInfo method = typeof(CborReader).GetMethod(methodName, new Type[0] { });
             return CreateMethodFunctor<CborReaderFunctor<T>>(method)(reader);
         }
@@ -168,24 +168,24 @@ namespace Dahomey.Cbor.Tests
 
         delegate void CborWriterFunctor<T>(CborWriter writer, T value);
 
-        public static string Write<T>(string methodName, T value, CborOptions options = null)
+        public static string Write<T>(string methodName, T value)
         {
             using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
             {
-                CborWriter writer = new CborWriter(bufferWriter, options);
+                CborWriter writer = new CborWriter(bufferWriter);
                 MethodInfo method = typeof(CborWriter).GetMethod(methodName, new[] { typeof(T) });
                 CreateMethodFunctor<CborWriterFunctor<T>>(method)(writer, value);
                 return BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", "");
             }
         }
 
-        public static void TestWrite<T>(string methodName, T value, string hexBuffer, Type expectedExceptionType = null, CborOptions options = null)
+        public static void TestWrite<T>(string methodName, T value, string hexBuffer, Type expectedExceptionType = null)
         {
             if (expectedExceptionType != null)
             {
                 try
                 {
-                    Write(methodName, value, options);
+                    Write(methodName, value);
                 }
                 catch (Exception ex)
                 {
@@ -194,7 +194,7 @@ namespace Dahomey.Cbor.Tests
             }
             else
             {
-                Assert.Equal(hexBuffer, Write(methodName, value, options));
+                Assert.Equal(hexBuffer, Write(methodName, value));
             }
         }
 
