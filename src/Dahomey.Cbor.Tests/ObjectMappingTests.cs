@@ -222,7 +222,7 @@ namespace Dahomey.Cbor.Tests
         {
             private readonly DefaultObjectMappingConvention _defaultConvention = new DefaultObjectMappingConvention();
 
-            public void Apply<T>(SerializationRegistry registry, ObjectMapping<T> objectMapping) where T : class
+            public void Apply<T>(SerializationRegistry registry, ObjectMapping<T> objectMapping)
             {
                 _defaultConvention.Apply(registry, objectMapping);
 

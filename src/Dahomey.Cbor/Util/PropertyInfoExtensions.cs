@@ -1,15 +1,21 @@
 ﻿using System;
+using System.Linq.Expressions;
 using System.Reflection;
 
 namespace Dahomey.Cbor.Util
 {
     public static class PropertyInfoExtensions
     {
+        public static bool IsStatic(this PropertyInfo propertyInfo)
+        {
+            return propertyInfo.GetAccessors(true)[0].IsStatic;
+        }
+
         public static Func<T, TP> GenerateGetter<T, TP>(this PropertyInfo propertyInfo)
         {
             if (propertyInfo.GetMethod == null)
             {
-                throw new CborException("Cannot generate getter for property with no get method");
+                throw new CborException("Unexpected");
             }
 
             return (Func<T, TP>)propertyInfo.GetMethod.CreateDelegate(typeof(Func<T, TP>));
@@ -19,10 +25,32 @@ namespace Dahomey.Cbor.Util
         {
             if (propertyInfo.SetMethod == null)
             {
-                throw new CborException("Cannot generate Setter for property with no Set method");
+                throw new CborException("Unexpected");
             }
 
             return (Action<T, TP>)propertyInfo.SetMethod.CreateDelegate(typeof(Action<T, TP>));
+        }
+
+        public static StructMemberGetterDelegate<T, TP> GenerateStructGetter<T, TP>(this PropertyInfo propertyInfo)
+        {
+            ParameterExpression instanceParam = Expression.Parameter(typeof(T).MakeByRefType(), "instance");
+            return Expression.Lambda<StructMemberGetterDelegate<T, TP>>(
+                Expression.Property(propertyInfo.IsStatic() ? null : instanceParam, propertyInfo),
+                instanceParam).Compile();
+        }
+
+        public static StructMemberSetterDelegate<T, TP> GenerateStructSetter<T, TP>(this PropertyInfo propertyInfo)
+        {
+            ParameterExpression instanceParam = Expression.Parameter(typeof(T).MakeByRefType(), "instance");
+            ParameterExpression valueParam = Expression.Parameter(typeof(TP), "value");
+
+            return Expression.Lambda<StructMemberSetterDelegate<T, TP>>(
+                Expression.Assign(
+                    Expression.Property(
+                        propertyInfo.IsStatic() ? null : instanceParam,
+                        propertyInfo),
+                    valueParam),
+                instanceParam, valueParam).Compile();
         }
     }
 }

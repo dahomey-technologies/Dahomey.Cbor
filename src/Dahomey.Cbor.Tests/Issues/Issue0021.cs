@@ -24,7 +24,7 @@ namespace Dahomey.Cbor.Tests.Issues
             private readonly IObjectMappingConvention defaultObjectMappingConvention = new DefaultObjectMappingConvention();
             private readonly INamingConvention lowerCaseNamingConvention = new LowerCaseNamingConvention();
 
-            public void Apply<T>(SerializationRegistry registry, ObjectMapping<T> objectMapping) where T : class
+            public void Apply<T>(SerializationRegistry registry, ObjectMapping<T> objectMapping)
             {
                 defaultObjectMappingConvention.Apply<T>(registry, objectMapping);
                 objectMapping.SetNamingConvention(lowerCaseNamingConvention);

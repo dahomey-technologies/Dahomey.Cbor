@@ -1,11 +1,12 @@
 ﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Util;
 using System;
 using System.Linq;
 using System.Reflection;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
-    public class MemberMapping<T> : IMemberMapping where T : class
+    public class MemberMapping<T> : IMemberMapping
     {
         private readonly IObjectMapping _objectMapping;
         private readonly CborConverterRegistry _converterRegistry;
@@ -86,7 +87,17 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public IMemberConverter GenerateMemberConverter()
         {
-            Type type = typeof(MemberConverter<,>).MakeGenericType(typeof(T), MemberType);
+            Type type;
+
+            if (typeof(T).IsStruct())
+            {
+                type = typeof(StructMemberConverter<,>).MakeGenericType(typeof(T), MemberType);
+            }
+            else
+            {
+                type = typeof(MemberConverter<,>).MakeGenericType(typeof(T), MemberType);
+            }
+
             IMemberConverter? memberConverter = 
                 (IMemberConverter?)Activator.CreateInstance(type, _converterRegistry, this);
 

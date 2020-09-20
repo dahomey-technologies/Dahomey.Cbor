@@ -26,7 +26,7 @@ namespace Dahomey.Cbor.Tests.Issues
         {
             private readonly DefaultObjectMappingConvention _defaultObjectMappingConvention = new DefaultObjectMappingConvention();
 
-            public void Apply<T>(SerializationRegistry registry, ObjectMapping<T> objectMapping) where T : class
+            public void Apply<T>(SerializationRegistry registry, ObjectMapping<T> objectMapping)
             {
                 _defaultObjectMappingConvention.Apply<T>(registry, objectMapping);
                 objectMapping.SetOrderBy(m => m.MemberName);

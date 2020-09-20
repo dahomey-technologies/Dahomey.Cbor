@@ -14,7 +14,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
     public class DefaultObjectMappingConvention : IObjectMappingConvention
     {
-        public void Apply<T>(SerializationRegistry registry, ObjectMapping<T> objectMapping) where T : class
+        public void Apply<T>(SerializationRegistry registry, ObjectMapping<T> objectMapping)
         {
             Type type = objectMapping.ObjectType;
             List<MemberMapping<T>> memberMappings = new List<MemberMapping<T>>();
@@ -159,7 +159,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
         }
 
-        private void ProcessDefaultValue<T>(MemberInfo memberInfo, MemberMapping<T> memberMapping) where T : class
+        private void ProcessDefaultValue<T>(MemberInfo memberInfo, MemberMapping<T> memberMapping)
         {
             DefaultValueAttribute? defaultValueAttribute = memberInfo.GetCustomAttribute<DefaultValueAttribute>();
             if (defaultValueAttribute != null)
@@ -173,7 +173,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
         }
 
-        private void ProcessShouldSerializeMethod<T>(MemberMapping<T> memberMapping) where T : class
+        private void ProcessShouldSerializeMethod<T>(MemberMapping<T> memberMapping)
         {
             string shouldSerializeMethodName = "ShouldSerialize" + memberMapping.MemberInfo.Name;
             Type? objectType = memberMapping.MemberInfo.DeclaringType;
@@ -200,7 +200,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
         }
 
-        private void ProcessLengthMode<T>(MemberInfo memberInfo, MemberMapping<T> memberMapping) where T : class
+        private void ProcessLengthMode<T>(MemberInfo memberInfo, MemberMapping<T> memberMapping)
         {
             CborLengthModeAttribute? lengthModeAttribute = memberInfo.GetCustomAttribute<CborLengthModeAttribute>();
             if (lengthModeAttribute != null)
@@ -209,7 +209,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
         }
 
-        private void ProcessRequired<T>(MemberInfo memberInfo, MemberMapping<T> memberMapping) where T : class
+        private void ProcessRequired<T>(MemberInfo memberInfo, MemberMapping<T> memberMapping)
         {
             CborRequiredAttribute? jsonRequiredAttribute = memberInfo.GetCustomAttribute<CborRequiredAttribute>();
             if (jsonRequiredAttribute != null)

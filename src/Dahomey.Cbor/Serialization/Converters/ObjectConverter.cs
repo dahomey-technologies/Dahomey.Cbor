@@ -20,17 +20,15 @@ namespace Dahomey.Cbor.Serialization.Converters
     }
 
     public interface IObjectConverter<out T> : IObjectConverter
-        where T : class
     {
         T CreateInstance();
     }
 
     public class ObjectConverter<T> :
-        CborConverterBase<T?>,
+        CborConverterBase<T>,
         IObjectConverter<T>,
         ICborMapReader<ObjectConverter<T>.MapReaderContext>,
         ICborMapWriter<ObjectConverter<T>.MapWriterContext>
-        where T : class
     {
         public struct MapReaderContext
         {
@@ -58,6 +56,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly IObjectMapping _objectMapping;
         private readonly Func<T>? _constructor;
         private readonly bool _isInterfaceOrAbstract;
+        private readonly bool _isStruct;
         private readonly IDiscriminatorConvention? _discriminatorConvention = null;
 
         public IReadOnlyList<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
@@ -93,8 +92,9 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
 
             _isInterfaceOrAbstract = typeof(T).IsInterface || typeof(T).IsAbstract;
+            _isStruct = typeof(T).IsStruct();
 
-            if (!_isInterfaceOrAbstract && _objectMapping.CreatorMapping == null)
+            if (!_isInterfaceOrAbstract && !_isStruct && _objectMapping.CreatorMapping == null)
             {
                 ConstructorInfo? defaultConstructorInfo = typeof(T).GetConstructor(
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
@@ -123,11 +123,11 @@ namespace Dahomey.Cbor.Serialization.Converters
             return _constructor();
         }
 
-        public override T? Read(ref CborReader reader)
+        public override T Read(ref CborReader reader)
         {
             if (reader.ReadNull())
             {
-                return null;
+                return default!;
             }
 
             MapReaderContext context = new MapReaderContext
@@ -222,7 +222,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public override void Write(ref CborWriter writer, T? value, LengthMode lengthMode)
+        public override void Write(ref CborWriter writer, T value, LengthMode lengthMode)
         {
             if (value == null)
             {
@@ -239,8 +239,8 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 options = _options,
                 obj = value,
-                lengthMode = lengthMode != LengthMode.Default 
-                    ? lengthMode : _objectMapping.LengthMode != LengthMode.Default 
+                lengthMode = lengthMode != LengthMode.Default
+                    ? lengthMode : _objectMapping.LengthMode != LengthMode.Default
                         ? _objectMapping.LengthMode : _options.MapLengthMode
             };
 
@@ -297,38 +297,65 @@ namespace Dahomey.Cbor.Serialization.Converters
                     }
                 }
 
-                ReadOnlySpan<byte> memberName = reader.ReadRawString();
-
                 if (context.creatorValues == null)
                 {
-                    context.obj = context.converter.CreateInstance();
+                    if (!_isStruct)
+                    {
+                        context.obj = context.converter.CreateInstance();
+                    }
 
                     if (_objectMapping.OnDeserializingMethod != null)
                     {
                         ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
                     }
-
-                    context.converter.ReadValue(ref reader, context.obj, memberName, context.readMembers!);
-                }
-                else if (context.converter.ReadValue(ref reader, memberName, context.readMembers!, out object? value))
-                {
-                    if (_objectMapping.IsCreatorMember(memberName))
-                    {
-                        context.creatorValues.Add(new RawString(memberName), value);
-                    }
-                    else
-                    {
-                        context.regularValues!.Add(new RawString(memberName), value);
-                    }
                 }
             }
-            else
+            else if (context.converter == null)
             {
-                ReadOnlySpan<byte> memberName = reader.ReadRawString();
-                context.converter.ReadValue(ref reader, context.obj, memberName, context.readMembers!);
+                context.converter = this;
+            }
+
+            ReadOnlySpan<byte> memberName = reader.ReadRawString();
+            if (context.creatorValues == null)
+            {
+                if (_isStruct)
+                {
+                    ReadValueForStruct(ref reader, ref context.obj, memberName, context.readMembers!);
+                }
+                else
+                {
+                    context.converter.ReadValue(ref reader, context.obj!, memberName, context.readMembers!);
+                }
+            }
+            else if (context.converter.ReadValue(ref reader, memberName, context.readMembers!, out object? value))
+            {
+                if (_objectMapping.IsCreatorMember(memberName))
+                {
+                    context.creatorValues.Add(new RawString(memberName), value);
+                }
+                else
+                {
+                    context.regularValues!.Add(new RawString(memberName), value);
+                }
             }
         }
 
+        public void ReadValueForStruct(ref CborReader reader, ref T instance, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers)
+        {
+            if (_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter? memberConverter))
+            {
+                if (readMembers != null)
+                {
+                    readMembers.Add(memberConverter);
+                }
+
+                ((IMemberConverter<T>)memberConverter).Read(ref reader, ref instance);
+            }
+            else
+            {
+                reader.SkipDataItem();
+            }
+        }
         public static bool FindItem(ref CborReader reader, ReadOnlySpan<byte> name)
         {
             do
@@ -355,15 +382,24 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             int writableMembersCount = 0;
 
-            foreach (IMemberConverter member in context.objectConverter.MemberConvertersForWrite)
+            foreach (IMemberConverter memberConverter in context.objectConverter.MemberConvertersForWrite)
             {
-                if (member.ShouldSerialize(context.obj, typeof(T), context.options))
+                if (_isStruct)
+                {
+                    IMemberConverter<T> typedMemberConverter = (IMemberConverter<T>)memberConverter;
+
+                    if (typedMemberConverter.ShouldSerialize(ref context.obj, typeof(T)))
+                    {
+                        writableMembersCount++;
+                    }
+                }
+                else if (memberConverter.ShouldSerialize(context.obj!, typeof(T), context.options))
                 {
                     writableMembersCount++;
                 }
             }
 
-            return  writableMembersCount;
+            return writableMembersCount;
         }
 
         public bool WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
@@ -371,7 +407,18 @@ namespace Dahomey.Cbor.Serialization.Converters
             while (context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count)
             {
                 IMemberConverter memberConverter = context.objectConverter.MemberConvertersForWrite[context.memberIndex++];
-                if (memberConverter.ShouldSerialize(context.obj, typeof(T), context.options))
+                if (_isStruct)
+                {
+                    IMemberConverter<T> typedMemberConverter = (IMemberConverter<T>)memberConverter;
+
+                    if (typedMemberConverter.ShouldSerialize(ref context.obj, typeof(T)))
+                    {
+                        writer.WriteString(memberConverter.MemberName);
+                        typedMemberConverter.Write(ref writer, ref context.obj);
+                        break;
+                    }
+                }
+                else if (memberConverter.ShouldSerialize(context.obj!, typeof(T), context.options))
                 {
                     writer.WriteString(memberConverter.MemberName);
                     memberConverter.Write(ref writer, context.obj);

@@ -10,7 +10,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     {
     }
 
-    public class DiscriminatorMapping<T> : IDiscriminatorMapping where T : class
+    public class DiscriminatorMapping<T> : IDiscriminatorMapping
     {
         private readonly DiscriminatorConventionRegistry _discriminatorConventionRegistry;
         private readonly IObjectMapping _objectMapping;

@@ -14,7 +14,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     /// </summary>
     /// <typeparam name="T">The class.</typeparam>
     public class ObjectMapping<T> : IObjectMapping
-        where T : class
     {
         private bool _isInitialized = false;
         private readonly SerializationRegistry _registry;
@@ -40,7 +39,8 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _registry = registry;
             ObjectType = typeof(T);
 
-            if (!ObjectType.IsAbstract && !ObjectType.IsInterface && registry.DiscriminatorConventionRegistry.AnyConvention())
+            if (!ObjectType.IsAbstract && !ObjectType.IsInterface && !ObjectType.IsStruct() 
+                && registry.DiscriminatorConventionRegistry.AnyConvention())
             {
                 DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(registry.DiscriminatorConventionRegistry, this);
                 _memberMappings.Add(memberMapping);

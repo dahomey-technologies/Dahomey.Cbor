@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Dahomey.Cbor.Util;
+using System;
 
 namespace Dahomey.Cbor.Serialization.Converters.Providers
 {
@@ -13,7 +14,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 return CreateGenericConverter(options, typeof(NullableConverter<>), nullableUnderlyingType);
             }
 
-            if (type.IsClass || type.IsInterface)
+            if (type.IsClass || type.IsInterface || type.IsStruct())
             {
                 return CreateGenericConverter(options, typeof(ObjectConverter<>), type);
             }
