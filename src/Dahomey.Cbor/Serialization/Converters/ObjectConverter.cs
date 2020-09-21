@@ -270,7 +270,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadMapItem(ref CborReader reader, ref MapReaderContext context)
         {
-            if (context.obj == null)
+            if (context.obj == null || context.converter == null)
             {
                 if (context.converter == null)
                 {
@@ -299,7 +299,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 if (context.creatorValues == null)
                 {
-                    if (!_isStruct)
+                    if (!_isStruct && context.obj == null)
                     {
                         context.obj = context.converter.CreateInstance();
                     }

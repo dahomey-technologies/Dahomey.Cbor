@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Dahomey.Cbor.Attributes;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Xunit;
@@ -80,6 +81,35 @@ namespace Dahomey.Cbor.Tests
             FieldSerializationStructNoConstructor strct = Helper.Read<FieldSerializationStructNoConstructor>(hexBuffer);
 
             Assert.Equal(12, strct.id);
+        }
+
+        public readonly struct MyStruct
+        {
+            [CborConstructor("Value")]
+            public MyStruct(int value)
+            {
+                Value = value;
+            }
+
+            public int Value { get; }
+        }
+
+        [Fact]
+        public void ReadStructWithNonDefaultConstructor()
+        {
+            const string hexBuffer = "A16556616C75651864";
+            MyStruct strct = Helper.Read<MyStruct>(hexBuffer);
+
+            Assert.Equal(100, strct.Value);
+        }
+
+        [Fact]
+        public void WriteStructWithNonDefaultConstructor()
+        {
+            MyStruct strct = new MyStruct(100);
+
+            const string hexBuffer = "A16556616C75651864";
+            Helper.TestWrite(strct, hexBuffer);
         }
     }
 }
