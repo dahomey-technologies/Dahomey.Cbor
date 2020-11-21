@@ -8,7 +8,7 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 ## Supported .NET versions
 * .NET Standard 2.0
 * .NET Core 3.1
-* .NET 5.0 (preview 7)
+* .NET 5.0
 
 ## Features
 * Serialization/Deserialization from/to Streams, byte buffer
