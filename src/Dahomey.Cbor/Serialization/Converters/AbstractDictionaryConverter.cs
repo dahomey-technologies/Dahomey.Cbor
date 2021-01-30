@@ -7,18 +7,6 @@ namespace Dahomey.Cbor.Serialization.Converters
         where TC : notnull, IDictionary<TK, TV>
         where TK : notnull
     {
-        public struct ReaderContext
-        {
-            public IDictionary<TK, TV> dict;
-        }
-
-        public struct WriterContext
-        {
-            public int count;
-            public IEnumerator<KeyValuePair<TK, TV>> enumerator;
-            public LengthMode lengthMode;
-        }
-
         private readonly CborOptions _options;
         private readonly ICborConverter<TK> _keyConverter;
         private readonly ICborConverter<TV> _valueConverter;
@@ -40,22 +28,23 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return default!;
             }
 
-            ReaderContext context = new ReaderContext();
-
             reader.ReadBeginMap();
 
-            var remainingItemCount = reader.ReadSize();
+            int remainingItemCount = reader.ReadSize();
 
-            ReadBeginMap(remainingItemCount, ref context);
+            IDictionary<TK, TV> dict = InstantiateTempCollection();
 
             while (MoveNextMapItem(ref reader, ref remainingItemCount))
             {
-                ReadMapItem(ref reader, ref context);
+                TK key = _keyConverter.Read(ref reader);
+                TV value = _valueConverter.Read(ref reader);
+
+                dict.Add(key, value);
             }
 
             reader.ReadEndMap();
 
-            return InstantiateCollection(context.dict);
+            return InstantiateCollection(dict);
         }
 
         public override void Write(ref CborWriter writer, TC value, LengthMode lengthMode)
@@ -66,31 +55,21 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return;
             }
 
-            WriterContext context = new WriterContext
+            if (lengthMode == LengthMode.Default)
             {
-                count = value.Count,
-                enumerator = value.GetEnumerator(),
-                lengthMode = lengthMode != LengthMode.Default
-                    ? lengthMode : _options.MapLengthMode
-            };
+                lengthMode = _options.MapLengthMode;
+            }
 
-            int size = GetMapSize(ref context);
+            int size = lengthMode == LengthMode.IndefiniteLength ? -1 : value.Count;
             writer.WriteBeginMap(size);
-            while (WriteMapItem(ref writer, ref context)) ;
+
+            foreach (KeyValuePair<TK, TV> pair in value)
+            {
+                _keyConverter.Write(ref writer, pair.Key);
+                _valueConverter.Write(ref writer, pair.Value);
+            }
+
             writer.WriteEndMap(size);
-        }
-
-        public void ReadBeginMap(int size, ref ReaderContext context)
-        {
-            context.dict = InstantiateTempCollection();
-        }
-
-        public void ReadMapItem(ref CborReader reader, ref ReaderContext context)
-        {
-            TK key = _keyConverter.Read(ref reader);
-            TV value = _valueConverter.Read(ref reader);
-
-            context.dict.Add(key, value);
         }
 
         private static bool MoveNextMapItem(ref CborReader reader, ref int remainingItemCount)
@@ -102,25 +81,6 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             remainingItemCount--;
             return true;
-        }
-
-        public int GetMapSize(ref WriterContext context)
-        {
-            return context.lengthMode == LengthMode.IndefiniteLength ? -1 : context.count;
-        }
-
-        public bool WriteMapItem(ref CborWriter writer, ref WriterContext context)
-        {
-            if (context.enumerator.MoveNext())
-            {
-                _keyConverter.Write(ref writer, context.enumerator.Current.Key);
-                _valueConverter.Write(ref writer, context.enumerator.Current.Value);
-                return true;
-            }
-            else
-            {
-                return false;
-            }
         }
     }
 }

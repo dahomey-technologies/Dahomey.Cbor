@@ -35,7 +35,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             public Dictionary<RawString, object>? creatorValues;
             public Dictionary<RawString, object>? regularValues;
             public HashSet<IMemberConverter>? readMembers;
-            public int RemainingItemCount;
+            public int remainingItemCount;
         }
 
         public struct MapWriterContext
@@ -138,11 +138,9 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             reader.ReadBeginMap();
 
-            context.RemainingItemCount = reader.ReadSize();
+            context.remainingItemCount = reader.ReadSize();
 
-            ReadBeginMap(ref context);
-
-            while (MoveNextMapItem(ref reader, ref context.RemainingItemCount))
+            while (MoveNextMapItem(ref reader, ref context.remainingItemCount))
             {
                 ReadMapItem(ref reader, ref context);
             }
@@ -277,10 +275,6 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public void ReadBeginMap(ref MapReaderContext context)
-        {
-        }
-
         public void ReadMapItem(ref CborReader reader, ref MapReaderContext context)
         {
             if (context.obj == null || context.converter == null)
@@ -290,9 +284,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                     if (_discriminatorConvention != null)
                     {
                         CborReaderBookmark bookmark = reader.GetBookmark();
-                        var previousremainingItemCount = context.RemainingItemCount;
+                        var previousremainingItemCount = context.remainingItemCount;
 
-                        if (FindItem(ref reader, _discriminatorConvention.MemberName, ref context.RemainingItemCount))
+                        if (FindItem(ref reader, _discriminatorConvention.MemberName, ref context.remainingItemCount))
                         {
                             // discriminator value
                             Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
@@ -303,7 +297,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                             context.converter = this;
                         }
 
-                        context.RemainingItemCount = previousremainingItemCount;
+                        context.remainingItemCount = previousremainingItemCount;
                         reader.ReturnToBookmark(bookmark);
                     }
                     else
