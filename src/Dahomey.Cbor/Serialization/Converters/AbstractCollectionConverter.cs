@@ -4,8 +4,7 @@ using System.Linq;
 namespace Dahomey.Cbor.Serialization.Converters
 {
     public abstract class AbstractCollectionConverter<TC, TI> :
-        CborConverterBase<TC>,
-        ICborArrayReader<AbstractCollectionConverter<TC, TI>.ReaderContext>
+        CborConverterBase<TC>
         where TC : IEnumerable<TI>
     {
         public struct ReaderContext
@@ -40,7 +39,20 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
 
             ReaderContext context = new ReaderContext();
-            reader.ReadArray(this, ref context);
+
+            reader.ReadBeginArray();
+
+            int size = reader.ReadSize();
+
+            ReadBeginArray(size, ref context);
+
+            while (size > 0 || size < 0 && reader.GetCurrentDataItemType() != CborDataItemType.Break)
+            {
+                ReadArrayItem(ref reader, ref context);
+                size--;
+            }
+
+            reader.ReadEndArray();
 
             return InstantiateCollection(context.collection);
         }

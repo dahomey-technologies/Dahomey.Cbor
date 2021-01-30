@@ -24,18 +24,6 @@ namespace Dahomey.Cbor.Serialization
         Decimal
     }
 
-    public interface ICborMapReader<TC>
-    {
-        void ReadBeginMap(int size, ref TC context);
-        void ReadMapItem(ref CborReader reader, ref TC context);
-    }
-
-    public interface ICborArrayReader<TC>
-    {
-        void ReadBeginArray(int size, ref TC context);
-        void ReadArrayItem(ref CborReader reader, ref TC context);
-    }
-
     public enum CborReaderState
     {
         Start,
@@ -62,7 +50,6 @@ namespace Dahomey.Cbor.Serialization
         public int currentPos;
         public CborReaderState state;
         public CborReaderHeader header;
-        public int remainingItemCount;
     }
 
     public ref struct CborReader
@@ -74,7 +61,6 @@ namespace Dahomey.Cbor.Serialization
         private int _currentPos;
         private CborReaderState _state;
         private CborReaderHeader _header;
-        private int _remainingItemCount;
 
         public ReadOnlySpan<byte> Buffer => _buffer;
 
@@ -84,7 +70,6 @@ namespace Dahomey.Cbor.Serialization
             _currentPos = 0;
             _state = CborReaderState.Start;
             _header = new CborReaderHeader();
-            _remainingItemCount = 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -172,7 +157,6 @@ namespace Dahomey.Cbor.Serialization
             bookmark.currentPos = _currentPos;
             bookmark.state = _state;
             bookmark.header = _header;
-            bookmark.remainingItemCount = _remainingItemCount;
 
             return bookmark;
         }
@@ -183,7 +167,6 @@ namespace Dahomey.Cbor.Serialization
             _currentPos = bookmark.currentPos;
             _state = bookmark.state;
             _header = bookmark.header;
-            _remainingItemCount = bookmark.remainingItemCount;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -194,10 +177,22 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ReadEndArray()
+        {
+            _state = CborReaderState.Start;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReadBeginMap()
         {
             SkipSemanticTag();
             Expect(CborMajorType.Map);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ReadEndMap()
+        {
+            _state = CborReaderState.Start;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -469,54 +464,6 @@ namespace Dahomey.Cbor.Serialization
             }
 
             return (int)ReadInteger(int.MaxValue);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void ReadMap<TC>(ICborMapReader<TC> mapReader, ref TC context)
-        {
-            ReadBeginMap();
-
-            int previousRemainingItemCount = _remainingItemCount;
-            _remainingItemCount = ReadSize();
-
-            mapReader.ReadBeginMap(_remainingItemCount, ref context);
-
-            while (MoveNextMapItem())
-            {
-                mapReader.ReadMapItem(ref this, ref context);
-            }
-
-            _state = CborReaderState.Start;
-            _remainingItemCount = previousRemainingItemCount;
-        }
-
-        public bool MoveNextMapItem()
-        {
-            if (_remainingItemCount == 0 || _remainingItemCount < 0 && GetCurrentDataItemType() == CborDataItemType.Break)
-            {
-                return false;
-            }
-
-            _remainingItemCount--;
-            return true;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void ReadArray<TC>(ICborArrayReader<TC> arrayReader, ref TC context)
-        {
-            ReadBeginArray();
-
-            int size = ReadSize();
-
-            arrayReader.ReadBeginArray(size, ref context);
-
-            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
-            {
-                arrayReader.ReadArrayItem(ref this, ref context);
-                size--;
-            }
-
-            _state = CborReaderState.Start;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

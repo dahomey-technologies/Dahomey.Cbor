@@ -3,8 +3,7 @@
 namespace Dahomey.Cbor.Serialization.Converters
 {
     public class ArrayConverter<TI> :
-        CborConverterBase<TI[]?>, 
-        ICborArrayReader<ArrayConverter<TI>.ReaderContext>
+        CborConverterBase<TI[]?>
     {
         public struct ReaderContext
         {
@@ -37,7 +36,20 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
 
             ReaderContext context = new ReaderContext();
-            reader.ReadArray(this, ref context);
+
+            reader.ReadBeginArray();
+
+            int size = reader.ReadSize();
+
+            ReadBeginArray(size, ref context);
+
+            while (size > 0 || size < 0 && reader.GetCurrentDataItemType() != CborDataItemType.Break)
+            {
+                ReadArrayItem(ref reader, ref context);
+                size--;
+            }
+
+            reader.ReadEndArray();
 
             if (context.array != null)
             {

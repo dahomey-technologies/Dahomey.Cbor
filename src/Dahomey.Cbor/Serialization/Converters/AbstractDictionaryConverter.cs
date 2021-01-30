@@ -3,8 +3,7 @@
 namespace Dahomey.Cbor.Serialization.Converters
 {
     public abstract class AbstractDictionaryConverter<TC, TK, TV> :
-        CborConverterBase<TC>, 
-        ICborMapReader<AbstractDictionaryConverter<TC, TK, TV>.ReaderContext>
+        CborConverterBase<TC>
         where TC : notnull, IDictionary<TK, TV>
         where TK : notnull
     {
@@ -42,7 +41,20 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
 
             ReaderContext context = new ReaderContext();
-            reader.ReadMap(this, ref context);
+
+            reader.ReadBeginMap();
+
+            var remainingItemCount = reader.ReadSize();
+
+            ReadBeginMap(remainingItemCount, ref context);
+
+            while (MoveNextMapItem(ref reader, ref remainingItemCount))
+            {
+                ReadMapItem(ref reader, ref context);
+            }
+
+            reader.ReadEndMap();
+
             return InstantiateCollection(context.dict);
         }
 
@@ -79,6 +91,17 @@ namespace Dahomey.Cbor.Serialization.Converters
             TV value = _valueConverter.Read(ref reader);
 
             context.dict.Add(key, value);
+        }
+
+        private static bool MoveNextMapItem(ref CborReader reader, ref int remainingItemCount)
+        {
+            if (remainingItemCount == 0 || remainingItemCount < 0 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            {
+                return false;
+            }
+
+            remainingItemCount--;
+            return true;
         }
 
         public int GetMapSize(ref WriterContext context)
