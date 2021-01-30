@@ -4,8 +4,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public class ArrayConverter<TI> :
         CborConverterBase<TI[]?>, 
-        ICborArrayReader<ArrayConverter<TI>.ReaderContext>,
-        ICborArrayWriter<ArrayConverter<TI>.WriterContext>
+        ICborArrayReader<ArrayConverter<TI>.ReaderContext>
     {
         public struct ReaderContext
         {
@@ -65,7 +64,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                     ? lengthMode : _options.ArrayLengthMode
             };
 
-            writer.WriteArray(this, ref context);
+            int size = GetArraySize(ref context);
+            writer.WriteBeginArray(size);
+            while (WriteArrayItem(ref writer, ref context)) ;
+            writer.WriteEndArray(size);
         }
 
         public void ReadBeginArray(int size, ref ReaderContext context)

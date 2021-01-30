@@ -8,18 +8,6 @@ using System.Text;
 
 namespace Dahomey.Cbor.Serialization
 {
-    public interface ICborMapWriter<TC>
-    {
-        int GetMapSize(ref TC context);
-        bool WriteMapItem(ref CborWriter writer, ref TC context);
-    }
-
-    public interface ICborArrayWriter<TC>
-    {
-        int GetArraySize(ref TC context);
-        bool WriteArrayItem (ref CborWriter writer, ref TC context);
-    }
-
     public ref struct CborWriter
     {
         private const byte INDEFINITE_LENGTH = 31;
@@ -230,15 +218,6 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void WriteMap<TC>(ICborMapWriter<TC> mapWriter, ref TC context)
-        {
-            int size = mapWriter.GetMapSize(ref context);
-            WriteBeginMap(size);
-            while (mapWriter.WriteMapItem(ref this, ref context));
-            WriteEndMap(size);
-        }
-
         public void WriteBeginArray(int size)
         {
             WriteSize(CborMajorType.Array, size);
@@ -250,15 +229,6 @@ namespace Dahomey.Cbor.Serialization
             {
                 WritePrimitive(CborPrimitive.Break);
             }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void WriteArray<TC>(ICborArrayWriter<TC> arrayWriter, ref TC context)
-        {
-            int size = arrayWriter.GetArraySize(ref context);
-            WriteBeginArray(size);
-            while(arrayWriter.WriteArrayItem(ref this, ref context));
-            WriteEndArray(size);
         }
 
         private void WriteSize(CborMajorType majorType, int size)

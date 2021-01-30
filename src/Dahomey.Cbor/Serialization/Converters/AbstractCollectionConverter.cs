@@ -5,8 +5,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public abstract class AbstractCollectionConverter<TC, TI> :
         CborConverterBase<TC>,
-        ICborArrayReader<AbstractCollectionConverter<TC, TI>.ReaderContext>,
-        ICborArrayWriter<AbstractCollectionConverter<TC, TI>.WriterContext>
+        ICborArrayReader<AbstractCollectionConverter<TC, TI>.ReaderContext>
         where TC : IEnumerable<TI>
     {
         public struct ReaderContext
@@ -62,7 +61,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                     ? lengthMode : _options.ArrayLengthMode
             };
 
-            writer.WriteArray(this, ref context);
+            int size = GetArraySize(ref context);
+            writer.WriteBeginArray(size);
+            while (WriteArrayItem(ref writer, ref context)) ;
+            writer.WriteEndArray(size);
         }
 
         public void ReadBeginArray(int size, ref ReaderContext context)

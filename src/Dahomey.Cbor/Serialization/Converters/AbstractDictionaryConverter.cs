@@ -4,8 +4,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 {
     public abstract class AbstractDictionaryConverter<TC, TK, TV> :
         CborConverterBase<TC>, 
-        ICborMapReader<AbstractDictionaryConverter<TC, TK, TV>.ReaderContext>,
-        ICborMapWriter<AbstractDictionaryConverter<TC, TK, TV>.WriterContext>
+        ICborMapReader<AbstractDictionaryConverter<TC, TK, TV>.ReaderContext>
         where TC : notnull, IDictionary<TK, TV>
         where TK : notnull
     {
@@ -63,7 +62,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                     ? lengthMode : _options.MapLengthMode
             };
 
-            writer.WriteMap(this, ref context);
+            int size = GetMapSize(ref context);
+            writer.WriteBeginMap(size);
+            while (WriteMapItem(ref writer, ref context)) ;
+            writer.WriteEndMap(size);
         }
 
         public void ReadBeginMap(int size, ref ReaderContext context)

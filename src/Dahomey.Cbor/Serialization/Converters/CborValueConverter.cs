@@ -9,9 +9,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         ICborConverter<CborObject?>,
         ICborConverter<CborArray?>,
         ICborMapReader<CborValueConverter.MapReaderContext>,
-        ICborMapWriter<CborValueConverter.MapWriterContext>,
-        ICborArrayReader<CborValueConverter.ArrayReaderContext>,
-        ICborArrayWriter<CborValueConverter.ArrayWriterContext>
+        ICborArrayReader<CborValueConverter.ArrayReaderContext>
     {
         public struct MapReaderContext
         {
@@ -149,12 +147,12 @@ namespace Dahomey.Cbor.Serialization.Converters
             context.obj.Add(key, value);
         }
 
-        int ICborMapWriter<MapWriterContext>.GetMapSize(ref MapWriterContext context)
+        private int GetMapSize(ref MapWriterContext context)
         {
             return context.lengthMode == LengthMode.IndefiniteLength ? -1 : context.obj.Count;
         }
 
-        bool ICborMapWriter<MapWriterContext>.WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
+        private bool WriteMapItem(ref CborWriter writer, ref MapWriterContext context)
         {
             if (context.enumerator.MoveNext())
             {
@@ -184,12 +182,12 @@ namespace Dahomey.Cbor.Serialization.Converters
             context.array.Add(Read(ref reader));
         }
 
-        int ICborArrayWriter<ArrayWriterContext>.GetArraySize(ref ArrayWriterContext context)
+        private int GetArraySize(ref ArrayWriterContext context)
         {
             return context.lengthMode == LengthMode.IndefiniteLength ? -1 : context.array.Count;
         }
 
-        bool ICborArrayWriter<ArrayWriterContext>.WriteArrayItem(ref CborWriter writer, ref ArrayWriterContext context)
+        private bool WriteArrayItem(ref CborWriter writer, ref ArrayWriterContext context)
         {
             Write(ref writer, context.array[context.index++]);
             return context.index < context.array.Count;
@@ -233,7 +231,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : _options.MapLengthMode
             };
-            writer.WriteMap(this, ref mapWriterContext);
+
+            int size = GetMapSize(ref mapWriterContext);
+            writer.WriteBeginMap(size);
+            while (WriteMapItem(ref writer, ref mapWriterContext)) ;
+            writer.WriteEndMap(size);
         }
 
         CborArray? ICborConverter<CborArray?>.Read(ref CborReader reader)
@@ -273,7 +275,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : _options.ArrayLengthMode
             };
-            writer.WriteArray(this, ref arrayWriterContext);
+
+            int size = GetArraySize(ref arrayWriterContext);
+            writer.WriteBeginArray(size);
+            while (WriteArrayItem(ref writer, ref arrayWriterContext)) ;
+            writer.WriteEndArray(size);
         }
     }
 }

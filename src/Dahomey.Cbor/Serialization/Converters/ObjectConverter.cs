@@ -27,8 +27,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     public class ObjectConverter<T> :
         CborConverterBase<T>,
         IObjectConverter<T>,
-        ICborMapReader<ObjectConverter<T>.MapReaderContext>,
-        ICborMapWriter<ObjectConverter<T>.MapWriterContext>
+        ICborMapReader<ObjectConverter<T>.MapReaderContext>
     {
         public struct MapReaderContext
         {
@@ -256,7 +255,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                 context.objectConverter = this;
             }
 
-            writer.WriteMap(this, ref context);
+            int size = GetMapSize(ref context);
+            writer.WriteBeginMap(size);
+            while (WriteMapItem(ref writer, ref context)) ;
+            writer.WriteEndMap(size);
 
             if (_objectMapping.OnSerializedMethod != null)
             {
