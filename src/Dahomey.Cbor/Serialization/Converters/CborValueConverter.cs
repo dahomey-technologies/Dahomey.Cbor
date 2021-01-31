@@ -191,8 +191,13 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         bool ICborArrayWriter<ArrayWriterContext>.WriteArrayItem(ref CborWriter writer, ref ArrayWriterContext context)
         {
-            Write(ref writer, context.array[context.index++]);
-            return context.index < context.array.Count;
+            if (context.array.Count > 0)
+            {
+                Write(ref writer, context.array[context.index++]);
+                return context.index < context.array.Count;
+            }
+
+            return false;
         }
 
         CborObject? ICborConverter<CborObject?>.Read(ref CborReader reader)

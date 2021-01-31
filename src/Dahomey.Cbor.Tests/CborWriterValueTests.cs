@@ -142,5 +142,15 @@ namespace Dahomey.Cbor.Tests
             };
             Helper.TestWrite(array, hexBuffer);
         }
+
+        [Fact]
+        public void WriteEmptyArray()
+        {
+            const string hexBuffer = "80";
+
+            CborArray array = new CborArray();
+            
+            Helper.TestWrite(array, hexBuffer);
+        }
     }
 }
