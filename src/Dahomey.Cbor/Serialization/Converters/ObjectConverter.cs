@@ -37,6 +37,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             public Dictionary<RawString, object>? creatorValues;
             public Dictionary<RawString, object>? regularValues;
             public HashSet<IMemberConverter>? readMembers;
+            public int remainingItemCount;
         }
 
         public struct MapWriterContext
@@ -266,6 +267,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadBeginMap(int size, ref MapReaderContext context)
         {
+            context.remainingItemCount = size;
         }
 
         public void ReadMapItem(ref CborReader reader, ref MapReaderContext context)
@@ -277,8 +279,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                     if (_discriminatorConvention != null)
                     {
                         CborReaderBookmark bookmark = reader.GetBookmark();
+                        int previousRemainingItemCount = context.remainingItemCount;
 
-                        if (FindItem(ref reader, _discriminatorConvention.MemberName))
+                        if (FindItem(ref reader, _discriminatorConvention.MemberName, context.remainingItemCount))
                         {
                             // discriminator value
                             Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
@@ -289,6 +292,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                             context.converter = this;
                         }
 
+                        context.remainingItemCount = previousRemainingItemCount;
                         reader.ReturnToBookmark(bookmark);
                     }
                     else
@@ -356,7 +360,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                 reader.SkipDataItem();
             }
         }
-        public static bool FindItem(ref CborReader reader, ReadOnlySpan<byte> name)
+
+        public static bool FindItem(ref CborReader reader, ReadOnlySpan<byte> name, int remainingItemCount)
         {
             do
             {
@@ -367,8 +372,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
 
                 reader.SkipDataItem();
+                remainingItemCount--;
             }
-            while (reader.MoveNextMapItem());
+            while (remainingItemCount > 0 || remainingItemCount < 0 && reader.GetCurrentDataItemType() != CborDataItemType.Break);
 
             return false;
         }

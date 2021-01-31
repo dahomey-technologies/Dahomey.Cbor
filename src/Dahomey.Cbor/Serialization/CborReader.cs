@@ -62,7 +62,6 @@ namespace Dahomey.Cbor.Serialization
         public int currentPos;
         public CborReaderState state;
         public CborReaderHeader header;
-        public int remainingItemCount;
     }
 
     public ref struct CborReader
@@ -74,7 +73,6 @@ namespace Dahomey.Cbor.Serialization
         private int _currentPos;
         private CborReaderState _state;
         private CborReaderHeader _header;
-        private int _remainingItemCount;
 
         public ReadOnlySpan<byte> Buffer => _buffer;
 
@@ -84,7 +82,6 @@ namespace Dahomey.Cbor.Serialization
             _currentPos = 0;
             _state = CborReaderState.Start;
             _header = new CborReaderHeader();
-            _remainingItemCount = 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -172,7 +169,6 @@ namespace Dahomey.Cbor.Serialization
             bookmark.currentPos = _currentPos;
             bookmark.state = _state;
             bookmark.header = _header;
-            bookmark.remainingItemCount = _remainingItemCount;
 
             return bookmark;
         }
@@ -183,7 +179,6 @@ namespace Dahomey.Cbor.Serialization
             _currentPos = bookmark.currentPos;
             _state = bookmark.state;
             _header = bookmark.header;
-            _remainingItemCount = bookmark.remainingItemCount;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -476,29 +471,17 @@ namespace Dahomey.Cbor.Serialization
         {
             ReadBeginMap();
 
-            int previousRemainingItemCount = _remainingItemCount;
-            _remainingItemCount = ReadSize();
+            int size = ReadSize();
 
-            mapReader.ReadBeginMap(_remainingItemCount, ref context);
+            mapReader.ReadBeginMap(size, ref context);
 
-            while (MoveNextMapItem())
+            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
             {
                 mapReader.ReadMapItem(ref this, ref context);
+                size--;
             }
 
             _state = CborReaderState.Start;
-            _remainingItemCount = previousRemainingItemCount;
-        }
-
-        public bool MoveNextMapItem()
-        {
-            if (_remainingItemCount == 0 || _remainingItemCount < 0 && GetCurrentDataItemType() == CborDataItemType.Break)
-            {
-                return false;
-            }
-
-            _remainingItemCount--;
-            return true;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
