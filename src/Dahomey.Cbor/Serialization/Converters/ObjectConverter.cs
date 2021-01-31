@@ -272,6 +272,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadMapItem(ref CborReader reader, ref MapReaderContext context)
         {
+            context.remainingItemCount--;
+
             if (context.obj == null || context.converter == null)
             {
                 if (context.converter == null)
@@ -372,9 +374,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
 
                 reader.SkipDataItem();
-                remainingItemCount--;
             }
-            while (remainingItemCount > 0 || remainingItemCount < 0 && reader.GetCurrentDataItemType() != CborDataItemType.Break);
+            while (reader.MoveNextMapItem(ref remainingItemCount));
 
             return false;
         }

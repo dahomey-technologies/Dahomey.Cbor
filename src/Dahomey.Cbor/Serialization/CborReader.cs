@@ -484,6 +484,17 @@ namespace Dahomey.Cbor.Serialization
             _state = CborReaderState.Start;
         }
 
+        public bool MoveNextMapItem(ref int remainingItemCount)
+        {
+            if (remainingItemCount == 0 || remainingItemCount < 0 && GetCurrentDataItemType() == CborDataItemType.Break)
+            {
+                return false;
+            }
+
+            remainingItemCount--;
+            return true;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReadArray<TC>(ICborArrayReader<TC> arrayReader, ref TC context)
         {
