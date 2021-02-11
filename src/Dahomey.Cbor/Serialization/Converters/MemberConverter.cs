@@ -365,7 +365,6 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly IDiscriminatorConvention _discriminatorConvention;
         private readonly CborDiscriminatorPolicy _discriminatorPolicy;
-        private readonly ReadOnlyMemory<byte> _memberName;
 
         public DiscriminatorMemberConverter(
             IDiscriminatorConvention discriminatorConvention, 
@@ -373,14 +372,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             _discriminatorConvention = discriminatorConvention;
             _discriminatorPolicy = discriminatorPolicy;
-
-            if (discriminatorConvention != null)
-            {
-                _memberName = discriminatorConvention.MemberName.ToArray();
-            }
         }
 
-        public ReadOnlySpan<byte> MemberName => _memberName.Span;
+        public ReadOnlySpan<byte> MemberName => _discriminatorConvention.MemberName;
         public bool IgnoreIfDefault => false;
         public RequirementPolicy RequirementPolicy => RequirementPolicy.Never;
 
