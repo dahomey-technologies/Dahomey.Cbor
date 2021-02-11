@@ -37,7 +37,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             public Dictionary<RawString, object>? creatorValues;
             public Dictionary<RawString, object>? regularValues;
             public HashSet<IMemberConverter>? readMembers;
-            public int remainingItemCount;
+            public int itemCount;
         }
 
         public struct MapWriterContext
@@ -267,7 +267,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadBeginMap(int size, ref MapReaderContext context)
         {
-            context.remainingItemCount = size;
+            context.itemCount = size;
         }
 
         public void ReadMapItem(ref CborReader reader, ref MapReaderContext context)
@@ -278,7 +278,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     if (_discriminatorConvention != null)
                     {
-                        Type? actualType = ReadDiscriminator(ref reader, _discriminatorConvention, context.remainingItemCount);
+                        Type? actualType = ReadDiscriminator(ref reader, _discriminatorConvention, context.itemCount);
 
                         if (actualType != null)
                         {
@@ -336,8 +336,6 @@ namespace Dahomey.Cbor.Serialization.Converters
                     context.regularValues!.Add(new RawString(memberName), value);
                 }
             }
-
-            context.remainingItemCount--;
         }
 
         public void ReadValueForStruct(ref CborReader reader, ref T instance, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers)
