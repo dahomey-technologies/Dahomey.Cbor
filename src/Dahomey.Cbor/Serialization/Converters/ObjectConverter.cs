@@ -274,23 +274,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (context.converter == null)
             {
-                if (_discriminatorConvention != null)
-                {
-                    Type? actualType = ReadDiscriminator(ref reader, _discriminatorConvention, context.itemCount);
-
-                    if (actualType != null)
-                    {
-                        context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
-                    }
-                    else
-                    {
-                        context.converter = this;
-                    }
-                }
-                else
-                {
-                    context.converter = this;
-                }
+                context.converter = ResolveConverter(ref reader, context.itemCount);
             }
 
             ReadOnlySpan<byte> memberName = reader.ReadRawString();
@@ -298,7 +282,19 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (_isStruct)
                 {
-                    ReadValueForStruct(ref reader, ref context.obj, memberName, context.readMembers!);
+                    if (_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter? memberConverter))
+                    {
+                        if (context.readMembers != null)
+                        {
+                            context.readMembers.Add(memberConverter);
+                        }
+
+                        ((IMemberConverter<T>)memberConverter).Read(ref reader, ref context.obj);
+                    }
+                    else
+                    {
+                        reader.SkipDataItem();
+                    }
                 }
                 else
                 {
@@ -328,45 +324,36 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public void ReadValueForStruct(ref CborReader reader, ref T instance, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers)
+        private IObjectConverter<T> ResolveConverter(ref CborReader reader, int size)
         {
-            if (_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter? memberConverter))
+            if (_discriminatorConvention != null)
             {
-                if (readMembers != null)
+                Type? actualType = null;
+
+                CborReaderBookmark bookmark = reader.GetBookmark();
+
+                while (size > 0 || size < 0 && reader.GetCurrentDataItemType() != CborDataItemType.Break)
                 {
-                    readMembers.Add(memberConverter);
+                    ReadOnlySpan<byte> memberName = reader.ReadRawString();
+                    if (memberName.SequenceEqual(_discriminatorConvention.MemberName))
+                    {
+                        actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
+                        break;
+                    }
+
+                    reader.SkipDataItem();
+                    size--;
                 }
 
-                ((IMemberConverter<T>)memberConverter).Read(ref reader, ref instance);
-            }
-            else
-            {
-                reader.SkipDataItem();
-            }
-        }
+                reader.ReturnToBookmark(bookmark);
 
-        private static Type? ReadDiscriminator(ref CborReader reader, IDiscriminatorConvention discriminatorConvention, int size)
-        {
-            Type? actualType = null;
-
-            CborReaderBookmark bookmark = reader.GetBookmark();
-
-            while (size > 0 || size < 0 && reader.GetCurrentDataItemType() != CborDataItemType.Break)
-            {
-                ReadOnlySpan<byte> memberName = reader.ReadRawString();
-                if (memberName.SequenceEqual(discriminatorConvention.MemberName))
+                if (actualType != null)
                 {
-                    actualType = discriminatorConvention.ReadDiscriminator(ref reader);
-                    break;
+                    return (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
                 }
-
-                reader.SkipDataItem();
-                size--;
             }
 
-            reader.ReturnToBookmark(bookmark);
-
-            return actualType;
+            return this;
         }
 
         public int GetMapSize(ref MapWriterContext context)
