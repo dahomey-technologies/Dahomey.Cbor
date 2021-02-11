@@ -272,45 +272,25 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadMapItem(ref CborReader reader, ref MapReaderContext context)
         {
-            if (context.obj == null || context.converter == null)
+            if (context.converter == null)
             {
-                if (context.converter == null)
+                if (_discriminatorConvention != null)
                 {
-                    if (_discriminatorConvention != null)
-                    {
-                        Type? actualType = ReadDiscriminator(ref reader, _discriminatorConvention, context.itemCount);
+                    Type? actualType = ReadDiscriminator(ref reader, _discriminatorConvention, context.itemCount);
 
-                        if (actualType != null)
-                        {
-                            context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
-                        }
-                        else
-                        {
-                            context.converter = this;
-                        }
+                    if (actualType != null)
+                    {
+                        context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
                     }
                     else
                     {
                         context.converter = this;
                     }
                 }
-
-                if (context.creatorValues == null)
+                else
                 {
-                    if (!_isStruct && context.obj == null)
-                    {
-                        context.obj = context.converter.CreateInstance();
-                    }
-
-                    if (_objectMapping.OnDeserializingMethod != null)
-                    {
-                        ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
-                    }
+                    context.converter = this;
                 }
-            }
-            else if (context.converter == null)
-            {
-                context.converter = this;
             }
 
             ReadOnlySpan<byte> memberName = reader.ReadRawString();
@@ -322,6 +302,16 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
                 else
                 {
+                    if (context.obj == null)
+                    {
+                        context.obj = context.converter.CreateInstance();
+
+                        if (_objectMapping.OnDeserializingMethod != null)
+                        {
+                            ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
+                        }
+                    }
+
                     context.converter.ReadValue(ref reader, context.obj!, memberName, context.readMembers!);
                 }
             }
