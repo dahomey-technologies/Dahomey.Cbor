@@ -278,7 +278,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     if (_discriminatorConvention != null)
                     {
-                        Type? actualType = TryReadType(ref reader, _discriminatorConvention, context.remainingItemCount);
+                        Type? actualType = ReadDiscriminator(ref reader, _discriminatorConvention, context.remainingItemCount);
 
                         if (actualType != null)
                         {
@@ -357,7 +357,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        private static Type? TryReadType(ref CborReader reader, IDiscriminatorConvention discriminatorConvention, int size)
+        private static Type? ReadDiscriminator(ref CborReader reader, IDiscriminatorConvention discriminatorConvention, int size)
         {
             Type? actualType = null;
 
