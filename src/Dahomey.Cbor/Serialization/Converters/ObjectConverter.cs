@@ -272,30 +272,22 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadMapItem(ref CborReader reader, ref MapReaderContext context)
         {
-            context.remainingItemCount--;
-
             if (context.obj == null || context.converter == null)
             {
                 if (context.converter == null)
                 {
                     if (_discriminatorConvention != null)
                     {
-                        CborReaderBookmark bookmark = reader.GetBookmark();
-                        int previousRemainingItemCount = context.remainingItemCount;
+                        Type? actualType = TryReadType(ref reader, _discriminatorConvention, context.remainingItemCount);
 
-                        if (FindItem(ref reader, _discriminatorConvention.MemberName, context.remainingItemCount))
+                        if (actualType != null)
                         {
-                            // discriminator value
-                            Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
                             context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
                         }
                         else
                         {
                             context.converter = this;
                         }
-
-                        context.remainingItemCount = previousRemainingItemCount;
-                        reader.ReturnToBookmark(bookmark);
                     }
                     else
                     {
@@ -344,6 +336,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                     context.regularValues!.Add(new RawString(memberName), value);
                 }
             }
+
+            context.remainingItemCount--;
         }
 
         public void ReadValueForStruct(ref CborReader reader, ref T instance, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers)
@@ -363,21 +357,28 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        public static bool FindItem(ref CborReader reader, ReadOnlySpan<byte> name, int remainingItemCount)
+        private static Type? TryReadType(ref CborReader reader, IDiscriminatorConvention discriminatorConvention, int size)
         {
-            do
+            Type? actualType = null;
+
+            CborReaderBookmark bookmark = reader.GetBookmark();
+
+            while (size > 0 || size < 0 && reader.GetCurrentDataItemType() != CborDataItemType.Break)
             {
                 ReadOnlySpan<byte> memberName = reader.ReadRawString();
-                if (memberName.SequenceEqual(name))
+                if (memberName.SequenceEqual(discriminatorConvention.MemberName))
                 {
-                    return true;
+                    actualType = discriminatorConvention.ReadDiscriminator(ref reader);
+                    break;
                 }
 
                 reader.SkipDataItem();
+                size--;
             }
-            while (reader.MoveNextMapItem(ref remainingItemCount));
 
-            return false;
+            reader.ReturnToBookmark(bookmark);
+
+            return actualType;
         }
 
         public int GetMapSize(ref MapWriterContext context)
