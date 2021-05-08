@@ -421,7 +421,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 else if (memberConverter.ShouldSerialize(context.obj!, typeof(T), context.options))
                 {
                     writer.WriteString(memberConverter.MemberName);
-                    memberConverter.Write(ref writer, context.obj);
+                    memberConverter.Write(ref writer, context.obj!);
                     break;
                 }
             }

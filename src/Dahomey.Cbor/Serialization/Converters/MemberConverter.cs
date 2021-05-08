@@ -310,7 +310,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             switch (memberInfo)
             {
                 case PropertyInfo propertyInfo:
-                    if (propertyInfo.GetMethod.IsStatic)
+                    if (propertyInfo.GetMethod != null && propertyInfo.GetMethod.IsStatic)
                     {
                         if (!propertyInfo.CanRead)
                         {
@@ -340,7 +340,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             switch (memberInfo)
             {
                 case PropertyInfo propertyInfo:
-                    if (!propertyInfo.CanWrite || propertyInfo.SetMethod.IsStatic)
+                    if (!propertyInfo.CanWrite || propertyInfo.SetMethod != null && propertyInfo.SetMethod.IsStatic)
                     {
                         return null;
                     }

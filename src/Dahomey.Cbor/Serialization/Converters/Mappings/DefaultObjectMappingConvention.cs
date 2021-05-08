@@ -130,7 +130,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
             else if (type.GetInterfaces().Any(i => i == typeof(ISupportInitialize)))
             {
-                objectMapping.SetOnDeserializingMethod(t => ((ISupportInitialize)t).BeginInit());
+                objectMapping.SetOnDeserializingMethod(t => ((ISupportInitialize)t!).BeginInit());
             }
 
             methodInfo = type.GetMethods()
@@ -141,7 +141,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
             else if (type.GetInterfaces().Any(i => i == typeof(ISupportInitialize)))
             {
-                objectMapping.SetOnDeserializedMethod(t => ((ISupportInitialize)t).EndInit());
+                objectMapping.SetOnDeserializedMethod(t => ((ISupportInitialize)t!).EndInit());
             }
 
             methodInfo = type.GetMethods()
