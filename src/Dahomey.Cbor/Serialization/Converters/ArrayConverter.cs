@@ -101,6 +101,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public bool WriteArrayItem(ref CborWriter writer, ref WriterContext context)
         {
+            if (context.array.Length == 0)
+            {
+                return false;
+            }
+
             _itemConverter.Write(ref writer, context.array[context.index++]);
             return context.index < context.array.Length;
         }

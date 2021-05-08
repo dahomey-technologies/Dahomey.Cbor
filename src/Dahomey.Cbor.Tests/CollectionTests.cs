@@ -105,5 +105,56 @@ namespace Dahomey.Cbor.Tests
 
             Helper.TestWrite(lst, hexBuffer);
         }
+
+        [Fact]
+        public void ReadEmptyArray()
+        {
+            string hexBuffer = "80";
+            int[] array = Helper.Read<int[]>(hexBuffer);
+
+            Assert.Empty(array);
+        }
+
+        [Fact]
+        public void WriteEmptyArray()
+        {
+            string hexBuffer = "80";
+            int[] array = { };
+            Helper.TestWrite(array, hexBuffer);
+        }
+
+        [Fact]
+        public void ReadEmptyList()
+        {
+            string hexBuffer = "80";
+            List<int> list = Helper.Read<List<int>>(hexBuffer);
+
+            Assert.Empty(list);
+        }
+
+        [Fact]
+        public void WriteEmptyList()
+        {
+            string hexBuffer = "80";
+            List<int> list = new List<int>();
+            Helper.TestWrite(list, hexBuffer);
+        }
+
+        [Fact]
+        public void ReadEmptyDictionary()
+        {
+            string hexBuffer = "A0";
+            Dictionary<int, int> dict = Helper.Read<Dictionary<int, int>>(hexBuffer);
+
+            Assert.Empty(dict);
+        }
+
+        [Fact]
+        public void WriteEmptyDictionary()
+        {
+            string hexBuffer = "A0";
+            Dictionary<int, int> dict = new Dictionary<int, int>();
+            Helper.TestWrite(dict, hexBuffer);
+        }
     }
 }
