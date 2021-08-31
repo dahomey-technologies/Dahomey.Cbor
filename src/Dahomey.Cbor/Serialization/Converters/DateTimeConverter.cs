@@ -178,7 +178,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
 
                 DateTimeOffset offset = new DateTimeOffset(
-                    year, month, day, hours, minutes, seconds, milliseconds, 
+                    year, month, day, hours, minutes, seconds, milliseconds,
                     TimeSpan.FromHours(offsetHours) + TimeSpan.FromMinutes(offsetMinutes));
 
                 value = offset.LocalDateTime;
@@ -221,16 +221,26 @@ namespace Dahomey.Cbor.Serialization.Converters
             return true;
         }
 
+        /// <summary>
+        /// https://datatracker.ietf.org/doc/html/rfc7049#section-2.4.1
+        /// </summary>
         public override void Write(ref CborWriter writer, DateTime value)
         {
             switch (_options.DateTimeFormat)
             {
                 case DateTimeFormat.ISO8601:
+                    writer.WriteSemanticTag(0);
                     writer.WriteString(value.ToString("yyyy-MM-dd'T'HH:mm:ss.FFFK"));
                     break;
 
                 case DateTimeFormat.Unix:
+                    writer.WriteSemanticTag(1);
                     writer.WriteInt64(new DateTimeOffset(value).ToUnixTimeSeconds());
+                    break;
+
+                case DateTimeFormat.UnixMilliseconds:
+                    writer.WriteSemanticTag(1);
+                    writer.WriteDouble((double)new DateTimeOffset(value).ToUnixTimeMilliseconds() / 1000.0);
                     break;
             }
         }

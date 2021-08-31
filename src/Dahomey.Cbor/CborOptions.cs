@@ -20,6 +20,7 @@ namespace Dahomey.Cbor
     {
         ISO8601 = 0,
         Unix = 1,
+        UnixMilliseconds = 2,
     }
 
     /// <summary>
