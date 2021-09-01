@@ -208,6 +208,53 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(new CborArray(1, 2, 3), actual);
         }
 
+        class Foo
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+        }
+
+        [Fact]
+        public void FromClassArray()
+        {
+            Foo[] array =
+            { 
+                new Foo 
+                { 
+                    Id = 1, 
+                    Name = "foo"
+                }, 
+                new Foo 
+                { 
+                    Id = 2, 
+                    Name = "bar"
+                }
+            };
+
+            CborArray actual = CborArray.FromCollection(array);
+            CborArray expected = new CborArray(
+                new CborObject
+                {
+                    ["Id"] = 1,
+                    ["Name"] = "foo"
+                },
+                new CborObject
+                {
+                    ["Id"] = 2,
+                    ["Name"] = "bar"
+                });
+            Assert.Equal(expected, actual);
+        }
+
+        [Fact]
+        public void FromMixedArray()
+        {
+            object[] array = { true, "foo", 12, 12.12 };
+            CborArray actual = CborArray.FromCollection(array);
+            CborArray expected = new CborArray(true, "foo", 12, 12.12);
+            Assert.Equal(expected, actual);
+        }
+
         [Fact]
         public void ToArray()
         {
@@ -222,6 +269,47 @@ namespace Dahomey.Cbor.Tests
             List<int> list = new List<int> { 1, 2, 3 };
             CborArray actual = CborArray.FromCollection(list);
             Assert.Equal(new CborArray(1, 2, 3), actual);
+        }
+
+        [Fact]
+        public void FromClassList()
+        {
+            List<Foo> list = new List<Foo>
+            {
+                new Foo
+                {
+                    Id = 1,
+                    Name = "foo"
+                },
+                new Foo
+                {
+                    Id = 2,
+                    Name = "bar"
+                }
+            };
+
+            CborArray actual = CborArray.FromCollection(list);
+            CborArray expected = new CborArray(
+                new CborObject
+                {
+                    ["Id"] = 1,
+                    ["Name"] = "foo"
+                },
+                new CborObject
+                {
+                    ["Id"] = 2,
+                    ["Name"] = "bar"
+                });
+            Assert.Equal(expected, actual);
+        }
+
+        [Fact]
+        public void FromMixedList()
+        {
+            List<object> list = new List<object> { true, "foo", 12, 12.12 };
+            CborArray actual = CborArray.FromCollection(list);
+            CborArray expected = new CborArray(true, "foo", 12, 12.12);
+            Assert.Equal(expected, actual);
         }
 
         [Fact]

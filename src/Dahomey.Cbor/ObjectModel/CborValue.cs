@@ -1,4 +1,7 @@
-﻿using System;
+﻿using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Serialization.Converters;
+using Dahomey.Cbor.Util;
+using System;
 using System.Collections.Generic;
 using System.Dynamic;
 
@@ -7,6 +10,9 @@ namespace Dahomey.Cbor.ObjectModel
     public abstract class CborValue : DynamicObject, IComparable<CborValue>, IEquatable<CborValue>
     {
         public abstract CborValueType Type { get; }
+
+        private static readonly CborNull s_Null = new CborNull();
+        public static CborNull Null { get; } = s_Null;
 
         public virtual T Value<T>()
         {
@@ -84,9 +90,6 @@ namespace Dahomey.Cbor.ObjectModel
             return (CborBoolean)value;
         }
 
-        private static readonly CborNull s_Null = new CborNull();
-        public static CborNull Null { get; } = s_Null;
-
         public static implicit operator CborValue(CborValue[] values)
         {
             return new CborArray(values);
@@ -121,4 +124,111 @@ namespace Dahomey.Cbor.ObjectModel
         public abstract override bool Equals(object? obj);
         public abstract override int GetHashCode();
     }
+
+    public static class CborValueConvert
+    {
+        public static CborValue ToValue(string? value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(char value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(double value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(float value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(decimal value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(sbyte value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(byte value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(int value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(uint value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(short value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(ushort value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(long value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(ulong value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(bool value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(CborValue[] values, CborOptions? options = null)
+        {
+            return values;
+        }
+
+        public static CborValue ToValue(Dictionary<CborValue, CborValue> pairs, CborOptions? options = null)
+        {
+            return pairs;
+        }
+
+        public static CborValue ToValue(ReadOnlyMemory<byte> value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(ReadOnlySpan<byte> value, CborOptions? options = null)
+        {
+            return value;
+        }
+
+        public static CborValue ToValue(object value, CborOptions? options = null)
+        {
+            options ??= CborOptions.Default;
+
+            using ByteBufferWriter buffer = new ByteBufferWriter();
+            ICborConverter converter = options.Registry.ConverterRegistry.Lookup(value.GetType());
+            CborWriter writer = new CborWriter(buffer);
+            converter.Write(ref writer, value);
+
+            ICborConverter<CborValue> cborValueConverter = options.Registry.ConverterRegistry.Lookup<CborValue>();
+            CborReader reader = new CborReader(buffer.WrittenSpan);
+            return cborValueConverter.Read(ref reader);
+        }
+}
 }

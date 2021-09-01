@@ -177,19 +177,12 @@ namespace Dahomey.Cbor.ObjectModel
             return hash;
         }
 
-        public static CborArray FromCollection<T>(T collection, CborOptions? options = null)
-            where T : ICollection
+        public static CborArray FromCollection<T>(IEnumerable<T> collection, CborOptions? options = null)
         {
             options ??= CborOptions.Default;
 
-            using ByteBufferWriter buffer = new ByteBufferWriter();
-            ICborConverter<T> listConverter = options.Registry.ConverterRegistry.Lookup<T>();
-            CborWriter writer = new CborWriter(buffer);
-            listConverter.Write(ref writer, collection);
-
-            ICborConverter<CborArray> cborArrayConverter = options.Registry.ConverterRegistry.Lookup<CborArray>();
-            CborReader reader = new CborReader(buffer.WrittenSpan);
-            return cborArrayConverter.Read(ref reader);
+            IEnumerable<CborValue> values = collection.Select(item => item == null ? CborValue.Null : CborValueConvert.ToValue(item, options));
+            return new CborArray(values);
         }
 
         public T ToCollection<T>(CborOptions? options = null) 
