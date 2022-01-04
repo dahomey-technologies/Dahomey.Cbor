@@ -8,7 +8,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
-#if NET5_0
+#if NET5_0_OR_GREATER
 
 [assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(System.Half))]
 

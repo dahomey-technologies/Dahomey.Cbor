@@ -54,7 +54,7 @@ namespace Dahomey.Cbor.Util
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe int SingleToInt32Bits(float value)
         {
-#if NET5_0
+#if NET5_0_OR_GREATER
             return BitConverter.SingleToInt32Bits(value);
 #else
             return *((int*)&value);
@@ -64,7 +64,7 @@ namespace Dahomey.Cbor.Util
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe float Int32BitsToSingle(int value)
         {
-#if NET5_0
+#if NET5_0_OR_GREATER
             return BitConverter.Int32BitsToSingle(value);
 #else
             return *((float*)&value);
