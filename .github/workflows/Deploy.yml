@@ -11,15 +11,15 @@ jobs:
 
     steps:
     - name: checkout
-      uses: actions/checkout@v1
-      
+      uses: actions/checkout@v2
+
     - name: setup
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 5.0.400
-    
+        dotnet-version: 6.0.x
+
     - name: build
       run: dotnet pack -p:Version=${GITHUB_REF##*/} -p:FileVersion=${GITHUB_REF##*/} -p:AssemblyVersion=${GITHUB_REF##*/} -c Release src/Dahomey.Cbor
-    
+
     - name: deploy
       run: dotnet nuget push src/Dahomey.Cbor/bin/Release/Dahomey.Cbor.${GITHUB_REF##*/}.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json
