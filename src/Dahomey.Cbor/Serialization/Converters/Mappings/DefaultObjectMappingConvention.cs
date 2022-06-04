@@ -63,7 +63,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     continue;
                 }
 
-                if ((getMethod.IsPrivate || getMethod.IsStatic) && !propertyInfo.IsDefined(typeof(CborPropertyAttribute)))
+                if ((getMethod.IsFamily || getMethod.IsPrivate || getMethod.IsStatic) && !propertyInfo.IsDefined(typeof(CborPropertyAttribute)))
                 {
                     continue;
                 }
