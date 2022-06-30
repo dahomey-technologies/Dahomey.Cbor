@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers.Text;
+using System.Globalization;
 using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
@@ -230,7 +231,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 case DateTimeFormat.ISO8601:
                     writer.WriteSemanticTag(0);
-                    writer.WriteString(value.ToString("yyyy-MM-dd'T'HH:mm:ss.FFFK"));
+                    writer.WriteString(value.ToString("yyyy-MM-dd'T'HH:mm:ss.FFFK", CultureInfo.InvariantCulture));
                     break;
 
                 case DateTimeFormat.Unix:
