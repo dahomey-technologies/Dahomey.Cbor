@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Dahomey.Cbor.Attributes
 {
-    [AttributeUsage(AttributeTargets.Class|AttributeTargets.Struct|AttributeTargets.Enum|AttributeTargets.Property|AttributeTargets.Field)]
+    [AttributeUsage(AttributeTargets.Class|AttributeTargets.Struct|AttributeTargets.Interface|AttributeTargets.Enum|AttributeTargets.Property|AttributeTargets.Field)]
     public class CborConverterAttribute : Attribute
     {
         public Type ConverterType { get; }
