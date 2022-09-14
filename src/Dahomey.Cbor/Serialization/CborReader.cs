@@ -334,6 +334,8 @@ namespace Dahomey.Cbor.Serialization
         public ReadOnlySequence<byte> ReadByteStringSequence()
         {
             SkipSemanticTag();
+            Expect(CborMajorType.ByteString);
+            return ReadSizeAndSequence();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -772,6 +774,8 @@ namespace Dahomey.Cbor.Serialization
         private CborMajorType GetCurrentMajorType()
         {
             ExpectLength(1);
+            byte headerByte = GetBytes(1)[0];
+            CborMajorType majorType = (CborMajorType)((headerByte >> 5) & 0x07);
 
             if (majorType > CborMajorType.Max)
             {
@@ -806,7 +810,7 @@ namespace Dahomey.Cbor.Serialization
 
                 case CborMajorType.ByteString:
                 case CborMajorType.TextString:
-                    ReadSizeAndBytes();
+                    SkipSizeAndBytes();
                     break;
 
                 case CborMajorType.Array:
