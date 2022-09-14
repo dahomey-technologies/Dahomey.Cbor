@@ -97,7 +97,7 @@ namespace Dahomey.Cbor
             if (task.IsCompletedSuccessfully)
             {
                 ReadOnlySequence<byte> sequence = task.Result;
-                T result = Deserialize<T>(sequence.GetSpan(), options);
+                T result = Deserialize<T>(sequence, options);
                 reader.AdvanceTo(sequence.End);
                 return new ValueTask<T>(result);
             }
@@ -107,7 +107,7 @@ namespace Dahomey.Cbor
             async ValueTask<T> FinishDeserializeAsync(ValueTask<ReadOnlySequence<byte>> localTask)
             {
                 ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
-                T result = Deserialize<T>(sequence.GetSpan(), options);
+                T result = Deserialize<T>(sequence, options);
                 reader.AdvanceTo(sequence.End);
                 return result;
             }
@@ -125,7 +125,7 @@ namespace Dahomey.Cbor
             if (task.IsCompletedSuccessfully)
             {
                 ReadOnlySequence<byte> sequence = task.Result;
-                object? result = Cbor.Deserialize(objectType, sequence.GetSpan(), options);
+                object? result = Cbor.Deserialize(objectType, sequence, options);
                 reader.AdvanceTo(sequence.End);
                 return new ValueTask<object?>(result);
             }
@@ -135,7 +135,7 @@ namespace Dahomey.Cbor
             async ValueTask<object?> FinishDeserializeAsync(ValueTask<ReadOnlySequence<byte>> localTask)
             {
                 ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
-                object? result = Cbor.Deserialize(objectType, sequence.GetSpan(), options);
+                object? result = Cbor.Deserialize(objectType, sequence, options);
                 reader.AdvanceTo(sequence.End);
                 return result;
             }
@@ -153,9 +153,32 @@ namespace Dahomey.Cbor
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T Deserialize<T>(
+            ReadOnlySequence<byte> buffer,
+            CborOptions? options = null)
+        {
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
+            return converter.Read(ref reader);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object? Deserialize(
             Type objectType, 
             ReadOnlySpan<byte> buffer,
+            CborOptions? options = null)
+        {
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
+            return cborConverter.Read(ref reader);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static object? Deserialize(
+            Type objectType,
+            ReadOnlySequence<byte> buffer,
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;

@@ -1,5 +1,6 @@
 ﻿using Dahomey.Cbor.Util;
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -59,6 +60,7 @@ namespace Dahomey.Cbor.Serialization
     public ref struct CborReaderBookmark
     {
         public ReadOnlySpan<byte> buffer;
+        public ReadOnlySequence<byte>? sequence;
         public int currentPos;
         public CborReaderState state;
         public CborReaderHeader header;
@@ -69,22 +71,40 @@ namespace Dahomey.Cbor.Serialization
     {
         private const int CHUNK_SIZE = 1024;
         private const byte INDEFINITE_LENGTH = 31;
+        private const int SCRATCH_BUFFER_SIZE = 16; // This is enough for storing decimal bytes
 
         private ReadOnlySpan<byte> _buffer;
+        private ReadOnlySequence<byte>? _sequence;
         private int _currentPos;
         private CborReaderState _state;
         private CborReaderHeader _header;
         private int _remainingItemCount;
+        private byte[]? _scratchBuffer;
 
-        public ReadOnlySpan<byte> Buffer => _buffer;
+        public ReadOnlySpan<byte> Buffer => _sequence.HasValue
+            ? throw new InvalidOperationException("Buffer is not available when reader is operating on a sequence buffer")
+            : _buffer.Slice(_currentPos);
 
         public CborReader(ReadOnlySpan<byte> buffer)
         {
             _buffer = buffer;
+            _sequence = null;
             _currentPos = 0;
             _state = CborReaderState.Start;
             _header = new CborReaderHeader();
             _remainingItemCount = 0;
+            _scratchBuffer = null;
+        }
+
+        public CborReader(ReadOnlySequence<byte> buffer)
+        {
+            _buffer = ReadOnlySpan<byte>.Empty;
+            _sequence = buffer;
+            _currentPos = 0;
+            _state = CborReaderState.Start;
+            _header = new CborReaderHeader();
+            _remainingItemCount = 0;
+            _scratchBuffer = null;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -128,7 +148,7 @@ namespace Dahomey.Cbor.Serialization
                     return CborDataItemType.Map;
 
                 case CborMajorType.SemanticTag:
-                    Advance();
+                    Advance(1);
                     return GetCurrentDataItemType();
 
                 case CborMajorType.Primitive:
@@ -169,6 +189,7 @@ namespace Dahomey.Cbor.Serialization
             CborReaderBookmark bookmark;
 
             bookmark.buffer = _buffer;
+            bookmark.sequence = _sequence;
             bookmark.currentPos = _currentPos;
             bookmark.state = _state;
             bookmark.header = _header;
@@ -180,6 +201,7 @@ namespace Dahomey.Cbor.Serialization
         public void ReturnToBookmark(CborReaderBookmark bookmark)
         {
             _buffer = bookmark.buffer;
+            _sequence = bookmark.sequence;
             _currentPos = bookmark.currentPos;
             _state = bookmark.state;
             _header = bookmark.header;
@@ -285,7 +307,7 @@ namespace Dahomey.Cbor.Serialization
             }
 
             Expect(CborMajorType.TextString);
-            return Encoding.UTF8.GetString(ReadSizeAndBytes());
+            return Encoding.UTF8.GetString(ReadSizeAndBytes(allowScratchBuffer: true));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -297,7 +319,7 @@ namespace Dahomey.Cbor.Serialization
             }
 
             Expect(CborMajorType.TextString);
-            return ReadSizeAndBytes();
+            return ReadSizeAndBytes(allowScratchBuffer: false);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -305,7 +327,13 @@ namespace Dahomey.Cbor.Serialization
         {
             SkipSemanticTag();
             Expect(CborMajorType.ByteString);
-            return ReadSizeAndBytes();
+            return ReadSizeAndBytes(allowScratchBuffer: false);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ReadOnlySequence<byte> ReadByteStringSequence()
+        {
+            SkipSemanticTag();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -667,7 +695,7 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private ReadOnlySpan<byte> ReadSizeAndBytes()
+        private ReadOnlySpan<byte> ReadSizeAndBytes(bool allowScratchBuffer)
         {
             int size = ReadSize();
 
@@ -676,7 +704,37 @@ namespace Dahomey.Cbor.Serialization
                 throw new NotSupportedException();
             }
 
-            return ReadBytes(size);
+            return ReadBytes(size, allowScratchBuffer);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private ReadOnlySequence<byte> ReadSizeAndSequence()
+        {
+            int size = ReadSize();
+
+            if (size == -1)
+            {
+                throw new NotSupportedException();
+            }
+
+            ExpectLength(size);
+
+            ReadOnlySequence<byte> sequence;
+
+            if (_sequence.HasValue)
+            {
+                sequence = _sequence.Value.Slice(_currentPos, size);
+            }
+            else
+            {
+                var buffer = new byte[size];
+                _buffer.Slice(_currentPos, size).CopyTo(buffer);
+                sequence = new ReadOnlySequence<byte>(buffer);
+            }
+
+            Advance(size);
+
+            return sequence;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -687,27 +745,25 @@ namespace Dahomey.Cbor.Serialization
                 return _header;
             }
 
-            ExpectLength(1);
-
-            _header.MajorType = (CborMajorType)((_buffer[0] >> 5) & 0x07);
-            _header.AdditionalValue = (byte)(_buffer[0] & 0x1f);
+            byte headerByte = ReadBytes(1)[0];
+            _header.MajorType = (CborMajorType)((headerByte >> 5) & 0x07);
+            _header.AdditionalValue = (byte)(headerByte & 0x1f);
 
             if (_header.MajorType > CborMajorType.Max)
             {
                 throw new CborException($"Invalid major type {_header.MajorType}");
             }
 
-            Advance();
             _state = CborReaderState.Header;
 
             return _header;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private ReadOnlySpan<byte> ReadBytes(int length)
+        private ReadOnlySpan<byte> ReadBytes(int length, bool allowScratchBuffer = true)
         {
             ExpectLength(length);
-            ReadOnlySpan<byte> slice = _buffer.Slice(0, length);
+            ReadOnlySpan<byte> slice = GetBytes(length, allowScratchBuffer);
             Advance(length);
             return slice;
         }
@@ -716,8 +772,6 @@ namespace Dahomey.Cbor.Serialization
         private CborMajorType GetCurrentMajorType()
         {
             ExpectLength(1);
-
-            CborMajorType majorType = (CborMajorType)((_buffer[0] >> 5) & 0x07);
 
             if (majorType > CborMajorType.Max)
             {
@@ -800,6 +854,20 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void SkipSizeAndBytes()
+        {
+            int size = ReadSize();
+
+            if (size == -1)
+            {
+                throw new NotSupportedException();
+            }
+
+            ExpectLength(size);
+            Advance(size);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void SkipArray()
         {
             int size = ReadSize();
@@ -867,20 +935,47 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ExpectLength(int length)
         {
-            if (_buffer.Length < length)
+            int remaining = ((int?)_sequence?.Length ?? _buffer.Length) - _currentPos;
+            if (remaining < length)
             {
                 throw BuildException($"Unexpected end of buffer");
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Advance(int length = 1)
+        private ReadOnlySpan<byte> GetBytes(int length, bool allowScratchBuffer = true)
+        {
+            if (!_sequence.HasValue)
+            {
+                return _buffer.Slice(_currentPos, length);
+            }
+
+            ReadOnlySequence<byte> sequence = _sequence.Value.Slice(_currentPos, length);
+            if (sequence.IsSingleSegment)
+            {
+                return sequence.First.Span;
+            }
+            else if (allowScratchBuffer && length <= SCRATCH_BUFFER_SIZE)
+            {
+                byte[] scratchBuffer = _scratchBuffer ??= new byte[SCRATCH_BUFFER_SIZE];
+                sequence.CopyTo(scratchBuffer);
+                return scratchBuffer.AsSpan(0, length);
+            }
+            else
+            {
+                byte[] array = new byte[length];
+                sequence.CopyTo(array);
+                return array;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void Advance(int length)
         {
             if (_state == CborReaderState.Header)
             {
                 _state = CborReaderState.Data;
             }
-            _buffer = _buffer.Slice(length);
             _currentPos += length;
         }
 
