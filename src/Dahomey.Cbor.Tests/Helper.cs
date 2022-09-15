@@ -185,6 +185,11 @@ namespace Dahomey.Cbor.Tests
                 Assert.Equal(expected, ((ReadOnlySequence<byte>)(object)sequenceValue).ToArray());
                 Assert.Equal(expected, ((ReadOnlySequence<byte>)(object)fragmentizedSequenceValue).ToArray());
             }
+            else if (value is Half half && Half.IsNaN(half))
+            {
+                Assert.True(Half.IsNaN((Half)(object)sequenceValue));
+                Assert.True(Half.IsNaN((Half)(object)fragmentizedSequenceValue));
+            }
             else
             {
                 Assert.Equal(value, sequenceValue);
