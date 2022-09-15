@@ -1,4 +1,6 @@
 ﻿using Dahomey.Cbor.Attributes;
+using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.Serialization;
 using Xunit;
 
@@ -6,7 +8,7 @@ namespace Dahomey.Cbor.Tests
 {
     public class CallbackTests
     {
-        private class ObjectWithCallbacks
+        private class ObjectWithCallbacks : IEquatable<ObjectWithCallbacks>
         {
             public int Id { get; set; }
 
@@ -32,7 +34,7 @@ namespace Dahomey.Cbor.Tests
                 OnDeserializedCalled = true;
             }
 
-            [OnDeserializing]
+            [OnSerializing]
             public void OnSerializing()
             {
                 Assert.False(OnSerializingCalled);
@@ -40,12 +42,21 @@ namespace Dahomey.Cbor.Tests
                 OnSerializingCalled = true;
             }
 
-            [OnDeserialized]
+            [OnSerialized]
             public void OnSerialized()
             {
                 Assert.True(OnSerializingCalled);
                 Assert.False(OnSerializedCalled);
                 OnSerializedCalled = true;
+            }
+
+            public bool Equals([AllowNull] ObjectWithCallbacks other)
+            {
+                return Id == other.Id &&
+                    OnDeserializingCalled == other.OnDeserializingCalled &&
+                    OnDeserializedCalled == other.OnDeserializedCalled &&
+                    OnSerializingCalled == other.OnSerializingCalled &&
+                    OnSerializedCalled == other.OnSerializedCalled;
             }
         }
 

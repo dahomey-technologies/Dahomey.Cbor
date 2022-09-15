@@ -1,14 +1,15 @@
 ﻿using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Util;
-using Xunit;
+using Nerdbank.Streams;
+using Newtonsoft.Json;
 using System;
+using System.Buffers;
 using System.Collections;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Buffers;
-using Nerdbank.Streams;
+using Xunit;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -35,10 +36,20 @@ namespace Dahomey.Cbor.Tests
                 Assert.Equal(expected, ((ReadOnlySequence<byte>)(object)sequenceValue).ToArray());
                 Assert.Equal(expected, ((ReadOnlySequence<byte>)(object)fragmentizedSequenceValue).ToArray());
             }
-            else
+            else if (value is ICollection collection)
+            {
+                Assert.Equal(collection, (ICollection)sequenceValue);
+                Assert.Equal(collection, (ICollection)fragmentizedSequenceValue);
+            }
+            else if (value is IEquatable<T> equatable)
             {
                 Assert.Equal(value, sequenceValue);
                 Assert.Equal(value, fragmentizedSequenceValue);
+            }
+            else
+            {
+                Assert.Equal(JsonConvert.SerializeObject(value), JsonConvert.SerializeObject(sequenceValue));
+                Assert.Equal(JsonConvert.SerializeObject(value), JsonConvert.SerializeObject(fragmentizedSequenceValue));
             }
 
             return value;
