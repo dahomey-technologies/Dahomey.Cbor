@@ -63,6 +63,7 @@ namespace Dahomey.Cbor.Serialization
         public ReadOnlySequence<byte>? sequence;
         public int currentPos;
         public int length;
+        public SequenceReader<byte> sequenceReader;
         public CborReaderState state;
         public CborReaderHeader header;
         public int remainingItemCount;
@@ -78,6 +79,7 @@ namespace Dahomey.Cbor.Serialization
         private ReadOnlySequence<byte>? _sequence;
         private int _currentPos;
         private int _length;
+        private SequenceReader<byte> _sequenceReader;
         private CborReaderState _state;
         private CborReaderHeader _header;
         private int _remainingItemCount;
@@ -93,6 +95,7 @@ namespace Dahomey.Cbor.Serialization
             _sequence = null;
             _currentPos = 0;
             _length = buffer.Length;
+            _sequenceReader = default;
             _state = CborReaderState.Start;
             _header = new CborReaderHeader();
             _remainingItemCount = 0;
@@ -105,6 +108,7 @@ namespace Dahomey.Cbor.Serialization
             _sequence = buffer;
             _currentPos = 0;
             _length = (int)buffer.Length;
+            _sequenceReader = new SequenceReader<byte>(buffer);
             _state = CborReaderState.Start;
             _header = new CborReaderHeader();
             _remainingItemCount = 0;
@@ -198,6 +202,7 @@ namespace Dahomey.Cbor.Serialization
             bookmark.sequence = _sequence;
             bookmark.currentPos = _currentPos;
             bookmark.length = _length;
+            bookmark.sequenceReader = _sequenceReader;
             bookmark.state = _state;
             bookmark.header = _header;
             bookmark.remainingItemCount = _remainingItemCount;
@@ -211,6 +216,7 @@ namespace Dahomey.Cbor.Serialization
             _sequence = bookmark.sequence;
             _currentPos = bookmark.currentPos;
             _length = bookmark.length;
+            _sequenceReader = bookmark.sequenceReader;
             _state = bookmark.state;
             _header = bookmark.header;
             _remainingItemCount = bookmark.remainingItemCount;
@@ -974,21 +980,21 @@ namespace Dahomey.Cbor.Serialization
                 return _buffer.Slice(_currentPos, length);
             }
 
-            ReadOnlySequence<byte> sequence = _sequence.Value.Slice(_currentPos, length);
-            if (sequence.IsSingleSegment)
+            if (_sequenceReader.UnreadSpan.Length >= length)
             {
-                return sequence.First.Span;
+                return _sequenceReader.UnreadSpan.Slice(0, length);
             }
             else if (allowScratchBuffer && length <= SCRATCH_BUFFER_SIZE)
             {
                 byte[] scratchBuffer = _scratchBuffer ??= new byte[SCRATCH_BUFFER_SIZE];
-                sequence.CopyTo(scratchBuffer);
-                return scratchBuffer.AsSpan(0, length);
+                Span<byte> span = scratchBuffer.AsSpan(0, length);
+                _sequenceReader.TryCopyTo(span);
+                return span;
             }
             else
             {
                 byte[] array = new byte[length];
-                sequence.CopyTo(array);
+                _sequenceReader.TryCopyTo(array);
                 return array;
             }
         }
@@ -1001,6 +1007,11 @@ namespace Dahomey.Cbor.Serialization
                 _state = CborReaderState.Data;
             }
             _currentPos += length;
+
+            if (_sequence.HasValue)
+            {
+                _sequenceReader.Advance(length);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
