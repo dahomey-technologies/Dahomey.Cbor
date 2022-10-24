@@ -262,6 +262,88 @@ namespace Dahomey.Cbor
         }
 
         /// <summary>
+        /// Deserialize the next item of a CBOR sequence.
+        /// </summary>
+        /// <typeparam name="TItem">The type of item to read</typeparam>
+        /// <param name="reader">The pipe reader to read the sequence from</param>
+        /// <param name="options">The cbor options</param>
+        /// <param name="cancellationToken">The cancellation token</param>
+        /// <returns>The next item in the sequence. default(TItem) is returned when no more items are available</returns>
+        /// <exception cref="CborException">Thrown if the reader does not contain a valid cbor sequence</exception>
+        public static async ValueTask<TItem?> ReadNextItemAsync<TItem>(PipeReader reader, CborOptions? options = null, CancellationToken cancellationToken = default)
+        {
+            while (true)
+            {
+                ReadResult result = await reader.ReadAsync(cancellationToken: cancellationToken);
+                if (result.IsCanceled)
+                {
+                    await Task.FromCanceled(cancellationToken);
+                }
+
+                ReadOnlySequence<byte> buffer = result.Buffer;
+                if (buffer.IsEmpty)
+                {
+                    return default;
+                }
+
+                try
+                {
+                    if (TryReadItem(buffer, options ?? CborOptions.Default, out TItem? item, out var consumed))
+                    {
+                        reader.AdvanceTo(buffer.GetPosition(offset: consumed), examined: buffer.End);
+                        result = default;
+                        return item;
+                    }
+                    else
+                    {
+                        if (result.IsCompleted)
+                        {
+                            throw new CborException("Reader has completed with some buffer bytes but no item was read");
+                        }
+
+                        reader.AdvanceTo(buffer.Start, examined: buffer.End);
+                        result = default;
+                    }
+                }
+                catch (Exception) when (!result.IsCompleted)
+                {
+                    // Eat exception, as there is more data in the pipe, and we want to try again.
+                    // This is kind of naive, as the exception could be thrown either because
+                    // the object is not complete -or- because something actually went
+                    // wrong (IOException)
+                    // 
+                    // Anyways, if the pipe is complete, the exception will not be catched (see filter)
+
+                    reader.AdvanceTo(buffer.Start, examined: buffer.End);
+                    result = default;
+                }
+            }
+
+            static bool TryReadItem(
+                in ReadOnlySequence<byte> sequence,
+                CborOptions options,
+                out TItem? item,
+                out int consumed)
+            {
+                CborReader reader = new CborReader(sequence);
+                ICborConverter<TItem> converter = options.Registry.ConverterRegistry.Lookup<TItem>();
+
+                try
+                {
+                    item = converter.Read(ref reader);
+                    consumed = reader.GetBookmark().currentPos;
+                    return true;
+                }
+                catch (CborException)
+                {
+                    item = default;
+                    consumed = 0;
+                    return false;
+                }
+            }
+        }
+
+        /// <summary>
         /// Converts a CBOR binary buffer to a Json string for debugging purposes
         /// </summary>
         /// <param name="buffer"></param>
