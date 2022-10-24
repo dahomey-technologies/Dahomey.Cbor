@@ -29,7 +29,7 @@ namespace System.IO.Pipelines
                         return result.Buffer;
                     }
 
-                    reader.AdvanceTo(result.Buffer.Start);
+                    reader.AdvanceTo(result.Buffer.Start, result.Buffer.End);
                 }
             }
         }
