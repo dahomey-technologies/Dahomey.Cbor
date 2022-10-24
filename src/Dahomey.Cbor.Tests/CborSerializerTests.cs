@@ -37,7 +37,7 @@ namespace Dahomey.Cbor.Tests
         };
 
         [Fact]
-        public async Task DeserializeFromMemoryStream()
+        public async Task DeserializeFromMemoryStreamAsync()
         {
             MemoryStream stream = new MemoryStream(SimpleObjectHexBuffer.HexToBytes());
             SimpleObject obj = await Cbor.DeserializeAsync<SimpleObject>(stream);
@@ -45,7 +45,7 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public async Task DeserializeObjectFromMemoryStream()
+        public async Task DeserializeObjectFromMemoryStreamAsync()
         {
             MemoryStream stream = new MemoryStream(SimpleObjectHexBuffer.HexToBytes());
             SimpleObject obj = (SimpleObject)await Cbor.DeserializeAsync(typeof(SimpleObject), stream);
@@ -53,7 +53,7 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public async Task SerializeToMemoryStream()
+        public async Task SerializeToMemoryStreamAsync()
         {
             MemoryStream stream = new MemoryStream();
             await Cbor.SerializeAsync(SimpleObject, stream, Options);
@@ -61,7 +61,7 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public async Task SerializeOBjectToMemoryStream()
+        public async Task SerializeOBjectToMemoryStreamAsync()
         {
             MemoryStream stream = new MemoryStream();
             await Cbor.SerializeAsync(SimpleObject, typeof(SimpleObject), stream, Options);
@@ -69,7 +69,7 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public async Task DeserializeFromFileStream()
+        public async Task DeserializeFromFileStreamAsync()
         {
             string tempFileName = Path.GetTempFileName();
             File.WriteAllBytes(tempFileName, SimpleObjectHexBuffer.HexToBytes());
@@ -89,7 +89,7 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public async Task DeserializeObjectFromFileStream()
+        public async Task DeserializeObjectFromFileStreamAsync()
         {
             string tempFileName = Path.GetTempFileName();
             File.WriteAllBytes(tempFileName, SimpleObjectHexBuffer.HexToBytes());
@@ -109,7 +109,7 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public async Task SerializeObjectToFileStream()
+        public async Task SerializeObjectToFileStreamAsync()
         {
             string tempFileName = Path.GetTempFileName();
 
@@ -169,7 +169,7 @@ namespace Dahomey.Cbor.Tests
         [InlineData(1)]
         [InlineData(32)]
         [InlineData(512)]
-        public async Task DeserializeFromPipeReader(int bufferSize)
+        public async Task DeserializeFromPipeReaderAsync(int bufferSize)
         {
             ReadOnlyMemory<byte> cborBytes = SimpleObjectHexBuffer.HexToBytes();
 
@@ -190,14 +190,14 @@ namespace Dahomey.Cbor.Tests
                     await Task.Delay(1);
                 }
 
-                pipe.Writer.Complete();
+                await pipe.Writer.CompleteAsync();
             }
 
             Task<SimpleObject> readTask = Cbor.DeserializeAsync<SimpleObject>(pipe.Reader).AsTask();
 
             await Task.WhenAll(WriteAsync(bufferSize), readTask);
 
-            SimpleObject obj = readTask.Result;
+            SimpleObject obj = await readTask;
             TestSimpleObject(obj);
         }
 
@@ -205,7 +205,7 @@ namespace Dahomey.Cbor.Tests
         [InlineData(1)]
         [InlineData(32)]
         [InlineData(512)]
-        public async Task DeserializeObjectFromPipeReader(int bufferSize)
+        public async Task DeserializeObjectFromPipeReaderAsync(int bufferSize)
         {
             ReadOnlyMemory<byte> cborBytes = SimpleObjectHexBuffer.HexToBytes();
 
@@ -226,14 +226,14 @@ namespace Dahomey.Cbor.Tests
                     await Task.Delay(1);
                 }
 
-                pipe.Writer.Complete();
+                await pipe.Writer.CompleteAsync();
             }
 
             Task<object> readTask = Cbor.DeserializeAsync(typeof(SimpleObject), pipe.Reader).AsTask();
 
             await Task.WhenAll(WriteAsync(bufferSize), readTask);
 
-            SimpleObject obj = (SimpleObject)readTask.Result;
+            SimpleObject obj = (SimpleObject)await readTask;
             TestSimpleObject(obj);
         }
 

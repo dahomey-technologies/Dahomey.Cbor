@@ -2,6 +2,7 @@
 using System.Buffers;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -42,7 +43,7 @@ namespace Dahomey.Cbor.Tests
         [InlineData(20, 16)]
         [InlineData(16, 16)]
         [InlineData(10, 16)]
-        public async void ReadAsyncNoSync(int bufferLength, int hintSize)
+        public async Task ReadAsyncNoSyncAsync(int bufferLength, int hintSize)
         {
             byte[] buffer = Enumerable.Range(0, bufferLength).Select(i => (byte)i).ToArray();
             NoSeekStream stream = new NoSeekStream(buffer.AsMemory());
