@@ -2,6 +2,7 @@
 *.suo
 *.user
 .vs
+vs-chromium-project.txt
 
 # Build output
 src/**/obj/
