@@ -31,7 +31,9 @@ namespace Dahomey.Cbor
 
             if (task.IsCompletedSuccessfully)
             {
+#pragma warning disable VSTHRD103
                 return new ValueTask<T>(Deserialize(task.Result));
+#pragma warning restore VSTHRD103
             }
 
             return FinishDeserializeAsync(task);
@@ -67,7 +69,9 @@ namespace Dahomey.Cbor
 
             if (task.IsCompletedSuccessfully)
             {
+#pragma warning disable VSTHRD103
                 return new ValueTask<object?>(Deserialize(task.Result));
+#pragma warning restore VSTHRD103
             }
 
             return FinishDeserializeAsync(task);
@@ -96,7 +100,9 @@ namespace Dahomey.Cbor
 
             if (task.IsCompletedSuccessfully)
             {
+#pragma warning disable VSTHRD103
                 ReadOnlySequence<byte> sequence = task.Result;
+#pragma warning restore VSTHRD103
                 T result = Deserialize<T>(sequence, options);
                 reader.AdvanceTo(sequence.End);
                 return new ValueTask<T>(result);
@@ -124,7 +130,9 @@ namespace Dahomey.Cbor
 
             if (task.IsCompletedSuccessfully)
             {
+#pragma warning disable VSTHRD103
                 ReadOnlySequence<byte> sequence = task.Result;
+#pragma warning restore VSTHRD103
                 object? result = Cbor.Deserialize(objectType, sequence, options);
                 reader.AdvanceTo(sequence.End);
                 return new ValueTask<object?>(result);

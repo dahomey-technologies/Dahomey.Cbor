@@ -56,7 +56,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
         public void WriteDiscriminator(ref CborWriter writer, Type actualType)
         {
-            if (!_discriminatorsByType.TryGetValue(actualType, out T discriminator))
+            if (!_discriminatorsByType.TryGetValue(actualType, out T? discriminator))
             {
                 throw new CborException($"Unknown discriminator for type: {actualType}");
             }
