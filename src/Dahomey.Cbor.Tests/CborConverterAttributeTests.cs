@@ -114,6 +114,7 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
+        [CborConverter(typeof(SomeInterfaceCborConverter))]
         interface ISomeInterface
         {
             int Value { get; set; }
