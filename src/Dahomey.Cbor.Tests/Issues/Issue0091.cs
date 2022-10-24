@@ -3,6 +3,7 @@
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization.Conventions;
 using System;
+using System.Globalization;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
@@ -25,7 +26,7 @@ namespace Dahomey.Cbor.Tests.Issues
             options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(Dog));
 
-            Dog dog = new("black", DateTime.Parse("2022-10-24T14:05:08Z"));
+            Dog dog = new("black", DateTime.Parse("2022-10-24T14:05:08Z", null, DateTimeStyles.RoundtripKind));
             var cbor = Helper.Write<Animal>(dog, options);
 
             Animal deserialized = Helper.Read<Animal>(cbor, options);

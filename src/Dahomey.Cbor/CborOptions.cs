@@ -1,6 +1,7 @@
 ﻿using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Conventions;
+using System;
 
 namespace Dahomey.Cbor
 {
@@ -35,12 +36,19 @@ namespace Dahomey.Cbor
 
     public class CborOptions
     {
-        public static CborOptions Default { get; } = new CborOptions();
+        public static CborOptions Default { get; } = new CborOptions()
+        {
+            UnqualifiedTimeZoneDateTimeKind = DateTimeKind.Local
+        };
 
         public SerializationRegistry Registry { get; private set; }
         public UnhandledNameMode UnhandledNameMode { get; set; }
         public ValueFormat EnumFormat { get; set; }
         public DateTimeFormat DateTimeFormat { get; set; }
+        /// <summary>
+        /// When an ISO date with an unqualified timezone is parsed, this option gives the DateTimeKind to use
+        /// </summary>
+        public DateTimeKind UnqualifiedTimeZoneDateTimeKind { get; set; }
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; set; }
         public LengthMode ArrayLengthMode { get; set; } = LengthMode.DefiniteLength;
         public LengthMode MapLengthMode { get; set; } = LengthMode.DefiniteLength;

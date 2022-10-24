@@ -126,17 +126,17 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
             }
 
-            // unspecified time zone => assume local
+            // unspecified time zone => DateTimeKind is taken from the option UnqualifiedTimeZoneDateTimeKind, Local beeing the default
             if (buffer.IsEmpty)
             {
-                value = new DateTime(year, month, day, hours, minutes, seconds, milliseconds, DateTimeKind.Local);
+                value = new DateTime(year, month, day, hours, minutes, seconds, milliseconds, _options.UnqualifiedTimeZoneDateTimeKind);
             }
             // UTC
             else if (TryReadByte(ref buffer, (byte)'Z'))
             {
                 value = new DateTime(year, month, day, hours, minutes, seconds, milliseconds, DateTimeKind.Utc);
             }
-            // Other time zones => convert to local
+            // Other time zones => convert to UTC
             else
             {
                 bool negative;
@@ -178,11 +178,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                     offsetMinutes = -offsetMinutes;
                 }
 
-                DateTimeOffset offset = new DateTimeOffset(
-                    year, month, day, hours, minutes, seconds, milliseconds,
-                    TimeSpan.FromHours(offsetHours) + TimeSpan.FromMinutes(offsetMinutes));
-
-                value = offset.LocalDateTime;
+                value = new DateTime(year, month, day, hours, minutes, seconds, milliseconds, DateTimeKind.Utc)
+                    .AddHours(offsetHours)
+                    .AddMinutes(offsetMinutes);
             }
 
             return true;
