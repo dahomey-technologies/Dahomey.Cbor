@@ -1,12 +1,15 @@
 ﻿using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Util;
-using Xunit;
+using Nerdbank.Streams;
+using Newtonsoft.Json;
 using System;
+using System.Buffers;
 using System.Collections;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using Xunit;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -15,10 +18,41 @@ namespace Dahomey.Cbor.Tests
         public static T Read<T>(string hexBuffer, CborOptions options = null)
         {
             options = options ?? CborOptions.Default;
-            Span<byte> buffer = hexBuffer.HexToBytes();
-            CborReader reader = new CborReader(buffer);
+            byte[] buffer = hexBuffer.HexToBytes();
+            CborReader spanReader = new CborReader(buffer.AsSpan());
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
-            return converter.Read(ref reader);
+            
+            T value = converter.Read(ref spanReader);
+
+            CborReader sequenceReader = new CborReader(new ReadOnlySequence<byte>(buffer));
+            T sequenceValue = converter.Read(ref sequenceReader);
+
+            CborReader fragmentizedSequenceReader = new CborReader(Fragmentize(buffer));
+            T fragmentizedSequenceValue = converter.Read(ref fragmentizedSequenceReader);
+
+            if (typeof(T) == typeof(ReadOnlySequence<byte>))
+            {
+                var expected = ((ReadOnlySequence<byte>)(object)value).ToArray();
+                Assert.Equal(expected, ((ReadOnlySequence<byte>)(object)sequenceValue).ToArray());
+                Assert.Equal(expected, ((ReadOnlySequence<byte>)(object)fragmentizedSequenceValue).ToArray());
+            }
+            else if (value is ICollection collection)
+            {
+                Assert.Equal(collection, (ICollection)sequenceValue);
+                Assert.Equal(collection, (ICollection)fragmentizedSequenceValue);
+            }
+            else if (value is IEquatable<T> equatable)
+            {
+                Assert.Equal(value, sequenceValue);
+                Assert.Equal(value, fragmentizedSequenceValue);
+            }
+            else
+            {
+                Assert.Equal(JsonConvert.SerializeObject(value), JsonConvert.SerializeObject(sequenceValue));
+                Assert.Equal(JsonConvert.SerializeObject(value), JsonConvert.SerializeObject(fragmentizedSequenceValue));
+            }
+
+            return value;
         }
 
         public static void TestRead<T>(string hexBuffer, T expectedValue, Type expectedExceptionType = null, CborOptions options = null)
@@ -133,10 +167,36 @@ namespace Dahomey.Cbor.Tests
 
         public static T Read<T>(string methodName, string hexBuffer)
         {
-            Span<byte> buffer = hexBuffer.HexToBytes();
-            CborReader reader = new CborReader(buffer);
+            byte[] buffer = hexBuffer.HexToBytes();
+            CborReader spanReader = new CborReader(buffer.AsSpan());
             MethodInfo method = typeof(CborReader).GetMethod(methodName, new Type[0] { });
-            return CreateMethodFunctor<CborReaderFunctor<T>>(method)(reader);
+            var functor = CreateMethodFunctor<CborReaderFunctor<T>>(method);
+            T value = functor(spanReader);
+
+            CborReader sequenceReader = new CborReader(new ReadOnlySequence<byte>(buffer));
+            T sequenceValue = functor(sequenceReader);
+            
+            CborReader fragmentizedSequenceReader = new CborReader(Fragmentize(buffer));
+            T fragmentizedSequenceValue = functor(fragmentizedSequenceReader);
+
+            if (typeof(T) == typeof(ReadOnlySequence<byte>))
+            {
+                var expected = ((ReadOnlySequence<byte>)(object)value).ToArray();
+                Assert.Equal(expected, ((ReadOnlySequence<byte>)(object)sequenceValue).ToArray());
+                Assert.Equal(expected, ((ReadOnlySequence<byte>)(object)fragmentizedSequenceValue).ToArray());
+            }
+            else if (value is Half half && Half.IsNaN(half))
+            {
+                Assert.True(Half.IsNaN((Half)(object)sequenceValue));
+                Assert.True(Half.IsNaN((Half)(object)fragmentizedSequenceValue));
+            }
+            else
+            {
+                Assert.Equal(value, sequenceValue);
+                Assert.Equal(value, fragmentizedSequenceValue);
+            }
+
+            return value;
         }
 
         public static void TestRead<T>(string methodName, string hexBuffer, T expectedValue, Type expectedExceptionType = null)
@@ -158,6 +218,10 @@ namespace Dahomey.Cbor.Tests
                 if (actualValue is ICollection actualCollection)
                 {
                     Assert.Equal((ICollection)expectedValue, actualCollection);
+                }
+                else if (actualValue is ReadOnlySequence<byte> actualSequence)
+                {
+                    Assert.Equal(((ReadOnlySequence<byte>)(object)expectedValue).ToArray(), actualSequence.ToArray());
                 }
                 else
                 {
@@ -233,6 +297,53 @@ namespace Dahomey.Cbor.Tests
                 new[] { objParam }.Concat(argParams));
 
             return lambda.Compile();
+        }
+
+        public static ReadOnlySequence<byte> Fragmentize(ReadOnlySpan<byte> bytes)
+        {
+            var pool = new FakePool();
+            var writer = new Sequence<byte>(pool);
+
+            foreach (var @byte in bytes)
+            {
+                var span = writer.GetSpan(1);
+                span[0] = @byte;
+                writer.Advance(1);
+            }
+
+            return writer.AsReadOnlySequence;
+        }
+
+        class FakePool : MemoryPool<byte>
+        {
+            public override int MaxBufferSize => 1;
+
+            public override IMemoryOwner<byte> Rent(int minBufferSize = -1)
+            {
+                if (minBufferSize == -1)
+                {
+                    minBufferSize = 1;
+                }
+                return new Lease(new byte[minBufferSize]);
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+            }
+
+            class Lease : IMemoryOwner<byte>
+            {
+                public Memory<byte> Memory { get; }
+
+                public Lease(Memory<byte> memory)
+                {
+                    Memory = memory;
+                }
+
+                public void Dispose()
+                {
+                }
+            }
         }
     }
 }

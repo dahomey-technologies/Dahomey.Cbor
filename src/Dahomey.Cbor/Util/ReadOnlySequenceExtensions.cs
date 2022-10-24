@@ -7,6 +7,7 @@ namespace Dahomey.Cbor.Util
 {
     public static class ReadOnlySequenceExtensions
     {
+        [Obsolete]
         public static ReadOnlySpan<T> GetSpan<T>(this ReadOnlySequence<T> sequence)
         {
             if (sequence.IsSingleSegment)

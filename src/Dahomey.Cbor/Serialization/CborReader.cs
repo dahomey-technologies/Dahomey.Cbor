@@ -1,5 +1,6 @@
 ﻿using Dahomey.Cbor.Util;
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -59,7 +60,10 @@ namespace Dahomey.Cbor.Serialization
     public ref struct CborReaderBookmark
     {
         public ReadOnlySpan<byte> buffer;
+        public ReadOnlySequence<byte>? sequence;
         public int currentPos;
+        public int length;
+        public SequenceReader<byte> sequenceReader;
         public CborReaderState state;
         public CborReaderHeader header;
         public int remainingItemCount;
@@ -69,22 +73,46 @@ namespace Dahomey.Cbor.Serialization
     {
         private const int CHUNK_SIZE = 1024;
         private const byte INDEFINITE_LENGTH = 31;
+        private const int SCRATCH_BUFFER_SIZE = 16; // This is enough for storing decimal bytes
 
         private ReadOnlySpan<byte> _buffer;
+        private ReadOnlySequence<byte>? _sequence;
         private int _currentPos;
+        private int _length;
+        private SequenceReader<byte> _sequenceReader;
         private CborReaderState _state;
         private CborReaderHeader _header;
         private int _remainingItemCount;
+        private byte[]? _scratchBuffer;
 
-        public ReadOnlySpan<byte> Buffer => _buffer;
+        public ReadOnlySpan<byte> Buffer => _sequence.HasValue
+            ? throw new InvalidOperationException("Buffer is not available when reader is operating on a sequence buffer")
+            : _buffer.Slice(_currentPos);
 
         public CborReader(ReadOnlySpan<byte> buffer)
         {
             _buffer = buffer;
+            _sequence = null;
             _currentPos = 0;
+            _length = buffer.Length;
+            _sequenceReader = default;
             _state = CborReaderState.Start;
             _header = new CborReaderHeader();
             _remainingItemCount = 0;
+            _scratchBuffer = null;
+        }
+
+        public CborReader(ReadOnlySequence<byte> buffer)
+        {
+            _buffer = ReadOnlySpan<byte>.Empty;
+            _sequence = buffer;
+            _currentPos = 0;
+            _length = (int)buffer.Length;
+            _sequenceReader = new SequenceReader<byte>(buffer);
+            _state = CborReaderState.Start;
+            _header = new CborReaderHeader();
+            _remainingItemCount = 0;
+            _scratchBuffer = null;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -128,7 +156,7 @@ namespace Dahomey.Cbor.Serialization
                     return CborDataItemType.Map;
 
                 case CborMajorType.SemanticTag:
-                    Advance();
+                    Advance(1);
                     return GetCurrentDataItemType();
 
                 case CborMajorType.Primitive:
@@ -156,11 +184,13 @@ namespace Dahomey.Cbor.Serialization
                             return CborDataItemType.Break;
 
                         default:
-                            throw BuildException("Primitive not supported");
+                            ThrowCbor("Primitive not supported");
+                            return default; // Unreachable
                     }
 
                 default:
-                    throw BuildException("Major type not supported");
+                    ThrowCbor("Major type not supported");
+                    return default; // Unreachable
             }
         }
 
@@ -169,7 +199,10 @@ namespace Dahomey.Cbor.Serialization
             CborReaderBookmark bookmark;
 
             bookmark.buffer = _buffer;
+            bookmark.sequence = _sequence;
             bookmark.currentPos = _currentPos;
+            bookmark.length = _length;
+            bookmark.sequenceReader = _sequenceReader;
             bookmark.state = _state;
             bookmark.header = _header;
             bookmark.remainingItemCount = _remainingItemCount;
@@ -180,7 +213,10 @@ namespace Dahomey.Cbor.Serialization
         public void ReturnToBookmark(CborReaderBookmark bookmark)
         {
             _buffer = bookmark.buffer;
+            _sequence = bookmark.sequence;
             _currentPos = bookmark.currentPos;
+            _length = bookmark.length;
+            _sequenceReader = bookmark.sequenceReader;
             _state = bookmark.state;
             _header = bookmark.header;
             _remainingItemCount = bookmark.remainingItemCount;
@@ -285,7 +321,7 @@ namespace Dahomey.Cbor.Serialization
             }
 
             Expect(CborMajorType.TextString);
-            return Encoding.UTF8.GetString(ReadSizeAndBytes());
+            return Encoding.UTF8.GetString(ReadSizeAndBytes(allowScratchBuffer: true));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -297,7 +333,7 @@ namespace Dahomey.Cbor.Serialization
             }
 
             Expect(CborMajorType.TextString);
-            return ReadSizeAndBytes();
+            return ReadSizeAndBytes(allowScratchBuffer: false);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -305,7 +341,15 @@ namespace Dahomey.Cbor.Serialization
         {
             SkipSemanticTag();
             Expect(CborMajorType.ByteString);
-            return ReadSizeAndBytes();
+            return ReadSizeAndBytes(allowScratchBuffer: false);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ReadOnlySequence<byte> ReadByteStringSequence()
+        {
+            SkipSemanticTag();
+            Expect(CborMajorType.ByteString);
+            return ReadSizeAndSequence();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -336,12 +380,14 @@ namespace Dahomey.Cbor.Serialization
                                 return (Half)InternalReadDouble();
 
                             default:
-                                throw new CborException($"Invalid primitive {header.Primitive}");
+                                ThrowCbor($"Invalid primitive {header.Primitive}");
+                                return default; // Unreachable
                         }
                     }
 
                 default:
-                    throw new CborException($"Invalid major type {header.MajorType}");
+                    ThrowCbor($"Invalid major type {header.MajorType}");
+                    return default; // Unreachable
             }
         }
 
@@ -361,7 +407,7 @@ namespace Dahomey.Cbor.Serialization
 
                 case CborMajorType.Primitive:
                     {
-                        switch(header.Primitive)
+                        switch (header.Primitive)
                         {
                             case CborPrimitive.HalfFloat:
                                 return (float)InternalReadHalf();
@@ -373,12 +419,14 @@ namespace Dahomey.Cbor.Serialization
                                 return (float)InternalReadDouble();
 
                             default:
-                                throw new CborException($"Invalid primitive {header.Primitive}");
+                                ThrowCbor($"Invalid primitive {header.Primitive}");
+                                return default; // Unreachable
                         }
                     }
 
                 default:
-                    throw new CborException($"Invalid major type {header.MajorType}");
+                    ThrowCbor($"Invalid major type {header.MajorType}");
+                    return default; // Unreachable
             }
         }
 
@@ -410,12 +458,14 @@ namespace Dahomey.Cbor.Serialization
                                 return InternalReadDouble();
 
                             default:
-                                throw new CborException($"Invalid primitive {header.Primitive}");
+                                ThrowCbor($"Invalid primitive {header.Primitive}");
+                                return default; // Unreachable
                         }
                     }
 
                 default:
-                    throw new CborException($"Invalid major type {header.MajorType}");
+                    ThrowCbor($"Invalid major type {header.MajorType}");
+                    return default; // Unreachable
             }
         }
 
@@ -450,12 +500,14 @@ namespace Dahomey.Cbor.Serialization
                                 return InternalReadDecimal();
 
                             default:
-                                throw new CborException($"Invalid primitive {header.Primitive}");
+                                ThrowCbor($"Invalid primitive {header.Primitive}");
+                                return default; // Unreachable
                         }
                     }
 
                 default:
-                    throw new CborException($"Invalid major type {header.MajorType}");
+                    ThrowCbor($"Invalid major type {header.MajorType}");
+                    return default; // Unreachable
             }
         }
 
@@ -530,7 +582,8 @@ namespace Dahomey.Cbor.Serialization
                     return ReadInteger(maxValue);
 
                 default:
-                    throw new CborException($"Invalid major type {header.MajorType}");
+                    ThrowCbor($"Invalid major type {header.MajorType}");
+                    return default; // Unreachable
             }
         }
 
@@ -548,7 +601,8 @@ namespace Dahomey.Cbor.Serialization
                     return -1L - (long)ReadInteger((ulong)maxValue);
 
                 default:
-                    throw new CborException($"Invalid major type {header.MajorType}");
+                    ThrowCbor($"Invalid major type {header.MajorType}");
+                    return default; // Unreachable
             }
         }
 
@@ -585,7 +639,9 @@ namespace Dahomey.Cbor.Serialization
                 case 29:
                 case 30:
                 case 31:
-                    throw BuildException($"Unexpected additional value {header.AdditionalValue}");
+                    ThrowCbor($"Unexpected additional value {header.AdditionalValue}");
+                    value = default; // Unreachable
+                    break;
 
                 default:
                     value = header.AdditionalValue;
@@ -595,7 +651,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (value > maxValue)
             {
-                throw BuildException("Invalid signed integer");
+                ThrowCbor("Invalid signed integer");
             }
 
             return value;
@@ -607,7 +663,7 @@ namespace Dahomey.Cbor.Serialization
             ReadOnlySpan<byte> bytes = ReadBytes(2);
             return HalfHelpers.ReadHalf(bytes);
         }
-        
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float InternalReadSingle()
         {
@@ -667,16 +723,46 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private ReadOnlySpan<byte> ReadSizeAndBytes()
+        private ReadOnlySpan<byte> ReadSizeAndBytes(bool allowScratchBuffer)
         {
             int size = ReadSize();
 
             if (size == -1)
             {
-                throw new NotSupportedException();
+                ThrowNotSupported();
             }
 
-            return ReadBytes(size);
+            return ReadBytes(size, allowScratchBuffer);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private ReadOnlySequence<byte> ReadSizeAndSequence()
+        {
+            int size = ReadSize();
+
+            if (size == -1)
+            {
+                ThrowNotSupported();
+            }
+
+            ExpectLength(size);
+
+            ReadOnlySequence<byte> sequence;
+
+            if (_sequence.HasValue)
+            {
+                sequence = _sequence.Value.Slice(_currentPos, size);
+            }
+            else
+            {
+                var buffer = new byte[size];
+                _buffer.Slice(_currentPos, size).CopyTo(buffer);
+                sequence = new ReadOnlySequence<byte>(buffer);
+            }
+
+            Advance(size);
+
+            return sequence;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -687,27 +773,25 @@ namespace Dahomey.Cbor.Serialization
                 return _header;
             }
 
-            ExpectLength(1);
-
-            _header.MajorType = (CborMajorType)((_buffer[0] >> 5) & 0x07);
-            _header.AdditionalValue = (byte)(_buffer[0] & 0x1f);
+            byte headerByte = ReadBytes(1)[0];
+            _header.MajorType = (CborMajorType)((headerByte >> 5) & 0x07);
+            _header.AdditionalValue = (byte)(headerByte & 0x1f);
 
             if (_header.MajorType > CborMajorType.Max)
             {
-                throw new CborException($"Invalid major type {_header.MajorType}");
+                ThrowCbor($"Invalid major type {_header.MajorType}");
             }
 
-            Advance();
             _state = CborReaderState.Header;
 
             return _header;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private ReadOnlySpan<byte> ReadBytes(int length)
+        private ReadOnlySpan<byte> ReadBytes(int length, bool allowScratchBuffer = true)
         {
             ExpectLength(length);
-            ReadOnlySpan<byte> slice = _buffer.Slice(0, length);
+            ReadOnlySpan<byte> slice = GetBytes(length, allowScratchBuffer);
             Advance(length);
             return slice;
         }
@@ -716,12 +800,12 @@ namespace Dahomey.Cbor.Serialization
         private CborMajorType GetCurrentMajorType()
         {
             ExpectLength(1);
-
-            CborMajorType majorType = (CborMajorType)((_buffer[0] >> 5) & 0x07);
+            byte headerByte = GetBytes(1)[0];
+            CborMajorType majorType = (CborMajorType)((headerByte >> 5) & 0x07);
 
             if (majorType > CborMajorType.Max)
             {
-                throw new CborException($"Invalid major type {majorType}");
+                ThrowCbor($"Invalid major type {majorType}");
             }
 
             return majorType;
@@ -754,7 +838,7 @@ namespace Dahomey.Cbor.Serialization
 
                 case CborMajorType.ByteString:
                 case CborMajorType.TextString:
-                    ReadSizeAndBytes();
+                    SkipSizeAndBytes();
                     break;
 
                 case CborMajorType.Array:
@@ -799,6 +883,20 @@ namespace Dahomey.Cbor.Serialization
                     }
                     break;
             }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void SkipSizeAndBytes()
+        {
+            int size = ReadSize();
+
+            if (size == -1)
+            {
+                ThrowNotSupported();
+            }
+
+            ExpectLength(size);
+            Advance(size);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -847,7 +945,7 @@ namespace Dahomey.Cbor.Serialization
         {
             if (!Accept(primitive))
             {
-                throw BuildException($"Expected primitive {primitive} ({(byte)primitive})");
+                ThrowCbor($"Expected primitive {primitive} ({(byte)primitive})");
             }
         }
 
@@ -862,34 +960,76 @@ namespace Dahomey.Cbor.Serialization
         {
             if (!Accept(majorType))
             {
-                throw BuildException($"Expected major type {majorType} ({(byte)majorType})");
+                ThrowCbor($"Expected major type {majorType} ({(byte)majorType})");
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ExpectLength(int length)
         {
-            if (_buffer.Length < length)
+            int remaining = _length - _currentPos;
+            if (remaining < length)
             {
-                throw BuildException($"Unexpected end of buffer");
+                ThrowCbor($"Unexpected end of buffer");
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Advance(int length = 1)
+        private ReadOnlySpan<byte> GetBytes(int length, bool allowScratchBuffer = true)
+        {
+            if (!_sequence.HasValue)
+            {
+                return _buffer.Slice(_currentPos, length);
+            }
+
+            if (_sequenceReader.UnreadSpan.Length >= length)
+            {
+                return _sequenceReader.UnreadSpan.Slice(0, length);
+            }
+            else if (allowScratchBuffer && length <= SCRATCH_BUFFER_SIZE)
+            {
+                byte[] scratchBuffer = _scratchBuffer ??= new byte[SCRATCH_BUFFER_SIZE];
+                Span<byte> span = scratchBuffer.AsSpan(0, length);
+                _sequenceReader.TryCopyTo(span);
+                return span;
+            }
+            else
+            {
+                byte[] array = new byte[length];
+                _sequenceReader.TryCopyTo(array);
+                return array;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void Advance(int length)
         {
             if (_state == CborReaderState.Header)
             {
                 _state = CborReaderState.Data;
             }
-            _buffer = _buffer.Slice(length);
             _currentPos += length;
+
+            if (_sequence.HasValue)
+            {
+                _sequenceReader.Advance(length);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public CborException BuildException(string message)
         {
             return new CborException($"[{_currentPos}] {message}");
+        }
+
+        private void ThrowCbor(string message)
+        {
+            throw BuildException(message);
+        }
+
+        private void ThrowNotSupported()
+        {
+            throw new NotSupportedException();
         }
     }
 }

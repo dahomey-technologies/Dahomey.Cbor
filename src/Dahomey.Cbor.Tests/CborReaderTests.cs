@@ -3,6 +3,7 @@ using Xunit;
 using System;
 using Dahomey.Cbor.Util;
 using System.Globalization;
+using System.Buffers;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -250,17 +251,42 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Theory]
+        [InlineData("40", "", null)]
+        [InlineData("41FF", "FF", typeof(NotSupportedException))]
+        [InlineData("5000112233445566778899AABBCCDDEEFF", "00112233445566778899AABBCCDDEEFF", null)]
+        public void ReadByteString(string hexBuffer, string expectedHex, Type expectedExceptionType)
+        {
+            var expectedBytes = expectedHex.HexToBytes();
+            var buffer = new ArrayBufferWriter<byte>();
+            var writer = new CborWriter(buffer);
+            writer.WriteByteString(expectedBytes);
+
+            Helper.TestRead(nameof(CborReader.ReadByteStringSequence), hexBuffer, new ReadOnlySequence<byte>(expectedBytes), expectedExceptionType);
+        }
+
+        [Theory]
         [InlineData("1A5D2A3DDB", ulong.MaxValue)]
         [InlineData("C01A5D2A3DDB", 0ul)]
         [InlineData("D8641A5D2A3DDB", 100ul)]
         public void ReadSemanticTag(string hexBuffer, ulong expectedTag)
         {
-            ReadOnlySpan<byte> buffer = hexBuffer.HexToBytes();
-            CborReader reader = new CborReader(buffer);
-            bool hasTag = reader.TryReadSemanticTag(out ulong actualTag);
+            byte[] buffer = hexBuffer.HexToBytes();
+            CborReader reader = new CborReader(buffer.AsSpan());
+            AssertSemanticTag(reader);
 
-            Assert.Equal(expectedTag != ulong.MaxValue, hasTag);
-            Assert.Equal(expectedTag != ulong.MaxValue ? expectedTag : 0, actualTag);
+            reader = new CborReader(new ReadOnlySequence<byte>(buffer));
+            AssertSemanticTag(reader);
+
+            reader = new CborReader(Helper.Fragmentize(buffer));
+            AssertSemanticTag(reader);
+
+            void AssertSemanticTag(CborReader reader)
+            {
+                bool hasTag = reader.TryReadSemanticTag(out ulong actualTag);
+
+                Assert.Equal(expectedTag != ulong.MaxValue, hasTag);
+                Assert.Equal(expectedTag != ulong.MaxValue ? expectedTag : 0, actualTag);
+            }
         }
     }
 }
