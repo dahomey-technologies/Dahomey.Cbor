@@ -741,6 +741,8 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SkipDataItem()
         {
+            SkipSemanticTag();
+            
             CborReaderHeader header = GetHeader();
 
             switch (header.MajorType)
@@ -764,7 +766,7 @@ namespace Dahomey.Cbor.Serialization
                     break;
 
                 case CborMajorType.SemanticTag:
-                    _state = CborReaderState.Data;
+                    // Impossible - already skipped
                     break;
 
                 case CborMajorType.Primitive:
