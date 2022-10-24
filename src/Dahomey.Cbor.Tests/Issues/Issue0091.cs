@@ -26,11 +26,12 @@ namespace Dahomey.Cbor.Tests.Issues
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(Dog));
 
             Dog dog = new("black", DateTime.Parse("2022-10-24T14:05:08Z"));
-            var cbor = Helper.Write(dog, options);
+            var cbor = Helper.Write<Animal>(dog, options);
 
-            Dog dog2 = Helper.Read<Dog>(cbor);
+            Animal deserialized = Helper.Read<Animal>(cbor, options);
 
-            Assert.NotNull(dog2);
+            Assert.NotNull(deserialized);
+            Dog dog2 = Assert.IsType<Dog>(deserialized);
             Assert.Equal(dog.Color, dog2.Color);
             Assert.Equal(dog.Timestamp, dog2.Timestamp);
         }

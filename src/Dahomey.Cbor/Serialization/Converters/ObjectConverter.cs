@@ -16,7 +16,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers);
         bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers, [MaybeNullWhen(false)] out object value);
         IReadOnlyList<IMemberConverter> MemberConvertersForWrite { get; }
+        ByteBufferDictionary<IMemberConverter> MemberConvertersForRead { get; }
         IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead { get; }
+        IObjectMapping ObjectMapping { get; }
     }
 
     public interface IObjectConverter<out T> : IObjectConverter
@@ -60,7 +62,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly IDiscriminatorConvention? _discriminatorConvention = null;
 
         public IReadOnlyList<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
+        public ByteBufferDictionary<IMemberConverter> MemberConvertersForRead => _memberConvertersForRead;
         public IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead => _requiredMemberConvertersForRead;
+        public IObjectMapping ObjectMapping => _objectMapping;
 
         public ObjectConverter(CborOptions options)
         {
@@ -139,17 +143,23 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             reader.ReadMap(this, ref context);
 
-            if (_objectMapping.CreatorMapping != null)
+            if (context.converter == null)
             {
-                context.obj = (T)_objectMapping.CreatorMapping.CreateInstance(context.creatorValues!);
-                if (_objectMapping.OnDeserializingMethod != null)
+                context.converter = this;
+            }
+            IObjectMapping objectMapping = context.converter.ObjectMapping;
+
+            if (objectMapping.CreatorMapping != null)
+            {
+                context.obj = (T)objectMapping.CreatorMapping.CreateInstance(context.creatorValues!);
+                if (objectMapping.OnDeserializingMethod != null)
                 {
-                    ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
+                    ((Action<T>)objectMapping.OnDeserializingMethod)(context.obj);
                 }
 
                 foreach (KeyValuePair<RawString, object> value in context.regularValues!)
                 {
-                    if (!_memberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter? memberConverter))
+                    if (!context.converter.MemberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter? memberConverter))
                     {
                         // should not happen
                         throw new CborException("Unexpected error");
@@ -161,11 +171,6 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             if (context.readMembers != null)
             {
-                if (context.converter == null)
-                {
-                    context.converter = this;
-                }
-
                 foreach (IMemberConverter memberConverter in context.converter.RequiredMemberConvertersForRead)
                 {
                     if (!context.readMembers.Contains(memberConverter))
@@ -175,9 +180,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
             }
 
-            if (_objectMapping.OnDeserializedMethod != null)
+            if (objectMapping.OnDeserializedMethod != null)
             {
-                ((Action<T>)_objectMapping.OnDeserializedMethod)(context.obj);
+                ((Action<T>)objectMapping.OnDeserializedMethod)(context.obj);
             }
 
             return context.obj;
@@ -283,6 +288,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                             // discriminator value
                             Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
                             context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
+                            ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
+                            context.creatorValues = creatorMapping != null ? new Dictionary<RawString, object>() : null;
+                            context.regularValues = creatorMapping != null ? new Dictionary<RawString, object>() : null;
                         }
                         else
                         {
@@ -304,9 +312,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                         context.obj = context.converter.CreateInstance();
                     }
 
-                    if (_objectMapping.OnDeserializingMethod != null)
+                    if (context.converter.ObjectMapping.OnDeserializingMethod != null)
                     {
-                        ((Action<T>)_objectMapping.OnDeserializingMethod)(context.obj);
+                        ((Action<T>)context.converter.ObjectMapping.OnDeserializingMethod)(context.obj);
                     }
                 }
             }
@@ -329,7 +337,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             else if (context.converter.ReadValue(ref reader, memberName, context.readMembers!, out object? value))
             {
-                if (_objectMapping.IsCreatorMember(memberName))
+                if (context.converter.ObjectMapping.IsCreatorMember(memberName))
                 {
                     context.creatorValues.Add(new RawString(memberName), value);
                 }

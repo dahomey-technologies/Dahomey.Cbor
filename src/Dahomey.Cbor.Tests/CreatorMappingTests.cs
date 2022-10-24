@@ -1,6 +1,7 @@
 ﻿using Dahomey.Cbor.Attributes;
 using Xunit;
 using System;
+using Dahomey.Cbor.Serialization.Conventions;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -200,6 +201,39 @@ namespace Dahomey.Cbor.Tests
             Helper.TestRead(hexBuffer, (ObjectWithAbstractClass)null, typeof(CborException));
 
             Helper.TestWrite(obj, hexBuffer, null, options);
+        }
+
+        public abstract class AbstractPerson
+        {
+            public int Id { get; set; }
+        }
+
+        [CborDiscriminator("Person")]
+        public class Person : AbstractPerson
+        {
+            public string Name { get; set; }
+
+            public Person(int id, string name)
+            {
+                Id = id;
+                Name = name;
+            }
+        }
+
+        [Fact]
+        public void InheritedClassWithConstructor()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
+            options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(Person));
+
+            const string hexBuffer = "A3625F7466506572736F6E6249640C644E616D6563466F6F";
+            AbstractPerson obj = Helper.Read<AbstractPerson>(hexBuffer, options);
+
+            Assert.NotNull(obj);
+            Person person = Assert.IsType<Person>(obj);
+            Assert.Equal(12, person.Id);
+            Assert.Equal("Foo", person.Name);
         }
     }
 }
