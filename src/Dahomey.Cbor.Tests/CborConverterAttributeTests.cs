@@ -35,6 +35,15 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(SomeEnum.RandomValue, deserialized);
         }
 
+        [Fact]
+        public void CanConvertInterface()
+        {
+            var input = (ISomeInterface)new SomeInterfaceImpl() { Value = 42 };
+            var bytes = Serialize(input);
+            var deserialized = Cbor.Deserialize<ISomeInterface>(bytes);
+            Assert.Equal(42, deserialized.Value);
+        }
+
         private static byte[] Serialize<T>(T input)
         {
             var writer = new ArrayBufferWriter<byte>();
@@ -102,6 +111,29 @@ namespace Dahomey.Cbor.Tests
             public override void Write(ref CborWriter writer, SomeEnum value)
             {
                 writer.WriteInt32((int)value);
+            }
+        }
+
+        interface ISomeInterface
+        {
+            int Value { get; set; }
+        }
+
+        class SomeInterfaceImpl : ISomeInterface
+        {
+            public int Value { get; set; }
+        }
+
+        class SomeInterfaceCborConverter : CborConverterBase<ISomeInterface>
+        {
+            public override ISomeInterface Read(ref CborReader reader)
+            {
+                return new SomeInterfaceImpl { Value = reader.ReadInt32() };
+            }
+
+            public override void Write(ref CborWriter writer, ISomeInterface value)
+            {
+                writer.WriteInt32(value.Value);
             }
         }
     }
