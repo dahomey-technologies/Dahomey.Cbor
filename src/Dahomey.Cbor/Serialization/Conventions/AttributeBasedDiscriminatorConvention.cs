@@ -12,8 +12,8 @@ namespace Dahomey.Cbor.Serialization.Conventions
     {
         private readonly SerializationRegistry _serializationRegistry;
         private readonly ReadOnlyMemory<byte> _memberName;
-        private readonly ConcurrentDictionary<T, Type> _typesByDiscriminator = new ConcurrentDictionary<T, Type>();
-        private readonly ConcurrentDictionary<Type, T> _discriminatorsByType = new ConcurrentDictionary<Type, T>();
+        private readonly ConcurrentDictionary<T, Type> _typesByDiscriminator = new();
+        private readonly ConcurrentDictionary<Type, T> _discriminatorsByType = new();
         private readonly ICborConverter<T> _converter;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
@@ -34,7 +34,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
         {
             IObjectMapping objectMapping = _serializationRegistry.ObjectMappingRegistry.Lookup(type);
 
-            if (objectMapping.Discriminator == null || !(objectMapping.Discriminator is T discriminator))
+            if (objectMapping.Discriminator == null || objectMapping.Discriminator is not T discriminator)
             {
                 return false;
             }
