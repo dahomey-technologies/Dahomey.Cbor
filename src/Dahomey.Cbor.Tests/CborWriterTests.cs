@@ -256,6 +256,29 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(expected, actual);
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void WriteByteString(bool fragmentize)
+        {
+            var bytes = new byte[] { 0xde, 0xad, 0xbe, 0xef };
+            var bufferWriter = new ArrayBufferWriter<byte>();
+            var cborWriter = new CborWriter(bufferWriter);
+            cborWriter.WriteByteString(bytes.AsSpan());
+            var expected = bufferWriter.WrittenSpan.ToArray();
+
+            bufferWriter.Clear();
+
+            var value = fragmentize
+                ? Helper.Fragmentize(bytes)
+                : new ReadOnlySequence<byte>(bytes);
+
+            cborWriter.WriteByteString(value);
+            var actual = bufferWriter.WrittenSpan.ToArray();
+
+            Assert.Equal(expected, actual);
+        }
+
         [Fact]
         public void WriteByteStringSize()
         {
