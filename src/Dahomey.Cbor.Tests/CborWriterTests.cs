@@ -3,6 +3,8 @@ using Dahomey.Cbor.Util;
 using Xunit;
 using System;
 using System.Globalization;
+using System.Buffers;
+using System.Text;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -235,6 +237,40 @@ namespace Dahomey.Cbor.Tests
         public void WriteString(string hexBuffer, string value, Type expectedExceptionType)
         {
             Helper.TestWrite(nameof(CborWriter.WriteString), value, hexBuffer, expectedExceptionType);
+        }
+
+        [Fact]
+        public void WriteStringSize()
+        {
+            var bufferWriter = new ArrayBufferWriter<byte>();
+            var cborWriter = new CborWriter(bufferWriter);
+            cborWriter.WriteString("Hello world");
+            var expected = bufferWriter.WrittenSpan.ToArray();
+
+            bufferWriter.Clear();
+
+            cborWriter.WriteStringSize(11);
+            cborWriter.BufferWriter.Write(Encoding.UTF8.GetBytes("Hello world"));
+            var actual = bufferWriter.WrittenSpan.ToArray();
+
+            Assert.Equal(expected, actual);
+        }
+
+        [Fact]
+        public void WriteByteStringSize()
+        {
+            var bufferWriter = new ArrayBufferWriter<byte>();
+            var cborWriter = new CborWriter(bufferWriter);
+            cborWriter.WriteByteString(new byte[] { 0xde, 0xad, 0xbe, 0xef });
+            var expected = bufferWriter.WrittenSpan.ToArray();
+
+            bufferWriter.Clear();
+
+            cborWriter.WriteByteStringSize(4);
+            cborWriter.BufferWriter.Write(new byte[] { 0xde, 0xad, 0xbe, 0xef });
+            var actual = bufferWriter.WrittenSpan.ToArray();
+
+            Assert.Equal(expected, actual);
         }
 
         [Theory]

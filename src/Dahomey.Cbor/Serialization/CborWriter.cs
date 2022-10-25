@@ -2,6 +2,7 @@
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -210,6 +211,17 @@ namespace Dahomey.Cbor.Serialization
             _bufferWriter.Write(value);
         }
 
+        /// <summary>
+        /// Write the string header with a given size.
+        /// This leaves the writer in an invalid state and must be accompanied with a write to <see cref="BufferWriter"/> with exactly <paramref name="size"/> bytes.
+        /// </summary>
+        /// <param name="size">The byte string size</param>
+        [EditorBrowsable(EditorBrowsableState.Advanced)]
+        public void WriteStringSize(int size)
+        {
+            WriteSize(CborMajorType.TextString, size);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteByteString(ReadOnlySpan<byte> value)
         {
@@ -225,6 +237,17 @@ namespace Dahomey.Cbor.Serialization
             {
                 _bufferWriter.Write(segment.Span);
             }
+        }
+
+        /// <summary>
+        /// Write the byte string header with a given size.
+        /// This leaves the writer in an invalid state and must be accompanied with a write to <see cref="BufferWriter"/> with exactly <paramref name="size"/> bytes.
+        /// </summary>
+        /// <param name="size">The byte string size</param>
+        [EditorBrowsable(EditorBrowsableState.Advanced)]
+        public void WriteByteStringSize(int size)
+        {
+            WriteSize(CborMajorType.ByteString, size);
         }
 
         public void WriteBeginMap(int size)
