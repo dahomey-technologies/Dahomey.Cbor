@@ -217,6 +217,16 @@ namespace Dahomey.Cbor.Serialization
             _bufferWriter.Write(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void WriteByteString(ReadOnlySequence<byte> value)
+        {
+            WriteInteger(CborMajorType.ByteString, (ulong)value.Length);
+            foreach (var segment in value)
+            {
+                _bufferWriter.Write(segment.Span);
+            }
+        }
+
         public void WriteBeginMap(int size)
         {
             WriteSize(CborMajorType.Map, size);
