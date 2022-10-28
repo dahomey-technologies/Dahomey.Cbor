@@ -19,12 +19,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _objectMappings.AddOrUpdate(objectMapping.ObjectType, objectMapping,
                 (type, existingObjectMapping) => objectMapping);
 
-            IMappingInitialization mappingInitialization = objectMapping as IMappingInitialization;
-            if (mappingInitialization != null)
-            {
-                mappingInitialization.Initialize();
-            }
-
             if (objectMapping.Discriminator != null)
             {
                 _registry.DiscriminatorConventionRegistry.RegisterType(objectMapping.ObjectType);
@@ -51,14 +45,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public IObjectMapping Lookup(Type type)
         {
-            IObjectMapping objectMapping = _objectMappings.GetOrAdd(type, t => CreateDefaultObjectMapping(type));
-
-            if (objectMapping is IMappingInitialization mappingInitialization)
-            {
-                mappingInitialization.Initialize();
-            }
-
-            return objectMapping;
+            return _objectMappings.GetOrAdd(type, t => CreateDefaultObjectMapping(type));
         }
 
         private IObjectMapping CreateDefaultObjectMapping(Type type)

@@ -12,12 +12,21 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
     public class DiscriminatorMapping<T> : IDiscriminatorMapping
     {
+        private bool _isInitialized = false;
         private readonly DiscriminatorConventionRegistry _discriminatorConventionRegistry;
         private readonly IObjectMapping _objectMapping;
+        private string? _memberName = null;
 
         public MemberInfo? MemberInfo => null;
         public Type MemberType => throw new NotSupportedException();
-        public string? MemberName { get; private set; }
+        public string? MemberName
+        {
+            get
+            {
+                EnsureInitialize();
+                return _memberName;
+            }
+        }
         public ICborConverter Converter => throw new NotSupportedException();
         public bool CanBeDeserialized => false;
         public bool CanBeSerialized => true;
@@ -34,12 +43,21 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _objectMapping = objectMapping;
         }
 
-        public void Initialize()
+        public void EnsureInitialize()
         {
-            IDiscriminatorConvention? discriminatorConvention = _discriminatorConventionRegistry.GetConvention(_objectMapping.ObjectType);
-            if (discriminatorConvention != null)
+            if (!_isInitialized)
             {
-                MemberName = Encoding.UTF8.GetString(discriminatorConvention.MemberName);
+                lock (this)
+                {
+                    if (!_isInitialized)
+                    {
+                        IDiscriminatorConvention? discriminatorConvention = _discriminatorConventionRegistry.GetConvention(_objectMapping.ObjectType);
+                        if (discriminatorConvention != null)
+                        {
+                            _memberName = Encoding.UTF8.GetString(discriminatorConvention.MemberName);
+                        }
+                    }
+                }
             }
         }
 

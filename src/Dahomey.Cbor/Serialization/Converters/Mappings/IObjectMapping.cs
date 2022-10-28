@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
-    public interface IObjectMapping : IMappingInitialization
+    public interface IObjectMapping
     {
         Type ObjectType { get; }
         INamingConvention? NamingConvention { get; }

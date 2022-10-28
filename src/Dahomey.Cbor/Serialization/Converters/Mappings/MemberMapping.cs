@@ -8,15 +8,52 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
     public class MemberMapping<T> : IMemberMapping
     {
+        private bool _isInitialized = false;
         private readonly IObjectMapping _objectMapping;
         private readonly CborConverterRegistry _converterRegistry;
+        private string? _memberName = null;
+        private ICborConverter? _converter = null;
+        private bool _canBeDeserialized = false;
+        private bool _canBeSerialized = false;
 
         public MemberInfo MemberInfo { get; private set; }
         public Type MemberType { get; private set; }
-        public string? MemberName { get; private set; }
-        public ICborConverter? Converter { get; private set; }
-        public bool CanBeDeserialized { get; private set; }
-        public bool CanBeSerialized { get; private set; }
+        public string? MemberName
+        {
+            get
+            {
+                EnsureInitialize();
+                return _memberName;
+            }
+        }
+
+        public ICborConverter? Converter
+        {
+            get
+            {
+                EnsureInitialize();
+                return _converter;
+            }
+        }
+
+        public bool CanBeDeserialized
+        {
+            get
+            {
+                EnsureInitialize();
+                return _canBeDeserialized;
+            }
+        }
+
+        public bool CanBeSerialized
+        {
+            get
+            {
+                EnsureInitialize();
+                return _canBeSerialized;
+            }
+        }
+
         public object? DefaultValue { get; private set; }
         public bool IgnoreIfDefault { get; private set; }
         public Func<object, bool>? ShouldSerializeMethod { get; private set; }
@@ -30,19 +67,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _converterRegistry = converterRegistry;
             MemberInfo = memberInfo;
             MemberType = memberType;
-            MemberName = null;
             DefaultValue = (memberType.IsClass || memberType.IsInterface) ? null : Activator.CreateInstance(memberType);
         }
 
         public MemberMapping<T> SetMemberName(string memberName)
         {
-            MemberName = memberName;
+            _memberName = memberName;
             return this;
         }
 
         public MemberMapping<T> SetConverter(ICborConverter converter)
         {
-            Converter = converter;
+            _converter = converter;
             return this;
         }
 
@@ -76,13 +112,24 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return this;
         }
 
-        public void Initialize()
+        public void EnsureInitialize()
         {
-            InitializeMemberName();
-            InitializeConverter();
-            InitializeCanBeDeserialized();
-            InitializeCanBeSerialized();
-            ValidateDefaultValue();
+            if (!_isInitialized)
+            {
+                lock (this)
+                {
+                    if (!_isInitialized)
+                    {
+                        InitializeMemberName();
+                        InitializeConverter();
+                        InitializeCanBeDeserialized();
+                        InitializeCanBeSerialized();
+                        ValidateDefaultValue();
+
+                        _isInitialized = true;
+                    }
+                }
+            }
         }
 
         public IMemberConverter GenerateMemberConverter()
@@ -111,27 +158,27 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         private void InitializeMemberName()
         {
-            if (string.IsNullOrEmpty(MemberName))
+            if (string.IsNullOrEmpty(_memberName))
             {
                 CborPropertyAttribute? cborPropertyAttribute = MemberInfo.GetCustomAttribute<CborPropertyAttribute>();
                 if (cborPropertyAttribute != null && cborPropertyAttribute.PropertyName != null)
                 {
-                    MemberName = cborPropertyAttribute.PropertyName;
+                    _memberName = cborPropertyAttribute.PropertyName;
                 }
                 else if (_objectMapping.NamingConvention != null)
                 {
-                    MemberName = _objectMapping.NamingConvention.GetPropertyName(MemberInfo.Name);
+                    _memberName = _objectMapping.NamingConvention.GetPropertyName(MemberInfo.Name);
                 }
                 else
                 {
-                    MemberName = MemberInfo.Name;
+                    _memberName = MemberInfo.Name;
                 }
             }
         }
 
         private void InitializeConverter()
         {
-            if (Converter == null)
+            if (_converter == null)
             {
                 CborConverterAttribute? converterAttribute = MemberInfo.GetCustomAttribute<CborConverterAttribute>();
                 if (converterAttribute != null)
@@ -139,21 +186,21 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     Type converterType = converterAttribute.ConverterType;
                     VerifyMemberConverterType(converterType);
 
-                    Converter = (ICborConverter?)Activator.CreateInstance(converterType);
+                    _converter = (ICborConverter?)Activator.CreateInstance(converterType);
 
-                    if (Converter == null)
+                    if (_converter == null)
                     {
                         throw new CborException($"Cannot instantiate {converterType}");
                     }
                 }
                 else
                 {
-                    Converter = _converterRegistry.Lookup(MemberType);
+                    _converter = _converterRegistry.Lookup(MemberType);
                 }
             }
             else
             {
-                VerifyMemberConverterType(Converter.GetType());
+                VerifyMemberConverterType(_converter.GetType());
             }
         }
 
@@ -162,15 +209,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             switch (MemberInfo)
             {
                 case PropertyInfo propertyInfo:
-                    CanBeDeserialized = propertyInfo.CanWrite && propertyInfo.GetMethod != null && !propertyInfo.GetMethod.IsStatic;
+                    _canBeDeserialized = propertyInfo.CanWrite && propertyInfo.GetMethod != null && !propertyInfo.GetMethod.IsStatic;
                     break;
 
                 case FieldInfo fieldInfo:
-                    CanBeDeserialized = !fieldInfo.IsInitOnly && !fieldInfo.IsStatic;
+                    _canBeDeserialized = !fieldInfo.IsInitOnly && !fieldInfo.IsStatic;
                     break;
 
                 default:
-                    CanBeDeserialized = false;
+                    _canBeDeserialized = false;
                     break;
             }
         }
@@ -180,15 +227,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             switch (MemberInfo)
             {
                 case PropertyInfo propertyInfo:
-                    CanBeSerialized = propertyInfo.CanRead;
+                    _canBeSerialized = propertyInfo.CanRead;
                     break;
 
                 case FieldInfo fieldInfo:
-                    CanBeSerialized = true;
+                    _canBeSerialized = true;
                     break;
 
                 default:
-                    CanBeSerialized = false;
+                    _canBeSerialized = false;
                     break;
             }
         }

@@ -9,13 +9,21 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
     public class CreatorMapping : ICreatorMapping
     {
+        private bool _isInitialized = false;
         private readonly IObjectMapping _objectMapping;
         private readonly Delegate _delegate;
         private readonly ParameterInfo[] _parameters;
         private List<RawString>? _memberNames = null;
         private List<object?>? _defaultValues = null;
 
-        public IReadOnlyCollection<RawString>? MemberNames => _memberNames;
+        public IReadOnlyCollection<RawString>? MemberNames
+        {
+            get
+            {
+                EnsureInitialize();
+                return _memberNames;
+            }
+        }
 
         public CreatorMapping(IObjectMapping objectMapping, ConstructorInfo constructorInfo)
         {
@@ -74,65 +82,76 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return _delegate.DynamicInvoke(args) ?? throw new InvalidOperationException("Cannot instantiate type");
         }
 
-        public void Initialize()
+        private void EnsureInitialize()
         {
-            bool createMemberNames = _memberNames == null;
-
-            IReadOnlyCollection<IMemberMapping> memberMappings = _objectMapping.MemberMappings;
-            if (_memberNames == null)
+            if (!_isInitialized)
             {
-                _memberNames = new List<RawString>(_parameters.Length);
-            }
-            else if (_memberNames.Count != _parameters.Length)
-            {
-                throw new CborException($"Size mismatch between creator parameters and member names");
-            }
-
-            _defaultValues = new List<object?>(_parameters.Length);
-
-            for (int i = 0; i < _parameters.Length; i++)
-            {
-                ParameterInfo parameter = _parameters[i];
-                IMemberMapping? memberMapping;
-
-                if (createMemberNames)
+                lock (this)
                 {
-                    memberMapping = memberMappings
-                        .Where(m => !(m is IDiscriminatorMapping))
-                        .FirstOrDefault(m => string.Compare(m.MemberName, parameter.Name, ignoreCase: true) == 0);
-
-                    if (memberMapping == null || memberMapping.MemberName == null)
+                    if (!_isInitialized)
                     {
-                        _memberNames.Add(RawString.Empty);
-                    }
-                    else
-                    {
-                        _memberNames.Add(new RawString(memberMapping.MemberName, Encoding.ASCII));
-                    }
-                }
-                else
-                {
-                    memberMapping = memberMappings
-                        .FirstOrDefault(m => string.Compare(m.MemberName, _memberNames[i].ToString(), ignoreCase: true) == 0);
+                        bool createMemberNames = _memberNames == null;
 
-                    if (memberMapping == null)
-                    {
-                        throw new CborException($"Cannot find a field or property named {_memberNames[i]} on type {_objectMapping.ObjectType.FullName}");
-                    }
-                }
+                        IReadOnlyCollection<IMemberMapping> memberMappings = _objectMapping.MemberMappings;
+                        if (_memberNames == null)
+                        {
+                            _memberNames = new List<RawString>(_parameters.Length);
+                        }
+                        else if (_memberNames.Count != _parameters.Length)
+                        {
+                            throw new CborException($"Size mismatch between creator parameters and member names");
+                        }
 
-                if (memberMapping != null)
-                {
-                    if (memberMapping.MemberType != parameter.ParameterType)
-                    {
-                        throw new CborException($"Type mismatch between creator argument and field or property named {parameter.Name} on type {_objectMapping.ObjectType.FullName}");
-                    }
+                        _defaultValues = new List<object?>(_parameters.Length);
 
-                    _defaultValues.Add(memberMapping.DefaultValue);
-                }
-                else
-                {
-                    _defaultValues.Add(parameter.ParameterType.GetDefaultValue());
+                        for (int i = 0; i < _parameters.Length; i++)
+                        {
+                            ParameterInfo parameter = _parameters[i];
+                            IMemberMapping? memberMapping;
+
+                            if (createMemberNames)
+                            {
+                                memberMapping = memberMappings
+                                    .Where(m => !(m is IDiscriminatorMapping))
+                                    .FirstOrDefault(m => string.Compare(m.MemberName, parameter.Name, ignoreCase: true) == 0);
+
+                                if (memberMapping == null || memberMapping.MemberName == null)
+                                {
+                                    _memberNames.Add(RawString.Empty);
+                                }
+                                else
+                                {
+                                    _memberNames.Add(new RawString(memberMapping.MemberName, Encoding.ASCII));
+                                }
+                            }
+                            else
+                            {
+                                memberMapping = memberMappings
+                                    .FirstOrDefault(m => string.Compare(m.MemberName, _memberNames[i].ToString(), ignoreCase: true) == 0);
+
+                                if (memberMapping == null)
+                                {
+                                    throw new CborException($"Cannot find a field or property named {_memberNames[i]} on type {_objectMapping.ObjectType.FullName}");
+                                }
+                            }
+
+                            if (memberMapping != null)
+                            {
+                                if (memberMapping.MemberType != parameter.ParameterType)
+                                {
+                                    throw new CborException($"Type mismatch between creator argument and field or property named {parameter.Name} on type {_objectMapping.ObjectType.FullName}");
+                                }
+
+                                _defaultValues.Add(memberMapping.DefaultValue);
+                            }
+                            else
+                            {
+                                _defaultValues.Add(parameter.ParameterType.GetDefaultValue());
+                            }
+                        }
+
+                        _isInitialized = true;
+                    }
                 }
             }
         }

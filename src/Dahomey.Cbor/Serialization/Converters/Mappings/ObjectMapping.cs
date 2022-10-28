@@ -19,13 +19,27 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private readonly SerializationRegistry _registry;
         private List<IMemberMapping> _memberMappings = new List<IMemberMapping>();
         private ICreatorMapping? _creatorMapping = null;
-        private Action? _orderByAction = null; 
+        private Action? _orderByAction = null;
 
         public Type ObjectType { get; private set; }
 
         public INamingConvention? NamingConvention { get; private set; }
-        public IReadOnlyCollection<IMemberMapping> MemberMappings => _memberMappings;
-        public ICreatorMapping? CreatorMapping => _creatorMapping;
+        public IReadOnlyCollection<IMemberMapping> MemberMappings
+        {
+            get
+            { 
+                EnsureInitialize(); 
+                return _memberMappings;
+            }
+        }
+        public ICreatorMapping? CreatorMapping
+        {
+            get
+            {
+                EnsureInitialize();
+                return _creatorMapping;
+            }
+        }
         public Delegate? OnSerializingMethod { get; private set; }
         public Delegate? OnSerializedMethod { get; private set; }
         public Delegate? OnDeserializingMethod { get; private set; }
@@ -244,7 +258,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return false;
         }
 
-        public void Initialize()
+        private void EnsureInitialize()
         {
             if (!_isInitialized)
             {
@@ -252,22 +266,9 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 {
                     if (!_isInitialized)
                     {
-                        _isInitialized = true;
-
-                        foreach (IMemberMapping mapping in _memberMappings)
-                        {
-                            if (mapping is IMappingInitialization memberInitialization)
-                            {
-                                memberInitialization.Initialize();
-                            }
-                        }
-
-                        if (CreatorMapping != null && CreatorMapping is IMappingInitialization creatorInitialization)
-                        {
-                            creatorInitialization.Initialize();
-                        }
-
                         _orderByAction?.Invoke();
+
+                        _isInitialized = true;
                     }
                 }
             }
