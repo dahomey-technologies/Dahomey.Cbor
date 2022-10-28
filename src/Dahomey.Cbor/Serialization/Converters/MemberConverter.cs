@@ -13,6 +13,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     public interface IMemberConverter
     {
         ReadOnlySpan<byte> MemberName { get; }
+        int? MemberIndex { get; }
         bool IgnoreIfDefault { get; }
         RequirementPolicy RequirementPolicy { get; }
 
@@ -35,6 +36,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly Action<T, TM>? _memberSetter;
         private readonly ICborConverter<TM> _converter;
         private ReadOnlyMemory<byte> _memberName;
+        private int? _memberIndex;
         private readonly TM _defaultValue;
         private readonly bool _ignoreIfDefault;
         private readonly Func<object, bool>? _shouldSerializeMethod;
@@ -43,6 +45,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly bool _isClass = typeof(TM).IsClass;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
+        public int? MemberIndex => _memberIndex;
         public bool IgnoreIfDefault => _ignoreIfDefault;
         public RequirementPolicy RequirementPolicy => _requirementPolicy;
 
@@ -55,7 +58,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("MemberInfo must not be null");
             }
 
-            _memberName = Encoding.UTF8.GetBytes(memberMapping.MemberName!);
+            if (memberMapping.MemberName != null)
+            {
+                _memberName = Encoding.UTF8.GetBytes(memberMapping.MemberName!);
+            }
+            _memberIndex = memberMapping.MemberIndex;
+
             _memberGetter = GenerateGetter(memberInfo);
             _memberSetter = GenerateSetter(memberInfo);
             _converter = (ICborConverter<TM>)memberMapping.Converter!;
@@ -206,6 +214,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly bool _isClass = typeof(TM).IsClass;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
+        public int? MemberIndex { get; private set; }
         public string MemberNameAsString { get; }
         public bool IgnoreIfDefault => _ignoreIfDefault;
         public RequirementPolicy RequirementPolicy => _requirementPolicy;
@@ -221,6 +230,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             MemberNameAsString = memberMapping.MemberName!;
             _memberName = Encoding.UTF8.GetBytes(MemberNameAsString);
+            MemberIndex = memberMapping.MemberIndex;
             _memberGetter = GenerateGetter(memberInfo);
             _memberSetter = GenerateSetter(memberInfo);
             _converter = (ICborConverter<TM>)memberMapping.Converter!;
@@ -381,6 +391,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
+        public int? MemberIndex => throw new NotSupportedException();
         public bool IgnoreIfDefault => false;
         public RequirementPolicy RequirementPolicy => RequirementPolicy.Never;
 

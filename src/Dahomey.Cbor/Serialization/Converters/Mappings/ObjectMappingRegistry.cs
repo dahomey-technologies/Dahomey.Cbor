@@ -8,10 +8,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private readonly ConcurrentDictionary<Type, IObjectMapping> _objectMappings
             = new ConcurrentDictionary<Type, IObjectMapping>();
         private readonly SerializationRegistry _registry;
+        private readonly CborOptions _options;
 
-        public ObjectMappingRegistry(SerializationRegistry registry)
+        public ObjectMappingRegistry(SerializationRegistry registry, CborOptions options)
         {
             _registry = registry;
+            _options = options;
         }
 
         public void Register(IObjectMapping objectMapping)
@@ -27,13 +29,13 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         public void Register<T>()
         {
-            ObjectMapping<T> objectMapping = new ObjectMapping<T>(_registry);
+            ObjectMapping<T> objectMapping = new ObjectMapping<T>(_registry, _options);
             Register(objectMapping);
         }
 
         public void Register<T>(Action<ObjectMapping<T>> initializer)
         {
-            ObjectMapping<T> objectMapping = new ObjectMapping<T>(_registry);
+            ObjectMapping<T> objectMapping = new ObjectMapping<T>(_registry, _options);
             initializer(objectMapping);
             Register(objectMapping);
         }
@@ -53,7 +55,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             Type objectMappingType = typeof(ObjectMapping<>).MakeGenericType(type);
 
             IObjectMapping? objectMapping =
-                (IObjectMapping?)Activator.CreateInstance(objectMappingType, _registry);
+                (IObjectMapping?)Activator.CreateInstance(objectMappingType, _registry, _options);
 
             if (objectMapping == null)
             {

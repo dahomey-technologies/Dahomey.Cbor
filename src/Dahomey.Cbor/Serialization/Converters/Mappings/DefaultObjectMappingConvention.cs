@@ -46,6 +46,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 objectMapping.SetLengthMode(lengthModeAttribute.LengthMode);
             }
 
+            CborObjectFormatAttribute? cborObjectFormatAttribute = type.GetCustomAttribute<CborObjectFormatAttribute>();
+            if (cborObjectFormatAttribute != null)
+            {
+                objectMapping.SetObjectFormat(cborObjectFormatAttribute.ObjectFormat);
+            }
+
             PropertyInfo[] properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
             FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
 

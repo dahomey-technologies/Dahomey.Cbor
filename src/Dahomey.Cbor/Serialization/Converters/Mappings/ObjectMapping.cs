@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.InteropServices.ComTypes;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
 {
@@ -17,6 +18,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     {
         private bool _isInitialized = false;
         private readonly SerializationRegistry _registry;
+        private readonly CborOptions _options;
         private List<IMemberMapping> _memberMappings = new List<IMemberMapping>();
         private ICreatorMapping? _creatorMapping = null;
         private Action? _orderByAction = null;
@@ -27,8 +29,8 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public IReadOnlyCollection<IMemberMapping> MemberMappings
         {
             get
-            { 
-                EnsureInitialize(); 
+            {
+                EnsureInitialize();
                 return _memberMappings;
             }
         }
@@ -47,18 +49,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; private set; }
         public object? Discriminator { get; private set; }
         public LengthMode LengthMode { get; private set; }
+        public CborObjectFormat ObjectFormat { get; private set; }
 
-        public ObjectMapping(SerializationRegistry registry)
+        public ObjectMapping(SerializationRegistry registry, CborOptions options)
         {
             _registry = registry;
+            _options = options;
             ObjectType = typeof(T);
-
-            if (!ObjectType.IsAbstract && !ObjectType.IsInterface && !ObjectType.IsStruct() 
-                && registry.DiscriminatorConventionRegistry.AnyConvention())
-            {
-                DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(registry.DiscriminatorConventionRegistry, this);
-                _memberMappings.Add(memberMapping);
-            }
+            ObjectFormat = options.ObjectFormat; // default value
         }
 
         void IObjectMapping.AutoMap()
@@ -76,6 +74,17 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public ObjectMapping<T> SetDiscriminator(object discriminator)
         {
             Discriminator = discriminator;
+
+            if (discriminator != null
+                && !ObjectType.IsAbstract 
+                && !ObjectType.IsInterface && !ObjectType.IsStruct()
+                && _registry.DiscriminatorConventionRegistry.AnyConvention()
+                && (_memberMappings.Count == 0 || _memberMappings[0] is not DiscriminatorMapping<T>))
+            {
+                DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(_registry.DiscriminatorConventionRegistry, this);
+                _memberMappings.Insert(0, memberMapping);
+            }
+
             return this;
         }
 
@@ -221,6 +230,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public ObjectMapping<T> SetDiscriminatorPolicy(CborDiscriminatorPolicy discriminatorPolicy)
         {
             DiscriminatorPolicy = discriminatorPolicy;
+
+            if ((discriminatorPolicy == CborDiscriminatorPolicy.Always
+                || discriminatorPolicy == CborDiscriminatorPolicy.Default && _options.DiscriminatorPolicy == CborDiscriminatorPolicy.Always)
+                && !ObjectType.IsAbstract
+                && !ObjectType.IsInterface && !ObjectType.IsStruct()
+                && _registry.DiscriminatorConventionRegistry.AnyConvention()
+                && (_memberMappings.Count == 0 || _memberMappings[0] is not DiscriminatorMapping<T>))
+            {
+                DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(_registry.DiscriminatorConventionRegistry, this);
+                _memberMappings.Insert(0, memberMapping);
+            }
+
             return this;
         }
 
@@ -258,6 +279,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return false;
         }
 
+        /// <summary>
+        /// The class/struct will be serialized as a CBOR array instead of a CBOR map
+        /// </summary>
+        /// CborPropertyAttribute.Index will be used as the index of each property/field of the class in the CBOR array
+        public void SetObjectFormat(CborObjectFormat objectFormat)
+        {
+            ObjectFormat = objectFormat;
+        }
+
         private void EnsureInitialize()
         {
             if (!_isInitialized)
@@ -267,10 +297,70 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     if (!_isInitialized)
                     {
                         _orderByAction?.Invoke();
+                        ValidateMemberNamesAndindexes();
 
                         _isInitialized = true;
                     }
                 }
+            }
+        }
+
+        private void ValidateMemberNamesAndindexes()
+        {
+            int memberNameCount = _memberMappings.Count(m => m.MemberName != null);
+            int memberIndexCount = _memberMappings.Count(m => m.MemberIndex.HasValue);
+
+            switch (ObjectFormat)
+            {
+                case CborObjectFormat.StringKeyMap:
+                    {
+                        if (memberNameCount != _memberMappings.Count)
+                        {
+                            throw new CborException($"expecting all fields/properties to get a member name in class/struct {ObjectType.Name}");
+                        }
+                    }
+                    break;
+                case CborObjectFormat.IntKeyMap:
+                    {
+                        if (memberIndexCount != _memberMappings.Count)
+                        {
+                            throw new CborException($"expecting all fields/properties to get a member index in class/struct {ObjectType.Name}");
+                        }
+
+                        bool indexDuplicates = _memberMappings
+                            .GroupBy(x => x.MemberIndex)
+                            .Any(g => g.Count() > 1);
+
+                        if (indexDuplicates)
+                        {
+                            throw new CborException($"class/struct {ObjectType.Name} holds duplicated MemberIndex fields/properties");
+                        }
+
+                        _memberMappings = _memberMappings
+                            .OrderBy(m => m.MemberIndex)
+                            .ToList();
+                    }
+                    break;
+                case CborObjectFormat.Array:
+                    {
+                        if (memberIndexCount != _memberMappings.Count)
+                        {
+                            throw new CborException($"exepcting all fields/properties to get a member index in class/struct {ObjectType.Name}");
+                        }
+
+                        _memberMappings = _memberMappings
+                            .OrderBy(m => m.MemberIndex)
+                            .ToList();
+
+                        for (int i = 0; i < _memberMappings.Count; i++)
+                        {
+                            if (_memberMappings[i].MemberIndex != i)
+                            {
+                                throw new CborException($"class/struct {ObjectType.Name} MemberIndexes must follow one another with no holes");
+                            }
+                        }
+                    }
+                    break;
             }
         }
 

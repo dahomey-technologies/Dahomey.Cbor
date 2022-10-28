@@ -50,6 +50,7 @@ namespace Dahomey.Cbor
         /// </summary>
         public DateTimeKind UnqualifiedTimeZoneDateTimeKind { get; set; }
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; set; }
+        public CborObjectFormat ObjectFormat { get; set; } = CborObjectFormat.StringKeyMap;
         public LengthMode ArrayLengthMode { get; set; } = LengthMode.DefiniteLength;
         public LengthMode MapLengthMode { get; set; } = LengthMode.DefiniteLength;
 

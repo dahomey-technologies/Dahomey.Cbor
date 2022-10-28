@@ -9,6 +9,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         MemberInfo? MemberInfo { get; }
         Type MemberType { get; }
         string? MemberName { get; }
+        int? MemberIndex { get; }
         ICborConverter? Converter { get; }
         bool CanBeDeserialized { get; }
         bool CanBeSerialized { get; }

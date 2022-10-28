@@ -16,9 +16,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private readonly DiscriminatorConventionRegistry _discriminatorConventionRegistry;
         private readonly IObjectMapping _objectMapping;
         private string? _memberName = null;
+        private int? _memberIndex = null;
 
         public MemberInfo? MemberInfo => null;
         public Type MemberType => throw new NotSupportedException();
+        public int? MemberIndex
+        {
+            get
+            {
+                EnsureInitialize();
+                return _memberIndex;
+            }
+        }
         public string? MemberName
         {
             get

@@ -12,6 +12,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         private readonly IObjectMapping _objectMapping;
         private readonly CborConverterRegistry _converterRegistry;
         private string? _memberName = null;
+        private int? _memberIndex = null;
         private ICborConverter? _converter = null;
         private bool _canBeDeserialized = false;
         private bool _canBeSerialized = false;
@@ -24,6 +25,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             {
                 EnsureInitialize();
                 return _memberName;
+            }
+        }
+
+        public int? MemberIndex
+        {
+            get
+            {
+                EnsureInitialize();
+                return _memberIndex;
             }
         }
 
@@ -73,6 +83,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public MemberMapping<T> SetMemberName(string memberName)
         {
             _memberName = memberName;
+            return this;
+        }
+
+        public MemberMapping<T> SetMemberIndex(int memberIndex)
+        {
+            _memberIndex = memberIndex;
             return this;
         }
 
@@ -158,9 +174,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
         private void InitializeMemberName()
         {
-            if (string.IsNullOrEmpty(_memberName))
+            CborPropertyAttribute? cborPropertyAttribute = MemberInfo.GetCustomAttribute<CborPropertyAttribute>();
+            if (cborPropertyAttribute != null && cborPropertyAttribute.Index.HasValue)
             {
-                CborPropertyAttribute? cborPropertyAttribute = MemberInfo.GetCustomAttribute<CborPropertyAttribute>();
+                _memberIndex = cborPropertyAttribute.Index;
+            }
+
+            if (!_memberIndex.HasValue && string.IsNullOrEmpty(_memberName))
+            {
                 if (cborPropertyAttribute != null && cborPropertyAttribute.PropertyName != null)
                 {
                     _memberName = cborPropertyAttribute.PropertyName;
@@ -173,6 +194,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 {
                     _memberName = MemberInfo.Name;
                 }
+            }
+
+            if (_memberName != null && _memberIndex.HasValue)
+            {
+                throw new CborException($"MemberName and MemberIndex cannot coexist in member {MemberType.Name}.{MemberInfo.Name}");
             }
         }
 

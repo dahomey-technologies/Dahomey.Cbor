@@ -18,6 +18,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         CborDiscriminatorPolicy DiscriminatorPolicy { get; }
         object? Discriminator { get; }
         LengthMode LengthMode { get; }
+        public CborObjectFormat ObjectFormat { get; }
 
         void AutoMap();
         bool IsCreatorMember(ReadOnlySpan<byte> memberName);
