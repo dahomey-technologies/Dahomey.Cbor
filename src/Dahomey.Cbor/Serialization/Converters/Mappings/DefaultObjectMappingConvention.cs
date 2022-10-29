@@ -118,9 +118,16 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 {
                     CborConstructorAttribute? constructorAttribute = constructorInfo.GetCustomAttribute<CborConstructorAttribute>();
                     CreatorMapping creatorMapping = objectMapping.MapCreator(constructorInfo);
-                    if (constructorAttribute != null && constructorAttribute.MemberNames != null)
+                    if (constructorAttribute != null )
                     {
-                        creatorMapping.SetMemberNames(constructorAttribute.MemberNames);
+                        if (constructorAttribute.MemberNames != null)
+                        {
+                            creatorMapping.SetMemberNames(constructorAttribute.MemberNames);
+                        }
+                        else if (constructorAttribute.MemberIndexes != null)
+                        {
+                            creatorMapping.SetMemberIndexes(constructorAttribute.MemberIndexes);
+                        }
                     }
                 }
                 // if no default constructor, pick up first one

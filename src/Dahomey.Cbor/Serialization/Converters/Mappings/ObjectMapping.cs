@@ -279,6 +279,24 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return false;
         }
 
+        public bool IsCreatorMember(int memberIndex)
+        {
+            if (CreatorMapping == null || CreatorMapping.MemberIndexes == null)
+            {
+                return false;
+            }
+
+            foreach (int creatorMemberIndex in CreatorMapping.MemberIndexes)
+            {
+                if (creatorMemberIndex == memberIndex)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// The class/struct will be serialized as a CBOR array instead of a CBOR map
         /// </summary>
