@@ -1,6 +1,8 @@
 ﻿using Dahomey.Cbor.Attributes;
 using System.Reflection;
+using System.Xml.Linq;
 using Xunit;
+using static Dahomey.Cbor.Tests.DiscriminatorTests;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -239,6 +241,124 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(expectedId, obj.Id);
             Assert.Equal(expectedName, obj.Name);
             Assert.Equal(expectedAge, obj.Age);
+        }
+
+        [CborObjectFormat(CborObjectFormat.IntKeyMap)]
+        public class WithId
+        {
+            [CborProperty(1)]
+            public int Id { get; set; }
+        }
+
+        [CborDiscriminator("Person4")]
+        [CborObjectFormat(CborObjectFormat.IntKeyMap)]
+        public class Person4 : WithId
+        {
+            [CborProperty(2)]
+            public string Name { get; set; }
+        }
+
+        [Fact]
+        public void ReadIntKeyMapWithDiscrimator()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person4>();
+
+            const string hexBuffer = "A30067506572736F6E34010C0263666F6F"; // {0: "Person4", 1: 12, 2: "foo"}
+            WithId obj = Helper.Read<WithId>(hexBuffer, options);
+            Assert.NotNull(obj);
+            Person4 person = Assert.IsType<Person4>(obj);
+            Assert.Equal(12, person.Id);
+            Assert.Equal("foo", person.Name);
+
+            const string hexBuffer2 = "A2010C0263666F6F"; // {1: 12, 2: "foo"}
+            Person4 obj2 = Helper.Read<Person4>(hexBuffer2, options); // no inheritance, no discriminator written
+            Assert.Equal(12, obj2.Id);
+            Assert.Equal("foo", obj2.Name);
+        }
+
+        [Fact]
+        public void WriteIntKeyMapWithDiscrimator()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person4>();
+
+            WithId person = new Person4
+            {
+                Id = 12,
+                Name = "foo"
+            };
+
+            const string hexBuffer = "A30067506572736F6E34010C0263666F6F"; // {0: "Person4", 1: 12, 2: "foo"}
+            Helper.TestWrite(person, hexBuffer, null, options);
+
+            Person4 person2 = new Person4 // no inheritance, no discriminator written
+            {
+                Id = 12,
+                Name = "foo"
+            };
+
+            const string hexBuffer2 = "A2010C0263666F6F"; // {1: 12, 2: "foo"}
+            Helper.TestWrite(person2, hexBuffer2, null, options);
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class WithId2
+        {
+            [CborProperty(1)]
+            public int Id { get; set; }
+        }
+
+        [CborDiscriminator("Person4")]
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class Person5 : WithId2
+        {
+            [CborProperty(2)]
+            public string Name { get; set; }
+        }
+
+        [Fact]
+        public void ReadArrayWithDiscrimator()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person5>();
+
+            const string hexBuffer = "83D82767506572736F6E340C63666F6F"; // [39("Person4"), 12, "foo"]
+            WithId2 obj = Helper.Read<WithId2>(hexBuffer, options);
+            Assert.NotNull(obj);
+            Person5 person = Assert.IsType<Person5>(obj);
+            Assert.Equal(12, person.Id);
+            Assert.Equal("foo", person.Name);
+
+            const string hexBuffer2 = "820C63666F6F"; // [12, "foo"]
+            Person5 obj2 = Helper.Read<Person5>(hexBuffer2, options); // no inheritance, no discriminator written
+            Assert.Equal(12, obj2.Id);
+            Assert.Equal("foo", obj2.Name);
+        }
+
+        [Fact]
+        public void WriteArrayWithDiscrimator()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person5>();
+
+            WithId2 person = new Person5
+            {
+                Id = 12,
+                Name = "foo"
+            };
+
+            const string hexBuffer = "83D82767506572736F6E340C63666F6F"; // [39("Person4"), 12, "foo"]
+            Helper.TestWrite(person, hexBuffer, null, options);
+
+            Person5 person2 = new Person5 // no inheritance, no discriminator written
+            {
+                Id = 12,
+                Name = "foo"
+            };
+
+            const string hexBuffer2 = "820C63666F6F"; // [12, "foo"]
+            Helper.TestWrite(person2, hexBuffer2, null, options);
         }
     }
 }

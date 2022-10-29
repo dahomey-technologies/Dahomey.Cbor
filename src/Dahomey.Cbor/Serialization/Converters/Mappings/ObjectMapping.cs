@@ -81,7 +81,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 && _registry.DiscriminatorConventionRegistry.AnyConvention()
                 && (_memberMappings.Count == 0 || _memberMappings[0] is not DiscriminatorMapping<T>))
             {
-                DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(_registry.DiscriminatorConventionRegistry, this);
+                DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(_options, this);
                 _memberMappings.Insert(0, memberMapping);
             }
 
@@ -238,7 +238,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 && _registry.DiscriminatorConventionRegistry.AnyConvention()
                 && (_memberMappings.Count == 0 || _memberMappings[0] is not DiscriminatorMapping<T>))
             {
-                DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(_registry.DiscriminatorConventionRegistry, this);
+                DiscriminatorMapping<T> memberMapping = new DiscriminatorMapping<T>(_options, this);
                 _memberMappings.Insert(0, memberMapping);
             }
 
@@ -366,17 +366,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                             throw new CborException($"exepcting all fields/properties to get a member index in class/struct {ObjectType.Name}");
                         }
 
+                        bool indexDuplicates = _memberMappings
+                            .GroupBy(x => x.MemberIndex)
+                            .Any(g => g.Count() > 1);
+
+                        if (indexDuplicates)
+                        {
+                            throw new CborException($"class/struct {ObjectType.Name} holds duplicated MemberIndex fields/properties");
+                        }
+
                         _memberMappings = _memberMappings
                             .OrderBy(m => m.MemberIndex)
                             .ToList();
-
-                        for (int i = 0; i < _memberMappings.Count; i++)
-                        {
-                            if (_memberMappings[i].MemberIndex != i)
-                            {
-                                throw new CborException($"class/struct {ObjectType.Name} MemberIndexes must follow one another with no holes");
-                            }
-                        }
                     }
                     break;
             }

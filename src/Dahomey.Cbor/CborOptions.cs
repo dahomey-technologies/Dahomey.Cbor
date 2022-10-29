@@ -53,8 +53,13 @@ namespace Dahomey.Cbor
         public CborObjectFormat ObjectFormat { get; set; } = CborObjectFormat.StringKeyMap;
         public LengthMode ArrayLengthMode { get; set; } = LengthMode.DefiniteLength;
         public LengthMode MapLengthMode { get; set; } = LengthMode.DefiniteLength;
+        /// <summary>
+        /// Semantic Tag to check if the discriminator is present when ObjectFormat is Array
+        /// </summary>
+        /// Default value is 39 (see: https://github.com/lucas-clemente/cbor-specs/blob/master/id.md)
+        public ulong DiscriminatorSemanticTag { get; set; } = 39;
 
-        public CborOptions()
+    public CborOptions()
         {
             Registry = new SerializationRegistry(this);
         }

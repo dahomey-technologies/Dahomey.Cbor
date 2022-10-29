@@ -373,16 +373,22 @@ namespace Dahomey.Cbor.Serialization.Converters
 
     public class DiscriminatorMemberConverter<T> : IMemberConverter
     {
+        private readonly CborOptions _options;
         private readonly IDiscriminatorConvention _discriminatorConvention;
         private readonly CborDiscriminatorPolicy _discriminatorPolicy;
+        private readonly CborObjectFormat _objectFormat;
         private readonly ReadOnlyMemory<byte> _memberName;
 
         public DiscriminatorMemberConverter(
-            IDiscriminatorConvention discriminatorConvention, 
-            CborDiscriminatorPolicy discriminatorPolicy)
+            CborOptions options,
+            IDiscriminatorConvention discriminatorConvention,
+            CborDiscriminatorPolicy discriminatorPolicy,
+            CborObjectFormat objectFormat)
         {
+            _options = options;
             _discriminatorConvention = discriminatorConvention;
             _discriminatorPolicy = discriminatorPolicy;
+            _objectFormat = objectFormat;
 
             if (discriminatorConvention != null)
             {
@@ -391,7 +397,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
-        public int? MemberIndex => throw new NotSupportedException();
+        public int? MemberIndex => 0; // discriminator gets always the first index
         public bool IgnoreIfDefault => false;
         public RequirementPolicy RequirementPolicy => RequirementPolicy.Never;
 
@@ -426,6 +432,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void Write(ref CborWriter writer, object obj)
         {
+            if (_objectFormat == CborObjectFormat.Array)
+            {
+                // we need a Semantic Tag to check if the discriminator is present
+                writer.WriteSemanticTag(_options.DiscriminatorSemanticTag);
+            }
             _discriminatorConvention.WriteDiscriminator(ref writer, obj.GetType());
         }
     }

@@ -445,31 +445,92 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (context.converter == null)
                 {
-                    if (_discriminatorConvention != null && _objectMapping.ObjectFormat == CborObjectFormat.StringKeyMap)
+                    if (_discriminatorConvention != null)
                     {
-                        CborReaderBookmark bookmark = reader.GetBookmark();
-
-                        if (FindItem(ref reader, _discriminatorConvention.MemberName))
+                        switch (_objectMapping.ObjectFormat)
                         {
-                            // discriminator value
-                            Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
+                            case CborObjectFormat.StringKeyMap:
+                                {
+                                    CborReaderBookmark bookmark = reader.GetBookmark();
 
-                            if (!_objectMapping.ObjectType.IsAssignableFrom(actualType))
-                            {
-                                throw new CborException($"expected type {_objectMapping.ObjectType} is not assignable from actual type {actualType}");
-                            }
+                                    if (FindItem(ref reader, _discriminatorConvention.MemberName))
+                                    {
+                                        // discriminator value
+                                        Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
 
-                            context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
-                            ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
-                            context.creatorValues = creatorMapping != null ? new Dictionary<RawString, object>() : null;
-                            context.regularValues = creatorMapping != null ? new Dictionary<RawString, object>() : null;
+                                        if (!_objectMapping.ObjectType.IsAssignableFrom(actualType))
+                                        {
+                                            throw new CborException($"expected type {_objectMapping.ObjectType} is not assignable from actual type {actualType}");
+                                        }
+
+                                        context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
+                                        ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
+                                        context.creatorValues = creatorMapping != null ? new() : null;
+                                        context.regularValues = creatorMapping != null ? new() : null;
+                                    }
+                                    else
+                                    {
+                                        context.converter = this;
+                                    }
+
+                                    reader.ReturnToBookmark(bookmark);
+                                }
+                                break;
+                            case CborObjectFormat.IntKeyMap:
+                                {
+                                    CborReaderBookmark bookmark = reader.GetBookmark();
+
+                                    if (FindItem(ref reader, 0)) // discriminator index is always 0
+                                    {
+                                        // discriminator value
+                                        Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
+
+                                        if (!_objectMapping.ObjectType.IsAssignableFrom(actualType))
+                                        {
+                                            throw new CborException($"expected type {_objectMapping.ObjectType} is not assignable from actual type {actualType}");
+                                        }
+
+                                        context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
+                                        ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
+                                        context.creatorValuesByIndex = creatorMapping != null ? new() : null;
+                                        context.regularValuesByIndex = creatorMapping != null ? new() : null;
+                                    }
+                                    else
+                                    {
+                                        context.converter = this;
+                                    }
+
+                                    reader.ReturnToBookmark(bookmark);
+                                }
+                                break;
+                            case CborObjectFormat.Array:
+                            default:
+                                // discriminator is always the first item
+                                // we need a Semantic Tag to check if the discriminator is present
+                                if (reader.TryReadSemanticTag(out ulong semanticTag) && semanticTag == _options.DiscriminatorSemanticTag)
+                                {
+                                    // discriminator value
+                                    Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
+
+                                    if (!_objectMapping.ObjectType.IsAssignableFrom(actualType))
+                                    {
+                                        throw new CborException($"expected type {_objectMapping.ObjectType} is not assignable from actual type {actualType}");
+                                    }
+
+                                    context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
+                                    ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
+                                    context.creatorValuesByIndex = creatorMapping != null ? new() : null;
+                                    context.regularValuesByIndex = creatorMapping != null ? new() : null;
+                                }
+                                else
+                                {
+                                    context.converter = this;
+                                }
+
+                                // increment to skip discriminator index even when the semantic tag is not present
+                                context.memberIndex++;
+                                break;
                         }
-                        else
-                        {
-                            context.converter = this;
-                        }
-
-                        reader.ReturnToBookmark(bookmark);
                     }
                     else
                     {
@@ -488,6 +549,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                     {
                         ((Action<T>)context.converter.ObjectMapping.OnDeserializingMethod)(context.obj);
                     }
+                }
+
+                if (_objectMapping.ObjectFormat == CborObjectFormat.Array && context.converter != this)
+                {
+                    // discrimnator read with no ReturnToBoomark, must exit here
+                    return;
                 }
             }
             else if (context.converter == null)
@@ -621,6 +688,23 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 ReadOnlySpan<byte> memberName = reader.ReadRawString();
                 if (memberName.SequenceEqual(name))
+                {
+                    return true;
+                }
+
+                reader.SkipDataItem();
+            }
+            while (reader.MoveNextMapItem());
+
+            return false;
+        }
+
+        private static bool FindItem(ref CborReader reader, int index)
+        {
+            do
+            {
+                int memberIndex = reader.ReadInt32();
+                if (memberIndex == index)
                 {
                     return true;
                 }
