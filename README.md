@@ -1,9 +1,9 @@
 # Dahomey.Cbor
 High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 
-![Nuget (with prereleases)](https://img.shields.io/nuget/vpre/Dahomey.Cbor)
-![](https://github.com/dahomey-technologies/Dahomey.Cbor/workflows/Build%20and%20Test/badge.svg)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
+[![Nuget (with prereleases)](https://img.shields.io/nuget/vpre/Dahomey.Cbor)](https://www.nuget.org/packages/Dahomey.Cbor)
+[![](https://github.com/dahomey-technologies/Dahomey.Cbor/actions/workflows/BuildAndTest.yml/badge.svg)](https://github.com/dahomey-technologies/Dahomey.Cbor/actions/workflows/BuildAndTest.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## Supported .NET versions
 * .NET Standard 2.0
