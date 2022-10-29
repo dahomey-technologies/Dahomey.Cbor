@@ -226,7 +226,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                                         {
                                             memberMapping = memberMappings
                                                 .Where(m => !(m is IDiscriminatorMapping))
-                                                .FirstOrDefault(m => string.Compare(m.MemberInfo.Name, parameter.Name, ignoreCase: true) == 0);
+                                                .FirstOrDefault(m => string.Compare(m.MemberInfo!.Name, parameter.Name, ignoreCase: true) == 0);
 
                                             if (memberMapping == null || !memberMapping.MemberIndex.HasValue)
                                             {

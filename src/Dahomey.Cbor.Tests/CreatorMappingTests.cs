@@ -224,7 +224,6 @@ namespace Dahomey.Cbor.Tests
         public void InheritedClassWithConstructor()
         {
             CborOptions options = new CborOptions();
-            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(Person));
 
             const string hexBuffer = "A3625F7466506572736F6E6249640C644E616D6563466F6F";

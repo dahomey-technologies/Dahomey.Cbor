@@ -23,7 +23,6 @@ namespace Dahomey.Cbor.Tests.Issues
         public void TestReadWrite()
         {
             CborOptions options = new CborOptions();
-            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(Dog));
 
             Dog dog = new("black", DateTime.Parse("2022-10-24T14:05:08Z", null, DateTimeStyles.RoundtripKind));

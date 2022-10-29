@@ -453,6 +453,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                         {
                             // discriminator value
                             Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
+
+                            if (!_objectMapping.ObjectType.IsAssignableFrom(actualType))
+                            {
+                                throw new CborException($"expected type {_objectMapping.ObjectType} is not assignable from actual type {actualType}");
+                            }
+
                             context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
                             ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
                             context.creatorValues = creatorMapping != null ? new Dictionary<RawString, object>() : null;

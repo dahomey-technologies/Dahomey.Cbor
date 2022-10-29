@@ -172,7 +172,6 @@ namespace Dahomey.Cbor.Tests
         public void ReadWithDiscriminator()
         {
             CborOptions options = new CborOptions();
-            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             options.Registry.ObjectMappingRegistry.Register<InheritedObject>(objectMapping =>
                 objectMapping
                     .AutoMap()
@@ -192,7 +191,6 @@ namespace Dahomey.Cbor.Tests
         public void WriteWithDiscriminator()
         {
             CborOptions options = new CborOptions();
-            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             options.Registry.ObjectMappingRegistry.Register<InheritedObject>(objectMapping =>
                 objectMapping
                     .SetDiscriminator("inherited")

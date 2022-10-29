@@ -19,7 +19,6 @@ namespace Dahomey.Cbor.Tests
         public void ReadPolymorphicObject()
         {
             CborOptions options = new CborOptions();
-            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(NameObject));
 
             const string hexBuffer = "A16A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F62496401";
@@ -31,20 +30,22 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(1, obj.BaseObject.Id);
         }
 
-        [Fact]
-        public void ReadPolymorphicObjectWithDefaultDiscriminatorConvention()
+        [CborDiscriminator("OtherObject")]
+        public class OtherObject
         {
-            const string hexBuffer = "A2625F7478374461686F6D65792E43626F722E54657374732E426173654F626A656374486F6C6465722C204461686F6D65792E43626F722E54657374736A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F62496401";
+        }
+
+        [Fact]
+        public void ReadNonAssignablePolymorphicObject()
+        {
+            const string hexBuffer = "A16A426173654F626A656374A1625F746B4F746865724F626A656374"; // {"BaseObject": {"_t": "OtherObject"}}
 
             CborOptions options = new CborOptions();
             DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
-            registry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             registry.RegisterType<NameObject>();
+            registry.RegisterType<OtherObject>();
 
-            object obj = Helper.Read<object>(hexBuffer, options);
-
-            Assert.NotNull(obj);
-            Assert.IsType<BaseObjectHolder>(obj);
+            Assert.ThrowsAny<CborException>(() => Helper.Read<BaseObjectHolder>(hexBuffer, options));
         }
 
         [Theory]
@@ -55,7 +56,6 @@ namespace Dahomey.Cbor.Tests
         public void WritePolymorphicObject(CborDiscriminatorPolicy discriminatorPolicy, string hexBuffer)
         {
             CborOptions options = new CborOptions();
-            options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new AttributeBasedDiscriminatorConvention<string>(options.Registry));
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(NameObject));
             options.Registry.ObjectMappingRegistry.Register<NameObject>(om =>
             {

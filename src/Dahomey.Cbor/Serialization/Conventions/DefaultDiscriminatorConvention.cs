@@ -1,17 +1,19 @@
-﻿using Dahomey.Cbor.Util;
+﻿using Dahomey.Cbor.Serialization.Converters;
+using Dahomey.Cbor.Serialization.Converters.Mappings;
+using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Concurrent;
-using System.Reflection;
-using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Conventions
 {
-    public class DefaultDiscriminatorConvention : IDiscriminatorConvention
+    public class DefaultDiscriminatorConvention<T> : IDiscriminatorConvention
+        where T : notnull
     {
         private readonly SerializationRegistry _serializationRegistry;
         private readonly ReadOnlyMemory<byte> _memberName;
-        private readonly ConcurrentDictionary<string, Type> _typesByDiscriminator = new ConcurrentDictionary<string, Type>();
-        private readonly ConcurrentDictionary<Type, string> _discriminatorsByType = new ConcurrentDictionary<Type, string>();
+        private readonly ConcurrentDictionary<T, Type> _typesByDiscriminator = new();
+        private readonly ConcurrentDictionary<Type, T> _discriminatorsByType = new();
+        private readonly ICborConverter<T> _converter;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
 
@@ -24,69 +26,49 @@ namespace Dahomey.Cbor.Serialization.Conventions
         {
             _serializationRegistry = serializationRegistry;
             _memberName = memberName.AsBinaryMemory();
+            _converter = serializationRegistry.ConverterRegistry.Lookup<T>();
         }
 
 
         public bool TryRegisterType(Type type)
         {
+            IObjectMapping objectMapping = _serializationRegistry.ObjectMappingRegistry.Lookup(type);
+
+            if (objectMapping.Discriminator == null || objectMapping.Discriminator is not T discriminator)
+            {
+                return false;
+            }
+
+            _discriminatorsByType.TryAdd(type, discriminator);
+            _typesByDiscriminator.TryAdd(discriminator, type);
             return true;
         }
 
         public Type ReadDiscriminator(ref CborReader reader)
         {
-            string? discriminator = reader.ReadString();
+            T discriminator = _converter.Read(ref reader);
 
             if (discriminator == null)
             {
-                throw reader.BuildException("Discrimnator cannot be null or empty");
+                throw new CborException("Null discriminator");
             }
 
-            Type type = _typesByDiscriminator.GetOrAdd(discriminator, NameToType);
+            if (!_typesByDiscriminator.TryGetValue(discriminator, out Type? type))
+            {
+                throw new CborException($"Unknown type discriminator: {discriminator}");
+            }
+
             return type;
         }
 
         public void WriteDiscriminator(ref CborWriter writer, Type actualType)
         {
-            string discriminator = _discriminatorsByType.GetOrAdd(actualType, TypeToName);
-            writer.WriteString(discriminator);
-        }
-
-        private string TypeToName(Type type)
-        {
-            return type.FullName + ", " + type.Assembly.GetName().Name;
-        }
-
-        private Type NameToType(string name)
-        {
-            string[] parts = name.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-            string? assemblyName;
-            string typeName;
-
-            switch (parts.Length)
+            if (!_discriminatorsByType.TryGetValue(actualType, out T? discriminator))
             {
-                case 1:
-                    typeName = parts[0];
-                    assemblyName = null;
-                    break;
-
-                case 2:
-                    typeName = parts[0];
-                    assemblyName = parts[1];
-                    break;
-
-                default:
-                    throw new CborException($"Invalid discriminator {name}");
-
+                throw new CborException($"Unknown discriminator for type: {actualType}");
             }
 
-            if (!string.IsNullOrEmpty(assemblyName))
-            {
-                Assembly assembly = Assembly.Load(assemblyName);
-                return assembly.GetType(typeName) ?? throw new CborException($"Cannot get type from {name}");
-            }
-
-            return Type.GetType(typeName) ?? throw new CborException($"Cannot get type from {name}");
+            _converter.Write(ref writer, discriminator);
         }
     }
 }

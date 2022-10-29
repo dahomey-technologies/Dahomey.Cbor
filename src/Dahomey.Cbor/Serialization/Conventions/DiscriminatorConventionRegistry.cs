@@ -17,7 +17,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
             _serializationRegistry = serializationRegistry;
 
             // order matters. It's in reverse order of how they'll get consumed
-            RegisterConvention(new DefaultDiscriminatorConvention(_serializationRegistry));
+            RegisterConvention(new DefaultDiscriminatorConvention<string>(_serializationRegistry));
         }
 
         public bool AnyConvention()
