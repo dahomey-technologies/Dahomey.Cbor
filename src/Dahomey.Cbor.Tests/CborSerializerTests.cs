@@ -4,6 +4,8 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using System.IO.Pipelines;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -164,6 +166,26 @@ namespace Dahomey.Cbor.Tests
                 TestBuffer(bufferWriter.WrittenSpan.ToArray());
             }
         }
+
+
+
+        [Fact]
+        public void SerializeLinqEnumerabe()
+        {
+            using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
+            {
+                var input = new[] { "hello", "world" }
+                    .Where(x => x.StartsWith("h"));
+
+                Cbor.Serialize(input, input.GetType(), bufferWriter, Options);
+                Assert.Equal("816568656C6C6F", BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", ""));
+
+                var deserialized = Cbor.Deserialize(input.GetType(), bufferWriter.WrittenSpan, Options);
+                var list = Assert.IsType<List<string>>(deserialized);
+                Assert.Single(list, "hello");
+            }
+        }
+
 
         [Theory]
         [InlineData(1)]
