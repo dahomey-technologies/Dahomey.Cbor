@@ -225,7 +225,7 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Task SerializeAsync(
-            object input,
+            object? input,
             Type inputType,
             Stream stream,
             CborOptions? options = null,
@@ -250,15 +250,22 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Serialize(
-            object input, 
+            object? input, 
             Type inputType, 
             in IBufferWriter<byte> buffer, 
             CborOptions? options = null)
         {
-            options ??= CborOptions.Default;
             CborWriter writer = new CborWriter(buffer);
-            ICborConverter converter = options.Registry.ConverterRegistry.Lookup(inputType);
-            converter.Write(ref writer, input);
+            if (input is null)
+            {
+                writer.WriteNull();
+            }
+            else
+            {
+                options ??= CborOptions.Default;
+                ICborConverter converter = options.Registry.ConverterRegistry.Lookup(inputType);
+                converter.Write(ref writer, input);
+            }
         }
 
         /// <summary>
