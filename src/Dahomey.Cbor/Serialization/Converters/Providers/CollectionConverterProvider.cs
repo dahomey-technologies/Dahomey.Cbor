@@ -25,6 +25,8 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
 
             if (type.IsGenericType)
             {
+                var typeInterfaces = type.GetInterfaces();
+
                 if (type.GetGenericTypeDefinition() == typeof(ImmutableDictionary<,>)
                     || type.GetGenericTypeDefinition() == typeof(ImmutableSortedDictionary<,>))
                 {
@@ -36,7 +38,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                         typeof(ImmutableDictionaryConverter<,,>), type, keyType, valueType);
                 }
 
-                if (type.GetInterfaces()
+                if (typeInterfaces
                     .Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IDictionary<,>)))
                 {
                     Type keyType = type.GetGenericArguments()[0];
@@ -95,7 +97,17 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                         typeof(List<>).MakeGenericType(itemType), type, itemType);
                 }
 
-                if (type.GetInterfaces()
+                var enumerableInterfaceType = typeInterfaces.FirstOrDefault(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+                if (type.Namespace == "System.Linq" && enumerableInterfaceType is not null)
+                {
+                    Type itemType = enumerableInterfaceType.GetGenericArguments()[0];
+                    return CreateGenericConverter(
+                        options,
+                        typeof(InterfaceCollectionConverter<,,>),
+                        typeof(List<>).MakeGenericType(itemType), enumerableInterfaceType, itemType);
+                }
+
+                if (typeInterfaces
                     .Any(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(ICollection<>)))
                 {
                     Type itemType = type.GetGenericArguments()[0];
