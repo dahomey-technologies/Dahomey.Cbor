@@ -36,5 +36,16 @@ namespace Dahomey.Cbor.Tests
                 "yyyy-MM-dd'T'HH:mm:ss.FFFK", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
             Helper.TestWrite(dateTime, hexBuffer, null, new CborOptions { DateTimeFormat = dateTimeFormat });
         }
+
+        [Theory]
+        [InlineData("C11A64633F08")] // Unsigned with tag
+        [InlineData("1A64633F08")] // Unsigned without tag
+        public void ReadUnixTimestamp(string hexBuffer)
+        {
+            var dateTime = Helper.Read<DateTime>(hexBuffer);
+
+            Assert.Equal(new DateTime(2023, 05, 16, 08, 30, 00, DateTimeKind.Utc), dateTime);
+            Assert.Equal(DateTimeKind.Utc, dateTime.Kind);
+        }
     }
 }
