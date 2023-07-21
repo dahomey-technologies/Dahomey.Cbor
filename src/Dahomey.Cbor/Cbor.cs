@@ -4,6 +4,7 @@ using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Util;
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Pipelines;
@@ -169,6 +170,38 @@ namespace Dahomey.Cbor
             CborReader reader = new CborReader(buffer);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             return converter.Read(ref reader);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T[] DeserializeMultiple<T>(
+            ReadOnlySpan<byte> buffer,
+            CborOptions? options = null)
+        {
+            var list = new List<T>();
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            while (reader.HasMoreData)
+            {
+                ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
+                list.Add(converter.Read(ref reader));
+            }
+            return list.ToArray();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T[] DeserializeMultiple<T>(
+            ReadOnlySequence<byte> buffer,
+            CborOptions? options = null)
+        {
+            var list = new List<T>();
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            while (reader.HasMoreData)
+            {
+                ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
+                list.Add(converter.Read(ref reader));
+            }
+            return list.ToArray();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
