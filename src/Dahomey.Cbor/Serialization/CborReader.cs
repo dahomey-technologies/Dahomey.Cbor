@@ -85,7 +85,7 @@ namespace Dahomey.Cbor.Serialization
         private int _remainingItemCount;
         private byte[]? _scratchBuffer;
 
-        public bool HasMoreData => _currentPos < _length;
+        public bool DataAvailable => _currentPos < _length;
 
         public ReadOnlySpan<byte> Buffer => _sequence.HasValue
             ? throw new InvalidOperationException("Buffer is not available when reader is operating on a sequence buffer")

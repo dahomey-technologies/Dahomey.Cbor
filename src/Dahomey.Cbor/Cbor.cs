@@ -93,7 +93,7 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueTask<T> DeserializeAsync<T>(
-            PipeReader reader, 
+            PipeReader reader,
             CborOptions? options = null,
             CancellationToken token = default)
         {
@@ -122,8 +122,8 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueTask<object?> DeserializeAsync(
-            Type objectType, 
-            PipeReader reader, 
+            Type objectType,
+            PipeReader reader,
             CborOptions? options = null,
             CancellationToken token = default)
         {
@@ -152,7 +152,7 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static T Deserialize<T>(
-            ReadOnlySpan<byte> buffer, 
+            ReadOnlySpan<byte> buffer,
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
@@ -180,7 +180,7 @@ namespace Dahomey.Cbor
             var list = new List<T>();
             options ??= CborOptions.Default;
             CborReader reader = new CborReader(buffer);
-            while (reader.HasMoreData)
+            while (reader.DataAvailable)
             {
                 ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
                 list.Add(converter.Read(ref reader));
@@ -196,7 +196,7 @@ namespace Dahomey.Cbor
             var list = new List<T>();
             options ??= CborOptions.Default;
             CborReader reader = new CborReader(buffer);
-            while (reader.HasMoreData)
+            while (reader.DataAvailable)
             {
                 ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
                 list.Add(converter.Read(ref reader));
@@ -206,7 +206,7 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object? Deserialize(
-            Type objectType, 
+            Type objectType,
             ReadOnlySpan<byte> buffer,
             CborOptions? options = null)
         {
@@ -246,8 +246,8 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Task SerializeAsync<T>(
-            T input, 
-            Stream stream, 
+            T input,
+            Stream stream,
             CborOptions? options = null,
             CancellationToken token = default)
         {
@@ -271,8 +271,8 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Serialize<T>(
-            T input, 
-            in IBufferWriter<byte> buffer, 
+            T input,
+            in IBufferWriter<byte> buffer,
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
@@ -283,9 +283,9 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Serialize(
-            object? input, 
-            Type inputType, 
-            in IBufferWriter<byte> buffer, 
+            object? input,
+            Type inputType,
+            in IBufferWriter<byte> buffer,
             CborOptions? options = null)
         {
             CborWriter writer = new CborWriter(buffer);
