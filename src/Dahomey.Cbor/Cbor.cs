@@ -228,6 +228,49 @@ namespace Dahomey.Cbor
             return cborConverter.Read(ref reader);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static object[] DeserializeMultiple(
+            Type objectType,
+            ReadOnlySpan<byte> buffer,
+            CborOptions? options = null)
+        {
+            var list = new List<object>();
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            while (reader.DataAvailable)
+            {
+                ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
+
+                var obj = cborConverter.Read(ref reader);
+                if (obj != null)
+                {
+                    list.Add(obj);
+                }
+            }
+            return list.ToArray();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static object[] DeserializeMultiple(
+            Type objectType,
+            ReadOnlySequence<byte> buffer,
+            CborOptions? options = null)
+        {
+            var list = new List<object>();
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            while (reader.DataAvailable)
+            {
+                ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
+                var obj = cborConverter.Read(ref reader);
+                if (obj != null)
+                {
+                    list.Add(obj);
+                }
+            }
+            return list.ToArray();
+        }
+
         /// <summary>
         /// Deserializes the CBOR buffer to the given anonymous type.
         /// </summary>
@@ -298,6 +341,45 @@ namespace Dahomey.Cbor
                 options ??= CborOptions.Default;
                 ICborConverter converter = options.Registry.ConverterRegistry.Lookup(inputType);
                 converter.Write(ref writer, input);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void SerializeMultiple<T>(
+            T[] input,
+            in IBufferWriter<byte> buffer,
+            CborOptions? options = null)
+        {
+            options ??= CborOptions.Default;
+            CborWriter writer = new CborWriter(buffer);
+            ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
+            for (int i = 0; i < input.Length; i++)
+            {
+                converter.Write(ref writer, input[i]);
+            }
+        }
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void SerializeMultiple(
+            object[] input,
+            Type inputType,
+            in IBufferWriter<byte> buffer,
+            CborOptions? options = null)
+        {
+            CborWriter writer = new CborWriter(buffer);
+            if (input is null)
+            {
+                writer.WriteNull();
+            }
+            else
+            {
+                options ??= CborOptions.Default;
+                ICborConverter converter = options.Registry.ConverterRegistry.Lookup(inputType);
+                for (int i = 0; i < input.Length; i++)
+                {
+                    converter.Write(ref writer, input[i]);
+                }
             }
         }
 
