@@ -151,6 +151,154 @@ namespace Dahomey.Cbor
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<T[]> DeserializeMultipleAsync<T>(
+            Stream stream,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            if (stream is MemoryStream ms && ms.TryGetBuffer(out ArraySegment<byte> buffer))
+            {
+                ReadOnlySpan<byte> span = new ReadOnlySpan<byte>(buffer.Array, buffer.Offset, buffer.Count);
+                return new ValueTask<T[]>(DeserializeMultiple<T>(span, options));
+            }
+
+            ValueTask<AsyncReadResult> task = stream.ReadAndGivePreciseLengthAsync(256, token);
+
+            if (task.IsCompletedSuccessfully)
+            {
+#pragma warning disable VSTHRD103
+                return new ValueTask<T[]>(DeserializeMultiple(task.Result));
+#pragma warning restore VSTHRD103
+            }
+
+            return FinishDeserializeAsync(task);
+
+            T[] DeserializeMultiple(AsyncReadResult asyncResult)
+            {
+                if (asyncResult.MemoryOwner != null)
+                {
+                    using (asyncResult.MemoryOwner)
+                    {
+                        return DeserializeMultiple<T>(asyncResult.MemoryOwner.Memory.Span.Slice(0, asyncResult.DataRead), options);
+                    }
+                }
+                else
+                {
+                    return new T[0];
+                }
+            }
+
+            async ValueTask<T[]> FinishDeserializeAsync(ValueTask<AsyncReadResult> localTask)
+            {
+                return DeserializeMultiple(await localTask.ConfigureAwait(false));
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<object[]> DeserializeMultipleAsync(
+            Type objectType,
+            Stream stream,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            if (stream is MemoryStream ms && ms.TryGetBuffer(out ArraySegment<byte> buffer))
+            {
+                ReadOnlySpan<byte> span = new ReadOnlySpan<byte>(buffer.Array, buffer.Offset, buffer.Count);
+                return new ValueTask<object[]>(Cbor.DeserializeMultiple(objectType, span, options));
+            }
+
+            ValueTask<AsyncReadResult> task = stream.ReadAndGivePreciseLengthAsync(256, token);
+
+            if (task.IsCompletedSuccessfully)
+            {
+#pragma warning disable VSTHRD103
+                return new ValueTask<object[]>(DeserializeMultiple(task.Result));
+#pragma warning restore VSTHRD103
+            }
+
+            return FinishDeserializeMultipleAsync(task);
+
+            object[] DeserializeMultiple(AsyncReadResult result)
+            {
+                if (result.MemoryOwner != null)
+                {
+                    using (result.MemoryOwner)
+                    {
+                        return Cbor.DeserializeMultiple(objectType, result.MemoryOwner.Memory.Span.Slice(0, result.DataRead), options);
+                    }
+                }
+                else
+                {
+                    return new object[0];
+                }
+            }
+
+            async ValueTask<object[]> FinishDeserializeMultipleAsync(ValueTask<AsyncReadResult> localTask)
+            {
+                return DeserializeMultiple(await localTask.ConfigureAwait(false));
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<T[]> DeserializeMultipleAsync<T>(
+            PipeReader reader,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            ValueTask<ReadOnlySequence<byte>> task = reader.FullReadAsync(token);
+
+            if (task.IsCompletedSuccessfully)
+            {
+#pragma warning disable VSTHRD103
+                ReadOnlySequence<byte> sequence = task.Result;
+#pragma warning restore VSTHRD103
+                T[] result = DeserializeMultiple<T>(sequence, options);
+                reader.AdvanceTo(sequence.End);
+                return new ValueTask<T[]>(result);
+            }
+
+            return FinishDeserializeMultipleAsync(task);
+
+            async ValueTask<T[]> FinishDeserializeMultipleAsync(ValueTask<ReadOnlySequence<byte>> localTask)
+            {
+                ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
+                T[] result = DeserializeMultiple<T>(sequence, options);
+                reader.AdvanceTo(sequence.End);
+                return result;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<object[]> DeserializeMultipleAsync(
+            Type objectType,
+            PipeReader reader,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            ValueTask<ReadOnlySequence<byte>> task = reader.FullReadAsync(token);
+
+            if (task.IsCompletedSuccessfully)
+            {
+#pragma warning disable VSTHRD103
+                ReadOnlySequence<byte> sequence = task.Result;
+#pragma warning restore VSTHRD103
+                object[] result = Cbor.DeserializeMultiple(objectType, sequence, options);
+                reader.AdvanceTo(sequence.End);
+                return new ValueTask<object[]>(result);
+            }
+
+            return FinishDeserializeMultipleAsync(task);
+
+            async ValueTask<object[]> FinishDeserializeMultipleAsync(ValueTask<ReadOnlySequence<byte>> localTask)
+            {
+                ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
+                object[] result = Cbor.DeserializeMultiple(objectType, sequence, options);
+                reader.AdvanceTo(sequence.End);
+                return result;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static T Deserialize<T>(
             ReadOnlySpan<byte> buffer,
             CborOptions? options = null)
@@ -170,6 +318,30 @@ namespace Dahomey.Cbor
             CborReader reader = new CborReader(buffer);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             return converter.Read(ref reader);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static object? Deserialize(
+            Type objectType,
+            ReadOnlySpan<byte> buffer,
+            CborOptions? options = null)
+        {
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
+            return cborConverter.Read(ref reader);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static object? Deserialize(
+            Type objectType,
+            ReadOnlySequence<byte> buffer,
+            CborOptions? options = null)
+        {
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
+            return cborConverter.Read(ref reader);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -202,30 +374,6 @@ namespace Dahomey.Cbor
                 list.Add(converter.Read(ref reader));
             }
             return list.ToArray();
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static object? Deserialize(
-            Type objectType,
-            ReadOnlySpan<byte> buffer,
-            CborOptions? options = null)
-        {
-            options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer);
-            ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
-            return cborConverter.Read(ref reader);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static object? Deserialize(
-            Type objectType,
-            ReadOnlySequence<byte> buffer,
-            CborOptions? options = null)
-        {
-            options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer);
-            ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
-            return cborConverter.Read(ref reader);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -312,6 +460,30 @@ namespace Dahomey.Cbor
             return bufferWriter.CopyToAsync(stream, token);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Task SerializeMultipleAsync<T>(
+            T[] input,
+            Stream stream,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            using ByteBufferWriter bufferWriter = new ByteBufferWriter();
+            SerializeMultiple(input, bufferWriter, options);
+            return bufferWriter.CopyToAsync(stream, token);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Task SerializeMultipleAsync(
+            object[] input,
+            Type inputType,
+            Stream stream,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            using ByteBufferWriter bufferWriter = new ByteBufferWriter();
+            SerializeMultiple(input, inputType, bufferWriter, options);
+            return bufferWriter.CopyToAsync(stream, token);
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Serialize<T>(
             T input,

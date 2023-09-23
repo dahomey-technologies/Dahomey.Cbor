@@ -76,6 +76,24 @@ namespace Dahomey.Cbor.Tests
             TestSimpleObject(obj);
         }
 
+#if !SKIP
+        [Fact]
+        public async Task DeserializeMultipleFromMemoryStreamAsync()
+        {
+            MemoryStream stream = new MemoryStream(MultipleSimpleObjectHexBuffer.HexToBytes());
+            SimpleObject[] obj = await Cbor.DeserializeMultipleAsync<SimpleObject>(stream);
+            TestMultipleSimpleObject(obj);
+        }
+
+        [Fact]
+        public async Task DeserializeMultipleObjectFromMemoryStreamAsync()
+        {
+            MemoryStream stream = new MemoryStream(MultipleSimpleObjectHexBuffer.HexToBytes());
+            object[] obj = await Cbor.DeserializeMultipleAsync(typeof(SimpleObject), stream);
+            TestMultipleSimpleObject(obj);
+        }
+#endif
+
         [Fact]
         public async Task SerializeToMemoryStreamAsync()
         {
@@ -90,6 +108,22 @@ namespace Dahomey.Cbor.Tests
             MemoryStream stream = new MemoryStream();
             await Cbor.SerializeAsync(SimpleObject, typeof(SimpleObject), stream, Options);
             TestBuffer(stream.ToArray());
+        }
+
+        [Fact]
+        public async Task SerializeMultipleToMemoryStreamAsync()
+        {
+            MemoryStream stream = new MemoryStream();
+            await Cbor.SerializeMultipleAsync(SimpleObjectArray, stream, Options);
+            TestMultipleBuffer(stream.ToArray());
+        }
+
+        [Fact]
+        public async Task SerializeMultipleObjectToMemoryStreamAsync()
+        {
+            MemoryStream stream = new MemoryStream();
+            await Cbor.SerializeMultipleAsync(SimpleObjectArray, typeof(SimpleObject), stream, Options);
+            TestMultipleBuffer(stream.ToArray());
         }
 
         [Fact]
@@ -133,6 +167,46 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
+        public async Task DeserializeMultipleFromFileStreamAsync()
+        {
+            string tempFileName = Path.GetTempFileName();
+            File.WriteAllBytes(tempFileName, MultipleSimpleObjectHexBuffer.HexToBytes());
+
+            try
+            {
+                using (FileStream stream = File.OpenRead(tempFileName))
+                {
+                    SimpleObject[] obj = await Cbor.DeserializeMultipleAsync<SimpleObject>(stream);
+                    TestMultipleSimpleObject(obj);
+                }
+            }
+            finally
+            {
+                File.Delete(tempFileName);
+            }
+        }
+
+        [Fact]
+        public async Task DeserializeMultipleObjectFromFileStreamAsync()
+        {
+            string tempFileName = Path.GetTempFileName();
+            File.WriteAllBytes(tempFileName, MultipleSimpleObjectHexBuffer.HexToBytes());
+
+            try
+            {
+                using (FileStream stream = File.OpenRead(tempFileName))
+                {
+                    object[] obj = await Cbor.DeserializeMultipleAsync(typeof(SimpleObject), stream);
+                    TestMultipleSimpleObject(obj);
+                }
+            }
+            finally
+            {
+                File.Delete(tempFileName);
+            }
+        }
+
+        [Fact]
         public async Task SerializeObjectToFileStreamAsync()
         {
             string tempFileName = Path.GetTempFileName();
@@ -146,6 +220,27 @@ namespace Dahomey.Cbor.Tests
 
                 byte[] actualBuffer = File.ReadAllBytes(tempFileName);
                 TestBuffer(actualBuffer);
+            }
+            finally
+            {
+                File.Delete(tempFileName);
+            }
+        }
+
+        [Fact]
+        public async Task SerializeMultipleObjectToFileStreamAsync()
+        {
+            string tempFileName = Path.GetTempFileName();
+
+            try
+            {
+                using (FileStream stream = File.OpenWrite(tempFileName))
+                {
+                    await Cbor.SerializeMultipleAsync(SimpleObjectArray, typeof(SimpleObject), stream, Options);
+                }
+
+                byte[] actualBuffer = File.ReadAllBytes(tempFileName);
+                TestMultipleBuffer(actualBuffer);
             }
             finally
             {
@@ -174,7 +269,7 @@ namespace Dahomey.Cbor.Tests
         {
             Span<byte> buffer = MultipleSimpleObjectHexBuffer.HexToBytes();
             SimpleObject[] objs = Cbor.DeserializeMultiple<SimpleObject>(buffer);
-            TestMutlipleSimpleObject(objs);
+            TestMultipleSimpleObject(objs);
         }
 
         [Fact]
@@ -182,7 +277,7 @@ namespace Dahomey.Cbor.Tests
         {
             Span<byte> buffer = MultipleSimpleObjectHexBuffer.HexToBytes();
             object[] objs = Cbor.DeserializeMultiple(typeof(SimpleObject), buffer);
-            TestMutlipleSimpleObject(objs);
+            TestMultipleSimpleObject(objs);
         }
 
         [Fact]
@@ -317,6 +412,78 @@ namespace Dahomey.Cbor.Tests
             TestSimpleObject(obj);
         }
 
+        [Theory]
+        [InlineData(1)]
+        [InlineData(32)]
+        [InlineData(512)]
+        public async Task DeserializeMultipleFromPipeReaderAsync(int bufferSize)
+        {
+            ReadOnlyMemory<byte> cborBytes = MultipleSimpleObjectHexBuffer.HexToBytes();
+
+            Pipe pipe = new Pipe();
+
+            async Task WriteAsync(int sliceSize)
+            {
+                Memory<byte> buffer = pipe.Writer.GetMemory(cborBytes.Length);
+
+                while (cborBytes.Length > 0)
+                {
+                    sliceSize = Math.Min(sliceSize, cborBytes.Length);
+                    cborBytes.Slice(0, sliceSize).CopyTo(buffer.Slice(0, sliceSize));
+                    cborBytes = cborBytes.Slice(sliceSize);
+                    buffer = buffer.Slice(sliceSize);
+                    pipe.Writer.Advance(sliceSize);
+                    await pipe.Writer.FlushAsync();
+                    await Task.Delay(1);
+                }
+
+                await pipe.Writer.CompleteAsync();
+            }
+
+            Task<SimpleObject[]> readTask = Cbor.DeserializeMultipleAsync<SimpleObject>(pipe.Reader).AsTask();
+
+            await Task.WhenAll(WriteAsync(bufferSize), readTask);
+
+            SimpleObject[] obj = await readTask;
+            TestMultipleSimpleObject(obj);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(32)]
+        [InlineData(512)]
+        public async Task DeserializeMultipleObjectFromPipeReaderAsync(int bufferSize)
+        {
+            ReadOnlyMemory<byte> cborBytes = MultipleSimpleObjectHexBuffer.HexToBytes();
+
+            Pipe pipe = new Pipe();
+
+            async Task WriteAsync(int sliceSize)
+            {
+                Memory<byte> buffer = pipe.Writer.GetMemory(cborBytes.Length);
+
+                while (cborBytes.Length > 0)
+                {
+                    sliceSize = Math.Min(sliceSize, cborBytes.Length);
+                    cborBytes.Slice(0, sliceSize).CopyTo(buffer.Slice(0, sliceSize));
+                    cborBytes = cborBytes.Slice(sliceSize);
+                    buffer = buffer.Slice(sliceSize);
+                    pipe.Writer.Advance(sliceSize);
+                    await pipe.Writer.FlushAsync();
+                    await Task.Delay(1);
+                }
+
+                await pipe.Writer.CompleteAsync();
+            }
+
+            Task<object[]> readTask = Cbor.DeserializeMultipleAsync(typeof(SimpleObject), pipe.Reader).AsTask();
+
+            await Task.WhenAll(WriteAsync(bufferSize), readTask);
+
+            object[] obj = await readTask;
+            TestMultipleSimpleObject(obj);
+        }
+
         private void TestBuffer(byte[] actualBuffer)
         {
             string actualHexBuffer = BitConverter.ToString(actualBuffer).Replace("-", "");
@@ -369,7 +536,7 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(EnumTest.Value1, obj.Enum);
         }
 
-        private void TestMutlipleSimpleObject(object[] objs)
+        private void TestMultipleSimpleObject(object[] objs)
         {
             TestSimpleObject((SimpleObject)objs[0]);
             TestSimpleObject2((SimpleObject)objs[1]);
