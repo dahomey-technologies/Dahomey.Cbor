@@ -59,6 +59,15 @@ namespace Dahomey.Cbor
         /// Default value is 39 (see: https://github.com/lucas-clemente/cbor-specs/blob/master/id.md)
         public ulong DiscriminatorSemanticTag { get; set; } = 39;
 
+        /// <summary>
+        /// Default naming convention type
+        /// </summary>
+        /// <remarks>
+        /// If type is marked 'CborNamingConventionAttribute' then will use naming convention from attribute
+        /// This option is usefult when uses codegeneration. Just set up this options same on each side
+        /// </remarks>
+        public Type? DefaultNamingConventionType { get; set; }
+
     public CborOptions()
         {
             Registry = new SerializationRegistry(this);

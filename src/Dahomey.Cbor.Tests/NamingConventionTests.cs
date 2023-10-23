@@ -34,5 +34,33 @@ namespace Dahomey.Cbor.Tests
             string actualName = new SnakeCaseNamingConvention().GetPropertyName(srcName);
             Assert.Equal(expectedName, actualName);
         }
+
+        [Theory]
+        [InlineData("FooBar", "foobar")]
+        [InlineData("fooBar", "foobar")]
+        [InlineData("FooBAR", "foobar")]
+        [InlineData("FooBARFoo", "foobarfoo")]
+        [InlineData("Foo", "foo")]
+        [InlineData("foo", "foo")]
+        [InlineData("", "")]
+        public void LowerCase(string srcName, string expectedName)
+        {
+            string actualName = new LowerCaseNamingConvention().GetPropertyName(srcName);
+            Assert.Equal(expectedName, actualName);
+        }
+
+        [Theory]
+        [InlineData("FooBar", "FOOBAR")]
+        [InlineData("fooBar", "FOOBAR")]
+        [InlineData("FooBAR", "FOOBAR")]
+        [InlineData("FooBARFoo", "FOOBARFOO")]
+        [InlineData("Foo", "FOO")]
+        [InlineData("foo", "FOO")]
+        [InlineData("", "")]
+        public void UpperCase(string srcName, string expectedName)
+        {
+            string actualName = new UpperCaseNamingConvention().GetPropertyName(srcName);
+            Assert.Equal(expectedName, actualName);
+        }
     }
 }
