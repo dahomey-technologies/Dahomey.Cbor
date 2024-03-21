@@ -21,13 +21,30 @@ namespace Dahomey.Cbor.Tests
             CborOptions options = new CborOptions();
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(NameObject));
 
-            const string hexBuffer = "A16A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F62496401";
+            const string hexBuffer = "A36B49426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563626172624964026A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F624964016A4E616D654F626A656374F6";
             BaseObjectHolder obj = Helper.Read<BaseObjectHolder>(hexBuffer, options);
 
             Assert.NotNull(obj);
             Assert.IsType<NameObject>(obj.BaseObject);
             Assert.Equal("foo", ((NameObject)obj.BaseObject).Name);
             Assert.Equal(1, obj.BaseObject.Id);
+            Assert.Equal("bar", ((NameObject)obj.IBaseObject).Name);
+            Assert.Equal(2, obj.IBaseObject.Id);
+        }
+
+        [Fact]
+        public void ReadInterfacePolymorphicObject()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(NameObject));
+
+            const string hexBuffer = "A3625F746A4E616D654F626A656374644E616D6563666F6F62496401";
+            IBaseInterface obj = Helper.Read<IBaseInterface>(hexBuffer, options);
+
+            Assert.NotNull(obj);
+            Assert.IsType<NameObject>(obj);
+            Assert.Equal("foo", ((NameObject)obj).Name);
+            Assert.Equal(1, obj.Id);
         }
 
         [CborDiscriminator("OtherObject")]
@@ -48,11 +65,23 @@ namespace Dahomey.Cbor.Tests
             Assert.ThrowsAny<CborException>(() => Helper.Read<BaseObjectHolder>(hexBuffer, options));
         }
 
+        [Fact]
+        public void WriteInterfacePolymorphicObject()
+        {
+            CborOptions options = new CborOptions();
+            // options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(NameObject));
+            IBaseInterface obj = new NameObject { Id = 1, Name = "foo" };
+
+            const string hexBuffer = "A3625F746A4E616D654F626A656374644E616D6563666F6F62496401";
+
+            Helper.TestWrite(obj, hexBuffer, null, options);
+        }
+
         [Theory]
-        [InlineData(CborDiscriminatorPolicy.Default, "A26A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F624964016A4E616D654F626A656374A2644E616D656362617262496402")]
-        [InlineData(CborDiscriminatorPolicy.Auto, "A26A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F624964016A4E616D654F626A656374A2644E616D656362617262496402")]
-        [InlineData(CborDiscriminatorPolicy.Never, "A26A426173654F626A656374A2644E616D6563666F6F624964016A4E616D654F626A656374A2644E616D656362617262496402")]
-        [InlineData(CborDiscriminatorPolicy.Always, "A26A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F624964016A4E616D654F626A656374A3625F746A4E616D654F626A656374644E616D656362617262496402")]
+        [InlineData(CborDiscriminatorPolicy.Default, "A36B49426173654F626A656374A3625F74714465736372697074696F6E4F626A6563746B4465736372697074696F6E6362617A624964036A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F624964016A4E616D654F626A656374A2644E616D656362617262496402")]
+        [InlineData(CborDiscriminatorPolicy.Auto, "A36B49426173654F626A656374A3625F74714465736372697074696F6E4F626A6563746B4465736372697074696F6E6362617A624964036A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F624964016A4E616D654F626A656374A2644E616D656362617262496402")]
+        [InlineData(CborDiscriminatorPolicy.Never, "A36B49426173654F626A656374A3625F74714465736372697074696F6E4F626A6563746B4465736372697074696F6E6362617A624964036A426173654F626A656374A2644E616D6563666F6F624964016A4E616D654F626A656374A2644E616D656362617262496402")]
+        [InlineData(CborDiscriminatorPolicy.Always, "A36B49426173654F626A656374A3625F74714465736372697074696F6E4F626A6563746B4465736372697074696F6E6362617A624964036A426173654F626A656374A3625F746A4E616D654F626A656374644E616D6563666F6F624964016A4E616D654F626A656374A3625F746A4E616D654F626A656374644E616D656362617262496402")]
         public void WritePolymorphicObject(CborDiscriminatorPolicy discriminatorPolicy, string hexBuffer)
         {
             CborOptions options = new CborOptions();
@@ -79,6 +108,11 @@ namespace Dahomey.Cbor.Tests
                 {
                     Id = 2,
                     Name = "bar"
+                },
+                IBaseObject = new DescriptionObject
+                {
+                    Id = 3,
+                    Description = "baz"
                 }
             };
 
@@ -151,7 +185,7 @@ namespace Dahomey.Cbor.Tests
             options.Registry.DiscriminatorConventionRegistry.RegisterConvention(new CustomDiscriminatorConvention());
             options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(NameObject));
 
-            const string hexBuffer = "A26A426173654F626A656374A364747970651A22134C83644E616D6563666F6F624964016A4E616D654F626A656374F6";
+            const string hexBuffer = "A36B49426173654F626A656374F66A426173654F626A656374A364747970651A22134C83644E616D6563666F6F624964016A4E616D654F626A656374F6";
 
             BaseObjectHolder obj = new BaseObjectHolder
             {
