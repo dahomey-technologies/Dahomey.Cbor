@@ -83,7 +83,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             if (_memberNames == null || _defaultValues == null)
             {
-                throw new CborException("Initialize has not been called");
+                throw new CborException($"Initialize has not been called ({_objectMapping.ObjectType})");
             }
 
             object?[] args = new object[_memberNames.Count];
@@ -100,14 +100,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 }
             }
 
-            return _delegate.DynamicInvoke(args) ?? throw new InvalidOperationException("Cannot instantiate type");
+            return _delegate.DynamicInvoke(args) ?? throw new InvalidOperationException($"Cannot instantiate type ({_objectMapping.ObjectType})");
         }
 
         object ICreatorMapping.CreateInstance(Dictionary<int, object> values)
         {
             if (_memberIndexes == null || _defaultValues == null)
             {
-                throw new CborException("Initialize has not been called");
+                throw new CborException($"Initialize has not been called ({_objectMapping.ObjectType})");
             }
 
             object?[] args = new object[_memberIndexes.Count];
@@ -124,7 +124,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 }
             }
 
-            return _delegate.DynamicInvoke(args) ?? throw new InvalidOperationException("Cannot instantiate type");
+            return _delegate.DynamicInvoke(args) ?? throw new InvalidOperationException($"Cannot instantiate type ({_objectMapping.ObjectType})");
         }
 
         private void EnsureInitialize()
