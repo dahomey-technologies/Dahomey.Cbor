@@ -277,9 +277,9 @@ namespace Dahomey.Cbor.Tests
         [Fact]
         public void WriteOptInWithDefaultNamingConvention()
         {
-            CborOptions options = new CborOptions()
+            var options = new CborOptions()
             {
-                DefaultNamingConventionType = typeof(LowerCaseNamingConvention)
+                DefaultNamingConvention = new LowerCaseNamingConvention()
             };
 
             options.Registry.ObjectMappingConventionRegistry.RegisterProvider(
@@ -294,9 +294,9 @@ namespace Dahomey.Cbor.Tests
         [Fact]
         public void ReadOptInWithDefaultNamingConvention()
         {
-            CborOptions options = new CborOptions()
+            var options = new CborOptions()
             {
-                DefaultNamingConventionType = typeof(LowerCaseNamingConvention)
+                DefaultNamingConvention = new LowerCaseNamingConvention()
             };
 
             options.Registry.ObjectMappingConventionRegistry.RegisterProvider(
@@ -324,9 +324,9 @@ namespace Dahomey.Cbor.Tests
         [Fact]
         public void WriteOptInWithDefaultNamingConventionAndCborNamingAttribute()
         {
-            CborOptions options = new CborOptions()
+            var options = new CborOptions()
             {
-                DefaultNamingConventionType = typeof(LowerCaseNamingConvention)
+                DefaultNamingConvention = new LowerCaseNamingConvention()
             };
 
             options.Registry.ObjectMappingConventionRegistry.RegisterProvider(
@@ -341,9 +341,9 @@ namespace Dahomey.Cbor.Tests
         [Fact]
         public void ReadOptInWithDefaultNamingConventionAndCborNamingAttribute()
         {
-            CborOptions options = new CborOptions()
+            var options = new CborOptions()
             {
-                DefaultNamingConventionType = typeof(LowerCaseNamingConvention)
+                DefaultNamingConvention = new LowerCaseNamingConvention()
             };
 
             options.Registry.ObjectMappingConventionRegistry.RegisterProvider(

@@ -28,7 +28,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
 
 
-            Type? namingConventionType = type.GetCustomAttribute<CborNamingConventionAttribute>()?.NamingConventionType ?? registry.Options.DefaultNamingConventionType;
+            Type? namingConventionType = type.GetCustomAttribute<CborNamingConventionAttribute>()?.NamingConventionType;
 
             if (namingConventionType != null)
             {
@@ -40,7 +40,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 }
 
                 objectMapping.SetNamingConvention(namingConvention);
-            } 
+            }
+            else
+            {
+                if (registry.Options.DefaultNamingConvention is not null)
+                {
+                    objectMapping.SetNamingConvention(registry.Options.DefaultNamingConvention);
+                }
+            }
 
             CborLengthModeAttribute? lengthModeAttribute = type.GetCustomAttribute<CborLengthModeAttribute>();
             if (lengthModeAttribute != null)

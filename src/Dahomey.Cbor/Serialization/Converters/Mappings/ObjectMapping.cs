@@ -57,6 +57,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _options = options;
             ObjectType = typeof(T);
             ObjectFormat = options.ObjectFormat; // default value
+            NamingConvention = options.DefaultNamingConvention;
         }
 
         void IObjectMapping.AutoMap()
