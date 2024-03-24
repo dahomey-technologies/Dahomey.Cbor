@@ -4,6 +4,7 @@ using System;
 using Dahomey.Cbor.Util;
 using System.Globalization;
 using System.Buffers;
+using Dahomey.Cbor.Tests.Extensions;
 
 namespace Dahomey.Cbor.Tests
 {
@@ -287,6 +288,60 @@ namespace Dahomey.Cbor.Tests
                 Assert.Equal(expectedTag != ulong.MaxValue, hasTag);
                 Assert.Equal(expectedTag != ulong.MaxValue ? expectedTag : 0, actualTag);
             }
+        }
+
+        [Theory]
+        [InlineData("a262696468366534306233336266726573756c74c6f6", "683665343062333362", "c6f6")]
+        [InlineData("a262696468366534306233336266726573756c74182a", "683665343062333362", "182a")]
+        [InlineData("A262696468376235356365363566726573756C7463657965", "683762353563653635", "63657965")]
+        public void ReadDataItem(string hexBuffer, string expectedIdValue, string expectedResultValue)
+        {
+            var reader = new CborReader(hexBuffer.HexToBytes());
+
+            reader.ReadBeginMap();
+
+            int remainingItemCount = reader.ReadSize();
+
+            reader.MoveNextMapItem(ref remainingItemCount);
+            var key1 = reader.ReadString();
+            Assert.Equal("id", key1);
+
+            var idValueItem = reader.ReadDataItem();
+            Assert.Equal(expectedIdValue, idValueItem.BytesToHex());
+
+            reader.MoveNextMapItem(ref remainingItemCount);
+            var key2 = reader.ReadString();
+            Assert.Equal("result", key2);
+
+            var resultValueItem = reader.ReadDataItem();
+            Assert.Equal(expectedResultValue, resultValueItem.BytesToHex());
+        }
+
+        [Theory]
+        [InlineData("a262696468366534306233336266726573756c74c6f6", CborDataItemType.Null, "f6")]
+        [InlineData("a262696468366534306233336266726573756c74182a", CborDataItemType.Unsigned, "182a")]
+        [InlineData("A262696468376235356365363566726573756C7463657965", CborDataItemType.String, "63657965")]
+        public void ReadDataItemWithHeaderCurrentlyRead(string hexBuffer, CborDataItemType expectedResultType, string expectedResultValue)
+        {
+            var reader = new CborReader(hexBuffer.HexToBytes());
+
+            reader.ReadBeginMap();
+
+            int remainingItemCount = reader.ReadSize();
+
+            reader.MoveNextMapItem(ref remainingItemCount);
+            reader.ReadString();
+            reader.ReadString();
+
+            reader.MoveNextMapItem(ref remainingItemCount);
+            var key2 = reader.ReadString();
+            Assert.Equal("result", key2);
+
+            var resultItemType = reader.GetCurrentDataItemType();
+            Assert.Equal(expectedResultType, resultItemType);
+
+            var resultValueItem = reader.ReadDataItem();
+            Assert.Equal(expectedResultValue, resultValueItem.BytesToHex());
         }
 
         [Fact]

@@ -1,5 +1,5 @@
 ﻿using Dahomey.Cbor.ObjectModel;
-using System;
+using Dahomey.Cbor.Tests.Extensions;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
