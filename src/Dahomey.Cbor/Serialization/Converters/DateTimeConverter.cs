@@ -29,12 +29,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                 case CborDataItemType.Signed:
                 case CborDataItemType.Unsigned:
                     long unixTime = reader.ReadInt64();
-                    return DateTimeOffset.FromUnixTimeSeconds(unixTime).DateTime;
+                    return DateTimeOffset.FromUnixTimeSeconds(unixTime).UtcDateTime;
 
                 case CborDataItemType.Double:
                 case CborDataItemType.Single:
                     double unixTimeDouble = reader.ReadDouble();
-                    return DateTimeOffset.FromUnixTimeSeconds(0).DateTime.AddSeconds(unixTimeDouble);
+                    return DateTimeOffset.FromUnixTimeSeconds(0).UtcDateTime.AddSeconds(unixTimeDouble);
 
                 default:
                     throw reader.BuildException($"Invalid date format");
