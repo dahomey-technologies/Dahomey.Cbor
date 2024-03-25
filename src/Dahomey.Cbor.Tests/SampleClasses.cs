@@ -163,11 +163,17 @@ namespace Dahomey.Cbor.Tests
 
     public class BaseObjectHolder
     {
+        public IBaseInterface IBaseObject { get; set; }
         public BaseObject BaseObject { get; set; }
         public NameObject NameObject { get; set; }
     }
 
-    public class BaseObject
+    public interface IBaseInterface
+    {
+        int Id { get; }
+    }
+
+    public class BaseObject : IBaseInterface
     {
         public int Id { get; set; }
     }
