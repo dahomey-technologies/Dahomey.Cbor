@@ -280,7 +280,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             if ((DefaultValue == null && MemberType.IsValueType && Nullable.GetUnderlyingType(MemberType) == null)
                 || (DefaultValue != null && DefaultValue.GetType() != MemberType))
             {
-                throw new CborException($"Default value type mismatch");
+                throw new CborException($"Default value type mismatch on {MemberInfo.ReflectedType?.Name}.{MemberInfo.Name}");
             }
         }
     }

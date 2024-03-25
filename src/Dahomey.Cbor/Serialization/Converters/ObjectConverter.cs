@@ -157,7 +157,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (_isInterfaceOrAbstract || _constructor == null)
             {
-                throw new CborException("A CreatorMapping should be defined for interfaces or abstract classes");
+                throw new CborException($"A CreatorMapping should be defined for interfaces or abstract classes ({typeof(T)})");
             }
 
             return _constructor();
