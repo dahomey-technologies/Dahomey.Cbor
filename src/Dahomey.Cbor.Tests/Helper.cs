@@ -230,6 +230,32 @@ namespace Dahomey.Cbor.Tests
             }
         }
 
+        public static void TestDataAvailable()
+        {
+            string hexBuffer = "0C2B";
+            byte[] buffer = hexBuffer.HexToBytes();
+
+
+            CborReader spanReader = new CborReader(buffer.AsSpan());
+            CborReader sequenceReader = new CborReader(new ReadOnlySequence<byte>(buffer));
+            var spanDataAvailabe = spanReader.DataAvailable;
+            var sequenceDataAvailable = sequenceReader.DataAvailable;
+            Assert.True(spanDataAvailabe);
+            Assert.True(sequenceDataAvailable);
+            spanReader.ReadInt32();
+            sequenceReader.ReadInt32();
+            spanDataAvailabe = spanReader.DataAvailable;
+            sequenceDataAvailable = sequenceReader.DataAvailable;
+            Assert.True(spanDataAvailabe);
+            Assert.True(sequenceDataAvailable);
+            spanReader.ReadInt32();
+            sequenceReader.ReadInt32();
+            spanDataAvailabe = spanReader.DataAvailable;
+            sequenceDataAvailable = sequenceReader.DataAvailable;
+            Assert.False(spanDataAvailabe);
+            Assert.False(sequenceDataAvailable);
+        }
+
         delegate void CborWriterFunctor<T>(CborWriter writer, T value);
 
         public static string Write<T>(string methodName, T value)

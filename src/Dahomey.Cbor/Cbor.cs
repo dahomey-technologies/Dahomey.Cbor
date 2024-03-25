@@ -4,6 +4,7 @@ using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Util;
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Pipelines;
@@ -92,7 +93,7 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueTask<T> DeserializeAsync<T>(
-            PipeReader reader, 
+            PipeReader reader,
             CborOptions? options = null,
             CancellationToken token = default)
         {
@@ -121,8 +122,8 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static ValueTask<object?> DeserializeAsync(
-            Type objectType, 
-            PipeReader reader, 
+            Type objectType,
+            PipeReader reader,
             CborOptions? options = null,
             CancellationToken token = default)
         {
@@ -150,8 +151,156 @@ namespace Dahomey.Cbor
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<T[]> DeserializeMultipleAsync<T>(
+            Stream stream,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            if (stream is MemoryStream ms && ms.TryGetBuffer(out ArraySegment<byte> buffer))
+            {
+                ReadOnlySpan<byte> span = new ReadOnlySpan<byte>(buffer.Array, buffer.Offset, buffer.Count);
+                return new ValueTask<T[]>(DeserializeMultiple<T>(span, options));
+            }
+
+            ValueTask<AsyncReadResult> task = stream.ReadAndGivePreciseLengthAsync(256, token);
+
+            if (task.IsCompletedSuccessfully)
+            {
+#pragma warning disable VSTHRD103
+                return new ValueTask<T[]>(DeserializeMultiple(task.Result));
+#pragma warning restore VSTHRD103
+            }
+
+            return FinishDeserializeAsync(task);
+
+            T[] DeserializeMultiple(AsyncReadResult asyncResult)
+            {
+                if (asyncResult.MemoryOwner != null)
+                {
+                    using (asyncResult.MemoryOwner)
+                    {
+                        return DeserializeMultiple<T>(asyncResult.MemoryOwner.Memory.Span.Slice(0, asyncResult.DataRead), options);
+                    }
+                }
+                else
+                {
+                    return new T[0];
+                }
+            }
+
+            async ValueTask<T[]> FinishDeserializeAsync(ValueTask<AsyncReadResult> localTask)
+            {
+                return DeserializeMultiple(await localTask.ConfigureAwait(false));
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<object[]> DeserializeMultipleAsync(
+            Type objectType,
+            Stream stream,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            if (stream is MemoryStream ms && ms.TryGetBuffer(out ArraySegment<byte> buffer))
+            {
+                ReadOnlySpan<byte> span = new ReadOnlySpan<byte>(buffer.Array, buffer.Offset, buffer.Count);
+                return new ValueTask<object[]>(Cbor.DeserializeMultiple(objectType, span, options));
+            }
+
+            ValueTask<AsyncReadResult> task = stream.ReadAndGivePreciseLengthAsync(256, token);
+
+            if (task.IsCompletedSuccessfully)
+            {
+#pragma warning disable VSTHRD103
+                return new ValueTask<object[]>(DeserializeMultiple(task.Result));
+#pragma warning restore VSTHRD103
+            }
+
+            return FinishDeserializeMultipleAsync(task);
+
+            object[] DeserializeMultiple(AsyncReadResult result)
+            {
+                if (result.MemoryOwner != null)
+                {
+                    using (result.MemoryOwner)
+                    {
+                        return Cbor.DeserializeMultiple(objectType, result.MemoryOwner.Memory.Span.Slice(0, result.DataRead), options);
+                    }
+                }
+                else
+                {
+                    return new object[0];
+                }
+            }
+
+            async ValueTask<object[]> FinishDeserializeMultipleAsync(ValueTask<AsyncReadResult> localTask)
+            {
+                return DeserializeMultiple(await localTask.ConfigureAwait(false));
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<T[]> DeserializeMultipleAsync<T>(
+            PipeReader reader,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            ValueTask<ReadOnlySequence<byte>> task = reader.FullReadAsync(token);
+
+            if (task.IsCompletedSuccessfully)
+            {
+#pragma warning disable VSTHRD103
+                ReadOnlySequence<byte> sequence = task.Result;
+#pragma warning restore VSTHRD103
+                T[] result = DeserializeMultiple<T>(sequence, options);
+                reader.AdvanceTo(sequence.End);
+                return new ValueTask<T[]>(result);
+            }
+
+            return FinishDeserializeMultipleAsync(task);
+
+            async ValueTask<T[]> FinishDeserializeMultipleAsync(ValueTask<ReadOnlySequence<byte>> localTask)
+            {
+                ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
+                T[] result = DeserializeMultiple<T>(sequence, options);
+                reader.AdvanceTo(sequence.End);
+                return result;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ValueTask<object[]> DeserializeMultipleAsync(
+            Type objectType,
+            PipeReader reader,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            ValueTask<ReadOnlySequence<byte>> task = reader.FullReadAsync(token);
+
+            if (task.IsCompletedSuccessfully)
+            {
+#pragma warning disable VSTHRD103
+                ReadOnlySequence<byte> sequence = task.Result;
+#pragma warning restore VSTHRD103
+                object[] result = Cbor.DeserializeMultiple(objectType, sequence, options);
+                reader.AdvanceTo(sequence.End);
+                return new ValueTask<object[]>(result);
+            }
+
+            return FinishDeserializeMultipleAsync(task);
+
+            async ValueTask<object[]> FinishDeserializeMultipleAsync(ValueTask<ReadOnlySequence<byte>> localTask)
+            {
+                ReadOnlySequence<byte> sequence = await localTask.ConfigureAwait(false);
+                object[] result = Cbor.DeserializeMultiple(objectType, sequence, options);
+                reader.AdvanceTo(sequence.End);
+                return result;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static T Deserialize<T>(
-            ReadOnlySpan<byte> buffer, 
+            ReadOnlySpan<byte> buffer,
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
@@ -173,7 +322,7 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static object? Deserialize(
-            Type objectType, 
+            Type objectType,
             ReadOnlySpan<byte> buffer,
             CborOptions? options = null)
         {
@@ -195,6 +344,81 @@ namespace Dahomey.Cbor
             return cborConverter.Read(ref reader);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T[] DeserializeMultiple<T>(
+            ReadOnlySpan<byte> buffer,
+            CborOptions? options = null)
+        {
+            var list = new List<T>();
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            while (reader.DataAvailable)
+            {
+                ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
+                list.Add(converter.Read(ref reader));
+            }
+            return list.ToArray();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static T[] DeserializeMultiple<T>(
+            ReadOnlySequence<byte> buffer,
+            CborOptions? options = null)
+        {
+            var list = new List<T>();
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            while (reader.DataAvailable)
+            {
+                ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
+                list.Add(converter.Read(ref reader));
+            }
+            return list.ToArray();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static object[] DeserializeMultiple(
+            Type objectType,
+            ReadOnlySpan<byte> buffer,
+            CborOptions? options = null)
+        {
+            var list = new List<object>();
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            while (reader.DataAvailable)
+            {
+                ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
+
+                var obj = cborConverter.Read(ref reader);
+                if (obj != null)
+                {
+                    list.Add(obj);
+                }
+            }
+            return list.ToArray();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static object[] DeserializeMultiple(
+            Type objectType,
+            ReadOnlySequence<byte> buffer,
+            CborOptions? options = null)
+        {
+            var list = new List<object>();
+            options ??= CborOptions.Default;
+            CborReader reader = new CborReader(buffer);
+            while (reader.DataAvailable)
+            {
+                ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
+                var obj = cborConverter.Read(ref reader);
+                if (obj != null)
+                {
+                    list.Add(obj);
+                }
+            }
+            return list.ToArray();
+        }
+
         /// <summary>
         /// Deserializes the CBOR buffer to the given anonymous type.
         /// </summary>
@@ -213,8 +437,8 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Task SerializeAsync<T>(
-            T input, 
-            Stream stream, 
+            T input,
+            Stream stream,
             CborOptions? options = null,
             CancellationToken token = default)
         {
@@ -237,9 +461,33 @@ namespace Dahomey.Cbor
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Task SerializeMultipleAsync<T>(
+            T[] input,
+            Stream stream,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            using ByteBufferWriter bufferWriter = new ByteBufferWriter();
+            SerializeMultiple(input, bufferWriter, options);
+            return bufferWriter.CopyToAsync(stream, token);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Task SerializeMultipleAsync(
+            object[] input,
+            Type inputType,
+            Stream stream,
+            CborOptions? options = null,
+            CancellationToken token = default)
+        {
+            using ByteBufferWriter bufferWriter = new ByteBufferWriter();
+            SerializeMultiple(input, inputType, bufferWriter, options);
+            return bufferWriter.CopyToAsync(stream, token);
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Serialize<T>(
-            T input, 
-            in IBufferWriter<byte> buffer, 
+            T input,
+            in IBufferWriter<byte> buffer,
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
@@ -250,9 +498,9 @@ namespace Dahomey.Cbor
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Serialize(
-            object? input, 
-            Type inputType, 
-            in IBufferWriter<byte> buffer, 
+            object? input,
+            Type inputType,
+            in IBufferWriter<byte> buffer,
             CborOptions? options = null)
         {
             CborWriter writer = new CborWriter(buffer);
@@ -265,6 +513,45 @@ namespace Dahomey.Cbor
                 options ??= CborOptions.Default;
                 ICborConverter converter = options.Registry.ConverterRegistry.Lookup(inputType);
                 converter.Write(ref writer, input);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void SerializeMultiple<T>(
+            T[] input,
+            in IBufferWriter<byte> buffer,
+            CborOptions? options = null)
+        {
+            options ??= CborOptions.Default;
+            CborWriter writer = new CborWriter(buffer);
+            ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
+            for (int i = 0; i < input.Length; i++)
+            {
+                converter.Write(ref writer, input[i]);
+            }
+        }
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void SerializeMultiple(
+            object[] input,
+            Type inputType,
+            in IBufferWriter<byte> buffer,
+            CborOptions? options = null)
+        {
+            CborWriter writer = new CborWriter(buffer);
+            if (input is null)
+            {
+                writer.WriteNull();
+            }
+            else
+            {
+                options ??= CborOptions.Default;
+                ICborConverter converter = options.Registry.ConverterRegistry.Lookup(inputType);
+                for (int i = 0; i < input.Length; i++)
+                {
+                    converter.Write(ref writer, input[i]);
+                }
             }
         }
 

@@ -54,5 +54,22 @@ namespace Dahomey.Cbor.Tests
 
             memory.Dispose();
         }
+
+        [Theory]
+        [InlineData(20, 16)]
+        [InlineData(16, 16)]
+        [InlineData(10, 16)]
+        public async Task ReadWwithPreciseLengthAsyncNoSyncAsync(int bufferLength, int hintSize)
+        {
+            byte[] buffer = Enumerable.Range(0, bufferLength).Select(i => (byte)i).ToArray();
+            NoSeekStream stream = new NoSeekStream(buffer.AsMemory());
+            AsyncReadResult result = await stream.ReadAndGivePreciseLengthAsync(hintSize);
+
+            Assert.True(result.MemoryOwner.Memory.Length > bufferLength);
+            Assert.Equal(result.MemoryOwner.Memory.Span.Slice(0, bufferLength).ToArray(), buffer);
+            Assert.Equal(result.DataRead, bufferLength);
+
+            result.MemoryOwner.Dispose();
+        }
     }
 }

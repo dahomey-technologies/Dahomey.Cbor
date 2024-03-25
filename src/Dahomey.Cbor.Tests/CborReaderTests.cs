@@ -288,5 +288,11 @@ namespace Dahomey.Cbor.Tests
                 Assert.Equal(expectedTag != ulong.MaxValue ? expectedTag : 0, actualTag);
             }
         }
+
+        [Fact]
+        public void DataAvailable()
+        {
+            Helper.TestDataAvailable();
+        }
     }
 }
