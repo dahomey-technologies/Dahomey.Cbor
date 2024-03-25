@@ -263,5 +263,98 @@ namespace Dahomey.Cbor.Tests
             const string hexBuffer2 = "A1644E616D6563666F6F";
             Helper.TestWrite(obj2, hexBuffer2, null, options);
         }
+
+        public class OptInObject3
+        {
+
+            [CborProperty]
+            public int OptInId { get; set; }
+
+            [CborProperty]
+            public string OptInName { get; set; }
+        }
+
+        [Fact]
+        public void WriteOptInWithDefaultNamingConvention()
+        {
+            CborOptions options = new CborOptions()
+            {
+                DefaultNamingConventionType = typeof(LowerCaseNamingConvention)
+            };
+
+            options.Registry.ObjectMappingConventionRegistry.RegisterProvider(
+                new OptInObjectMappingConventionProvider()
+            );
+
+            var obj3 = new OptInObject3 { OptInId = 12, OptInName = "foo" };
+            const string hexBuffer1 = "A2676F7074696E69640C696F7074696E6E616D6563666F6F";
+            Helper.TestWrite(obj3, hexBuffer1, null, options);
+        }
+
+        [Fact]
+        public void ReadOptInWithDefaultNamingConvention()
+        {
+            CborOptions options = new CborOptions()
+            {
+                DefaultNamingConventionType = typeof(LowerCaseNamingConvention)
+            };
+
+            options.Registry.ObjectMappingConventionRegistry.RegisterProvider(
+                new OptInObjectMappingConventionProvider()
+            );
+
+            var expectedObj = new OptInObject3 { OptInId = 12, OptInName = "foo" };
+            var actualObj = Helper.Read<OptInObject3>("A2676F7074696E69640C696F7074696E6E616D6563666F6F", options);
+
+            Assert.Equal(expectedObj.OptInId, actualObj.OptInId);
+            Assert.Equal(expectedObj.OptInName, actualObj.OptInName);
+        }
+
+        [CborNamingConvention(typeof(SnakeCaseNamingConvention))]
+        public class OptInObject4
+        {
+
+            [CborProperty]
+            public int OptInId { get; set; }
+
+            [CborProperty]
+            public string OptInName { get; set; }
+        }
+
+        [Fact]
+        public void WriteOptInWithDefaultNamingConventionAndCborNamingAttribute()
+        {
+            CborOptions options = new CborOptions()
+            {
+                DefaultNamingConventionType = typeof(LowerCaseNamingConvention)
+            };
+
+            options.Registry.ObjectMappingConventionRegistry.RegisterProvider(
+                new OptInObjectMappingConventionProvider()
+            );
+
+            var obj4 = new OptInObject4 { OptInId = 12, OptInName = "foo" };
+            const string hexBuffer1 = "A2696F70745F696E5F69640C6B6F70745F696E5F6E616D6563666F6F";
+            Helper.TestWrite(obj4, hexBuffer1, null, options);
+        }
+
+        [Fact]
+        public void ReadOptInWithDefaultNamingConventionAndCborNamingAttribute()
+        {
+            CborOptions options = new CborOptions()
+            {
+                DefaultNamingConventionType = typeof(LowerCaseNamingConvention)
+            };
+
+            options.Registry.ObjectMappingConventionRegistry.RegisterProvider(
+                new OptInObjectMappingConventionProvider()
+            );
+
+            var expectedObj = new OptInObject4 { OptInId = 12, OptInName = "foo" };
+            var actualObj = Helper.Read<OptInObject4>("A2696F70745F696E5F69640C6B6F70745F696E5F6E616D6563666F6F", options);
+
+            Assert.Equal(expectedObj.OptInId, actualObj.OptInId);
+            Assert.Equal(expectedObj.OptInName, actualObj.OptInName);
+        }
     }
 }

@@ -10,6 +10,7 @@ namespace Dahomey.Cbor.Serialization
 {
     public class SerializationRegistry
     {
+        public CborOptions Options { get; }
         public CborConverterRegistry ConverterRegistry { get; }
         public ObjectMappingRegistry ObjectMappingRegistry { get; }
         public ObjectMappingConventionRegistry ObjectMappingConventionRegistry { get; }
@@ -17,6 +18,7 @@ namespace Dahomey.Cbor.Serialization
 
         public SerializationRegistry(CborOptions options)
         {
+            Options = options;
             ConverterRegistry = new CborConverterRegistry(options);
             ObjectMappingRegistry = new ObjectMappingRegistry(this, options);
             ObjectMappingConventionRegistry = new ObjectMappingConventionRegistry();
