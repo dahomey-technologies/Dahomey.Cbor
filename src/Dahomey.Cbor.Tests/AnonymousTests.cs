@@ -1,4 +1,5 @@
 ﻿using System;
+using Dahomey.Cbor.Tests.Extensions;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests

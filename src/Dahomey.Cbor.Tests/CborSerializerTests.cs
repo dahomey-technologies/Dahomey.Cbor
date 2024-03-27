@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.IO.Pipelines;
 using System.Linq;
 using System.Collections.Generic;
+using Dahomey.Cbor.Tests.Extensions;
 
 namespace Dahomey.Cbor.Tests
 {

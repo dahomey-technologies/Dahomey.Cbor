@@ -1,5 +1,6 @@
 ﻿using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Converters;
+using Dahomey.Cbor.Tests.Extensions;
 using Dahomey.Cbor.Util;
 using Nerdbank.Streams;
 using Newtonsoft.Json;

@@ -546,12 +546,17 @@ namespace Dahomey.Cbor.Serialization
 
         public bool MoveNextMapItem()
         {
-            if (_remainingItemCount == 0 || _remainingItemCount < 0 && GetCurrentDataItemType() == CborDataItemType.Break)
+            return MoveNextMapItem(ref _remainingItemCount);
+        }
+
+        public bool MoveNextMapItem(ref int remainingItemCount)
+        {
+            if (remainingItemCount == 0 || remainingItemCount < 0 && GetCurrentDataItemType() == CborDataItemType.Break)
             {
                 return false;
             }
 
-            _remainingItemCount--;
+            remainingItemCount--;
             return true;
         }
 
@@ -735,6 +740,21 @@ namespace Dahomey.Cbor.Serialization
             }
 
             return ReadBytes(size, allowScratchBuffer);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ReadOnlySpan<byte> ReadDataItem()
+        {
+            int headerOffset = _state == CborReaderState.Header ? 1 : 0;
+            int currentDataItemPos = _currentPos - headerOffset;
+
+            SkipDataItem();
+
+            int size = _currentPos - currentDataItemPos;
+
+            var buffer = new byte[size];
+            _buffer.Slice(currentDataItemPos, size).CopyTo(buffer);
+            return new ReadOnlySpan<byte>(buffer);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
