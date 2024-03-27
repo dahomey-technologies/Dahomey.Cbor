@@ -377,7 +377,21 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             if (_objectMapping.CreatorMapping == null && actualType != declaredType)
             {
-                context.objectConverter = (IObjectConverter)_registry.ConverterRegistry.Lookup(value.GetType());
+                var converter = _registry.ConverterRegistry.Lookup(actualType);
+
+                if (converter is IObjectConverter objectConverter)
+                {
+                    context.objectConverter = objectConverter;
+                }
+                else if (converter is not null)
+                {
+                    converter.Write(ref writer, value);
+                    return;
+                }
+                else
+                {
+                    throw new CborException($"No converter found for type {actualType.Name}");
+                }
             }
             else
             {

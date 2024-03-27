@@ -315,5 +315,14 @@ namespace Dahomey.Cbor.Tests
                 Assert.Equal(hexBuffer, BitConverter.ToString(buffer.WrittenSpan.ToArray()).Replace("-", ""));
             }
         }
+
+        [Theory]
+        [InlineData(42, "182A")]
+        [InlineData("Hello world", "6B48656C6C6F20776F726C64")]
+        [InlineData(false, "F4")]
+        public void WriteDataTypeCastAsObject(object value, string hexBuffer)
+        {
+            Helper.TestWrite(value, hexBuffer);
+        }
     }
 }
