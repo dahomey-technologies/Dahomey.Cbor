@@ -60,15 +60,11 @@ namespace Dahomey.Cbor
         public ulong DiscriminatorSemanticTag { get; set; } = 39;
 
         /// <summary>
-        /// Default naming convention type
+        /// The default naming convention to use when no naming convention is specified.
         /// </summary>
-        /// <remarks>
-        /// If type is marked 'CborNamingConventionAttribute' then will use naming convention from attribute
-        /// This option is usefult when uses codegeneration. Just set up this options same on each side
-        /// </remarks>
-        public Type? DefaultNamingConventionType { get; set; }
+        public INamingConvention? DefaultNamingConvention { get; set; }
 
-    public CborOptions()
+        public CborOptions()
         {
             Registry = new SerializationRegistry(this);
         }
