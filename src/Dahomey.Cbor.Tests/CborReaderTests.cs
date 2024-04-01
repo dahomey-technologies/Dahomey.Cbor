@@ -156,6 +156,8 @@ namespace Dahomey.Cbor.Tests
         [InlineData("F9C400", -4f, null)]
         [InlineData("F97C00", float.PositiveInfinity, null)]
         [InlineData("F9FC00", float.NegativeInfinity, null)]
+        // string
+        [InlineData("663232322E3232", 222.22f, null)]
         public void ReadHalf(string hexBuffer, float expectedValue, Type expectedExceptionType)
         {
             Helper.TestRead(nameof(CborReader.ReadHalf), hexBuffer, (Half)expectedValue, expectedExceptionType);
@@ -187,6 +189,8 @@ namespace Dahomey.Cbor.Tests
         [InlineData("FAFFC00000", float.NaN, null)]
         [InlineData("FA7F800000", float.PositiveInfinity, null)]
         [InlineData("FAFF800000", float.NegativeInfinity, null)]
+        // string
+        [InlineData("663232322E3232", 222.22f, null)]
         public void ReadSingle(string hexBuffer, float expectedValue, Type expectedExceptionType)
         {
             Helper.TestRead(nameof(CborReader.ReadSingle), hexBuffer, expectedValue, expectedExceptionType);
@@ -216,6 +220,8 @@ namespace Dahomey.Cbor.Tests
         [InlineData("FBFFF8000000000000", double.NaN, null)]
         [InlineData("FB7FF0000000000000", double.PositiveInfinity, null)]
         [InlineData("FBFFF0000000000000", double.NegativeInfinity, null)]
+        // string
+        [InlineData("7231323334352E313233343536373839313233", 12345.123456789123d, null)]
         public void ReadDouble(string hexBuffer, double expectedValue, Type expectedExceptionType)
         {
             Helper.TestRead(nameof(CborReader.ReadDouble), hexBuffer, expectedValue, expectedExceptionType);
@@ -239,6 +245,13 @@ namespace Dahomey.Cbor.Tests
             Helper.TestRead(nameof(CborReader.ReadDecimal), hexBuffer, decimalValue, expectedExceptionType);
         }
 
+        [Fact]
+        public void ReadDecimalFromString()
+        {
+            string hexBuffer = "7820332E313431353932363533353839373933323338343632363433333833323739";
+            decimal expectedValue = 3.141592653589793238462643383279m;
+            Helper.TestRead(nameof(CborReader.ReadDecimal), hexBuffer, expectedValue, null);
+        }
 
         [Theory]
         [InlineData("63666F6F", "foo", null)]

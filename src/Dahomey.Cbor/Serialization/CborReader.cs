@@ -2,6 +2,7 @@
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -368,6 +369,9 @@ namespace Dahomey.Cbor.Serialization
                 case CborMajorType.NegativeInteger:
                     return (Half)(- 1L - (long)ReadInteger());
 
+                case CborMajorType.TextString:
+                    return Half.Parse(ReadString()!, CultureInfo.InvariantCulture);
+
                 case CborMajorType.Primitive:
                     {
                         switch (header.Primitive)
@@ -406,6 +410,9 @@ namespace Dahomey.Cbor.Serialization
 
                 case CborMajorType.NegativeInteger:
                     return -1L - (long)ReadInteger();
+
+                case CborMajorType.TextString:
+                    return float.Parse(ReadString()!, CultureInfo.InvariantCulture);
 
                 case CborMajorType.Primitive:
                     {
@@ -446,6 +453,9 @@ namespace Dahomey.Cbor.Serialization
                 case CborMajorType.NegativeInteger:
                     return -1L - (long)ReadInteger();
 
+                case CborMajorType.TextString:
+                    return double.Parse(ReadString()!, CultureInfo.InvariantCulture);
+
                 case CborMajorType.Primitive:
                     {
                         switch (header.Primitive)
@@ -484,6 +494,9 @@ namespace Dahomey.Cbor.Serialization
 
                 case CborMajorType.NegativeInteger:
                     return -1L - (long)ReadInteger();
+
+                case CborMajorType.TextString:
+                    return decimal.Parse(ReadString()!, CultureInfo.InvariantCulture);
 
                 case CborMajorType.Primitive:
                     {
