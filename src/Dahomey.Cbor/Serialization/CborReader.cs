@@ -468,7 +468,7 @@ namespace Dahomey.Cbor.Serialization
                     ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
                     if (!Utf8Parser.TryParse(buffer, out double value, out int bytesConsumed))
                     {
-                        ThrowCbor($"Cannot parse single from {Encoding.ASCII.GetString(buffer)}");
+                        ThrowCbor($"Cannot parse double from {Encoding.ASCII.GetString(buffer)}");
                     }
                     return value;
 
@@ -515,7 +515,7 @@ namespace Dahomey.Cbor.Serialization
                     ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
                     if (!Utf8Parser.TryParse(buffer, out decimal value, out int bytesConsumed))
                     {
-                        ThrowCbor($"Cannot parse single from {Encoding.ASCII.GetString(buffer)}");
+                        ThrowCbor($"Cannot parse decimal from {Encoding.ASCII.GetString(buffer)}");
                     }
                     return value;
 
