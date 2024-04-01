@@ -512,7 +512,12 @@ namespace Dahomey.Cbor.Serialization
                     return -1L - (long)ReadInteger();
 
                 case CborMajorType.TextString:
-                    return decimal.Parse(ReadString()!, CultureInfo.InvariantCulture);
+                    ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
+                    if (!Utf8Parser.TryParse(buffer, out decimal value, out int bytesConsumed))
+                    {
+                        ThrowCbor($"Cannot parse single from {Encoding.ASCII.GetString(buffer)}");
+                    }
+                    return value;
 
                 case CborMajorType.Primitive:
                     {
