@@ -14,41 +14,41 @@ namespace Dahomey.Cbor.Util
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Half ReadHalf(ReadOnlySpan<byte> source)
         {
-            if (BitConverter.IsLittleEndian)
-            {
-                ushort value = BinaryPrimitives.ReadUInt16BigEndian(source);
-                return UInt16BitsToHalf(value);
-            }
-            else
-            {
-                return UInt16BitsToHalf(MemoryMarshal.Read<ushort>(source));
-            }
+#if NET6_0_OR_GREATER
+            return BinaryPrimitives.ReadHalfBigEndian(source);
+#else
+            return UInt16BitsToHalf(BinaryPrimitives.ReadUInt16BigEndian(source));
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void WriteHalf(Span<byte> destination, Half value)
         {
-            if (BitConverter.IsLittleEndian)
-            {
-                BinaryPrimitives.WriteUInt16BigEndian(destination, HalfToUInt16Bits(value));
-            }
-            else
-            {
-                ushort tmp = HalfToUInt16Bits(value);
-                MemoryMarshal.Write(destination, ref tmp);
-            }
+#if NET6_0_OR_GREATER
+            BinaryPrimitives.WriteHalfBigEndian(destination, value);
+#else
+            BinaryPrimitives.WriteUInt16BigEndian(destination, HalfToUInt16Bits(value));
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe ushort HalfToUInt16Bits(Half value)
         {
+#if NET6_0_OR_GREATER
+            return BitConverter.HalfToUInt16Bits(value);
+#else
             return *((ushort*)&value);
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static unsafe Half UInt16BitsToHalf(ushort value)
         {
+#if NET6_0_OR_GREATER
+            return BitConverter.UInt16BitsToHalf(value);
+#else
             return *(Half*)&value;
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

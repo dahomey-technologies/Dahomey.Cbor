@@ -83,7 +83,7 @@ namespace Dahomey.Cbor.Util
                 int lo = 0;
                 int hi = _nodes.Length - 1;
 
-                ref Node start = ref Unsafe.AsRef(_nodes[0]);
+                ref Node start = ref Unsafe.AsRef(in _nodes[0]);
 
                 while (lo <= hi)
                 {

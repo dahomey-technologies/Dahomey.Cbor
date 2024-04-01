@@ -392,7 +392,11 @@ namespace Dahomey.Cbor.Serialization
             }
             else
             {
+#if NET8_0_OR_GREATER
+                MemoryMarshal.Write(bytes, in value);
+#else
                 MemoryMarshal.Write(bytes, ref value);
+#endif
             }
 
             _bufferWriter.Advance(4);
@@ -416,7 +420,11 @@ namespace Dahomey.Cbor.Serialization
             }
             else
             {
+#if NET8_0_OR_GREATER
+                MemoryMarshal.Write(bytes, in value);
+#else
                 MemoryMarshal.Write(bytes, ref value);
+#endif
             }
 
             _bufferWriter.Advance(8);
@@ -441,7 +449,11 @@ namespace Dahomey.Cbor.Serialization
             }
             else
             {
+#if NET8_0_OR_GREATER
+                MemoryMarshal.Write(span, in value);
+#else
                 MemoryMarshal.Write(span, ref value);
+#endif
             }
 
             _bufferWriter.Advance(16);
