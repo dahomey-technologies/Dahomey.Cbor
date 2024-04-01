@@ -158,6 +158,8 @@ namespace Dahomey.Cbor.Tests
         [InlineData("F9FC00", float.NegativeInfinity, null)]
         // string
         [InlineData("663232322E3232", 222.22f, null)]
+        [InlineData("74352E393630343634343737353339303633652D38", 5.960464477539063e-8f, null)]
+        [InlineData("63312E35", 1.5f, null)]
         public void ReadHalf(string hexBuffer, float expectedValue, Type expectedExceptionType)
         {
             Helper.TestRead(nameof(CborReader.ReadHalf), hexBuffer, (Half)expectedValue, expectedExceptionType);
@@ -191,6 +193,8 @@ namespace Dahomey.Cbor.Tests
         [InlineData("FAFF800000", float.NegativeInfinity, null)]
         // string
         [InlineData("663232322E3232", 222.22f, null)]
+        [InlineData("74352E393630343634343737353339303633652D38", 5.960464477539063e-8f, null)]
+        [InlineData("63312E35", 1.5f, null)]
         public void ReadSingle(string hexBuffer, float expectedValue, Type expectedExceptionType)
         {
             Helper.TestRead(nameof(CborReader.ReadSingle), hexBuffer, expectedValue, expectedExceptionType);
@@ -222,6 +226,8 @@ namespace Dahomey.Cbor.Tests
         [InlineData("FBFFF0000000000000", double.NegativeInfinity, null)]
         // string
         [InlineData("7231323334352E313233343536373839313233", 12345.123456789123d, null)]
+        [InlineData("74352E393630343634343737353339303633652D38", 5.960464477539063e-8, null)]
+        [InlineData("63312E35", 1.5, null)]
         public void ReadDouble(string hexBuffer, double expectedValue, Type expectedExceptionType)
         {
             Helper.TestRead(nameof(CborReader.ReadDouble), hexBuffer, expectedValue, expectedExceptionType);

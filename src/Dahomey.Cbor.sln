@@ -7,8 +7,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Dahomey.Cbor", "Dahomey.Cbo
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Dahomey.Cbor.Tests", "Dahomey.Cbor.Tests\Dahomey.Cbor.Tests.csproj", "{F95D4310-F3CC-4485-8568-7B3B5DAB81EC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestDeserializeMultiple", "TestDeserializeMultiple\TestDeserializeMultiple.csproj", "{1734A8C4-3F8A-416A-8D36-4B3F4F8D7FF7}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,10 +21,6 @@ Global
 		{F95D4310-F3CC-4485-8568-7B3B5DAB81EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F95D4310-F3CC-4485-8568-7B3B5DAB81EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F95D4310-F3CC-4485-8568-7B3B5DAB81EC}.Release|Any CPU.Build.0 = Release|Any CPU
-		{1734A8C4-3F8A-416A-8D36-4B3F4F8D7FF7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{1734A8C4-3F8A-416A-8D36-4B3F4F8D7FF7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{1734A8C4-3F8A-416A-8D36-4B3F4F8D7FF7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{1734A8C4-3F8A-416A-8D36-4B3F4F8D7FF7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
