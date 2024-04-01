@@ -2,6 +2,8 @@
 using System;
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Buffers.Text;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -368,6 +370,14 @@ namespace Dahomey.Cbor.Serialization
                 case CborMajorType.NegativeInteger:
                     return (Half)(- 1L - (long)ReadInteger());
 
+                case CborMajorType.TextString:
+                    ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
+                    if (!Utf8Parser.TryParse(buffer, out double value, out int bytesConsumed))
+                    {
+                        ThrowCbor($"Cannot parse half from {Encoding.ASCII.GetString(buffer)}");
+                    }
+                    return (Half)value;
+
                 case CborMajorType.Primitive:
                     {
                         switch (header.Primitive)
@@ -406,6 +416,14 @@ namespace Dahomey.Cbor.Serialization
 
                 case CborMajorType.NegativeInteger:
                     return -1L - (long)ReadInteger();
+
+                case CborMajorType.TextString:
+                    ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
+                    if (!Utf8Parser.TryParse(buffer, out float value, out int bytesConsumed))
+                    {
+                        ThrowCbor($"Cannot parse single from {Encoding.ASCII.GetString(buffer)}");
+                    }
+                    return value;
 
                 case CborMajorType.Primitive:
                     {
@@ -446,6 +464,14 @@ namespace Dahomey.Cbor.Serialization
                 case CborMajorType.NegativeInteger:
                     return -1L - (long)ReadInteger();
 
+                case CborMajorType.TextString:
+                    ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
+                    if (!Utf8Parser.TryParse(buffer, out double value, out int bytesConsumed))
+                    {
+                        ThrowCbor($"Cannot parse single from {Encoding.ASCII.GetString(buffer)}");
+                    }
+                    return value;
+
                 case CborMajorType.Primitive:
                     {
                         switch (header.Primitive)
@@ -484,6 +510,14 @@ namespace Dahomey.Cbor.Serialization
 
                 case CborMajorType.NegativeInteger:
                     return -1L - (long)ReadInteger();
+
+                case CborMajorType.TextString:
+                    ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
+                    if (!Utf8Parser.TryParse(buffer, out decimal value, out int bytesConsumed))
+                    {
+                        ThrowCbor($"Cannot parse single from {Encoding.ASCII.GetString(buffer)}");
+                    }
+                    return value;
 
                 case CborMajorType.Primitive:
                     {
