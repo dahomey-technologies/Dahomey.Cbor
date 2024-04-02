@@ -368,5 +368,13 @@ namespace Dahomey.Cbor.Tests
         {
             Helper.TestDataAvailable();
         }
+
+        [Theory]
+        [InlineData("F6", true, null)]
+        [InlineData("C6F6", true, null)]
+        public void ReadNull(string hexBuffer, bool expectedValue, Type expectedExceptionType)
+        {
+            Helper.TestRead(nameof(CborReader.ReadNull), hexBuffer, expectedValue, expectedExceptionType);
+        }
     }
 }
