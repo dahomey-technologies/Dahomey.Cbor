@@ -495,5 +495,20 @@ namespace Dahomey.Cbor.Tests
             Assert.NotNull(obj);
             Assert.Equal(1, obj.IntValue);
         }
+
+        public class StringObject
+        {
+            public string String { get; set; }
+        }
+
+        [Theory]
+        [InlineData("A166537472696E67F6")]
+        [InlineData("A166537472696E67C6F6")]
+        public void ReadWithNullProperty(string hexBuffer)
+        {
+            StringObject obj = Helper.Read<StringObject>(hexBuffer);
+            Assert.NotNull(obj);
+            Assert.Null(obj.String);
+        }
     }
 }
