@@ -263,6 +263,7 @@ namespace Dahomey.Cbor.Tests
         [InlineData("63666F6F", "foo", null)]
         [InlineData("7F6166616F616FFF", "foo", typeof(NotSupportedException))]
         [InlineData("F6", null, null)]
+        [InlineData("C6F6", null, null)] // semantig tag 6 + null
         [InlineData("60", "", null)]
         [InlineData("68C3A9C3A0C3AAC3AF", "éàêï", null)]
         public void ReadString(string hexBuffer, string expectedValue, Type expectedExceptionType)
@@ -367,6 +368,14 @@ namespace Dahomey.Cbor.Tests
         public void DataAvailable()
         {
             Helper.TestDataAvailable();
+        }
+
+        [Theory]
+        [InlineData("F6", true, null)]
+        [InlineData("C6F6", true, null)]
+        public void ReadNull(string hexBuffer, bool expectedValue, Type expectedExceptionType)
+        {
+            Helper.TestRead(nameof(CborReader.ReadNull), hexBuffer, expectedValue, expectedExceptionType);
         }
     }
 }
