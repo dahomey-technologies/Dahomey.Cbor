@@ -786,9 +786,7 @@ namespace Dahomey.Cbor.Serialization
 
             int size = _currentPos - currentDataItemPos;
 
-            var buffer = new byte[size];
-            _buffer.Slice(currentDataItemPos, size).CopyTo(buffer);
-            return new ReadOnlySpan<byte>(buffer);
+            return _buffer.Slice(currentDataItemPos, size);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
