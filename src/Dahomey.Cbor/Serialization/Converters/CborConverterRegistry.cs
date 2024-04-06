@@ -17,6 +17,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             // order matters. It's in reverse order of how they'll get consumed
             RegisterConverterProvider(new ObjectConverterProvider());
+            RegisterConverterProvider(new TupleConverterProvider());
             RegisterConverterProvider(new CollectionConverterProvider());
             RegisterConverterProvider(new PrimitiveConverterProvider());
             RegisterConverterProvider(new ByAttributeConverterProvider());
