@@ -777,7 +777,7 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ReadOnlySpan<byte> ReadDataItem()
+        public ReadOnlyMemory<byte> ReadDataItem()
         {
             int headerOffset = _state == CborReaderState.Header ? 1 : 0;
             int currentDataItemPos = _currentPos - headerOffset;
@@ -788,7 +788,7 @@ namespace Dahomey.Cbor.Serialization
 
             var buffer = new byte[size];
             _buffer.Slice(currentDataItemPos, size).CopyTo(buffer);
-            return new ReadOnlySpan<byte>(buffer);
+            return new ReadOnlyMemory<byte>(buffer);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

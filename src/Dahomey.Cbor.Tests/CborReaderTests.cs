@@ -327,14 +327,14 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal("id", key1);
 
             var idValueItem = reader.ReadDataItem();
-            Assert.Equal(expectedIdValue, idValueItem.BytesToHex());
+            Assert.Equal(expectedIdValue, idValueItem.Span.BytesToHex());
 
             reader.MoveNextMapItem(ref remainingItemCount);
             var key2 = reader.ReadString();
             Assert.Equal("result", key2);
 
             var resultValueItem = reader.ReadDataItem();
-            Assert.Equal(expectedResultValue, resultValueItem.BytesToHex());
+            Assert.Equal(expectedResultValue, resultValueItem.Span.BytesToHex());
         }
 
         [Theory]
@@ -361,7 +361,7 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(expectedResultType, resultItemType);
 
             var resultValueItem = reader.ReadDataItem();
-            Assert.Equal(expectedResultValue, resultValueItem.BytesToHex());
+            Assert.Equal(expectedResultValue, resultValueItem.Span.BytesToHex());
         }
 
         [Fact]
