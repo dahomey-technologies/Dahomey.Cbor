@@ -786,7 +786,7 @@ namespace Dahomey.Cbor.Serialization
 
             int size = _currentPos - currentDataItemPos;
 
-            return _buffer.Slice(currentDataItemPos, size).CopyTo(buffer);
+            return _buffer.Slice(currentDataItemPos, size);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
