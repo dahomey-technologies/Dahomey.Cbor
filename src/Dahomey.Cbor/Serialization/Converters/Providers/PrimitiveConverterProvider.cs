@@ -6,31 +6,35 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
 {
     public class PrimitiveConverterProvider : CborConverterProviderBase
     {
-        private static readonly Dictionary<Type, Type> _converterTypes = new Dictionary<Type, Type>
+        private static readonly Dictionary<Type, Lazy<ICborConverter>> _lazyConverterTypes = new()
         {
-            [typeof(bool)] = typeof(BooleanConverter),
-            [typeof(sbyte)] = typeof(SByteConverter),
-            [typeof(byte)] = typeof(ByteConverter),
-            [typeof(short)] = typeof(Int16Converter),
-            [typeof(ushort)] = typeof(UInt16Converter),
-            [typeof(int)] = typeof(Int32Converter),
-            [typeof(uint)] = typeof(UInt32Converter),
-            [typeof(long)] = typeof(Int64Converter),
-            [typeof(ulong)] = typeof(UInt64Converter),
-            [typeof(float)] = typeof(SingleConverter),
-            [typeof(double)] = typeof(DoubleConverter),
-            [typeof(decimal)] = typeof(DecimalConverter),
-            [typeof(string)] = typeof(StringConverter),
-            [typeof(DateTime)] = typeof(DateTimeConverter),
-            [typeof(ReadOnlyMemory<byte>)] = typeof(ReadOnlyMemoryConverter),
-            [typeof(byte[])] = typeof(ByteArrayConverter),
+            [typeof(bool)] = new(() => new BooleanConverter()),
+            [typeof(sbyte)] = new(() => new SByteConverter()),
+            [typeof(byte)] = new(() => new ByteConverter()),
+            [typeof(short)] = new(() => new Int16Converter()),
+            [typeof(ushort)] = new(() => new UInt16Converter()),
+            [typeof(int)] = new(() => new Int32Converter()),
+            [typeof(uint)] = new(() => new UInt32Converter()),
+            [typeof(long)] = new(() => new Int64Converter()),
+            [typeof(ulong)] = new(() => new UInt64Converter()),
+            [typeof(float)] = new(() => new SingleConverter()),
+            [typeof(double)] = new(() => new DoubleConverter()),
+            [typeof(decimal)] = new(() => new DecimalConverter()),
+            [typeof(string)] = new(() => new StringConverter()),
+            [typeof(ReadOnlyMemory<byte>)] = new(() => new ReadOnlyMemoryConverter()),
+            [typeof(byte[])] = new(() => new ByteArrayConverter()),
         };
 
         public override ICborConverter? GetConverter(Type type, CborOptions options)
         {
-            if (_converterTypes.TryGetValue(type, out Type? converterType))
+            if (_lazyConverterTypes.TryGetValue(type, out var converterType))
             {
-                return CreateConverter(options, converterType);
+                return converterType.Value;
+            }
+
+            if (type == typeof(DateTime))
+            {
+                return new DateTimeConverter(options);
             }
 
             if (type.IsEnum)
