@@ -324,5 +324,13 @@ namespace Dahomey.Cbor.Tests
         {
             Helper.TestWrite(value, hexBuffer);
         }
+
+        [Theory]
+        [InlineData("62C3A9", 'é')] // "à"
+        [InlineData("6165", 'e')] // "a"
+        public void WriteChar(string hexBuffer, char value)
+        {
+            Helper.TestWrite(nameof(CborWriter.WriteChar), value, hexBuffer, null);
+        }
     }
 }

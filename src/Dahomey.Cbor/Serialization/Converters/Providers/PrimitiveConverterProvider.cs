@@ -1,40 +1,54 @@
 ﻿using Dahomey.Cbor.ObjectModel;
 using System;
-using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Serialization.Converters.Providers
 {
     public class PrimitiveConverterProvider : CborConverterProviderBase
     {
-        private static readonly Dictionary<Type, Lazy<ICborConverter>> _lazyConverterTypes = new()
-        {
-            [typeof(bool)] = new(() => new BooleanConverter()),
-            [typeof(sbyte)] = new(() => new SByteConverter()),
-            [typeof(byte)] = new(() => new ByteConverter()),
-            [typeof(short)] = new(() => new Int16Converter()),
-            [typeof(ushort)] = new(() => new UInt16Converter()),
-            [typeof(int)] = new(() => new Int32Converter()),
-            [typeof(uint)] = new(() => new UInt32Converter()),
-            [typeof(long)] = new(() => new Int64Converter()),
-            [typeof(ulong)] = new(() => new UInt64Converter()),
-            [typeof(float)] = new(() => new SingleConverter()),
-            [typeof(double)] = new(() => new DoubleConverter()),
-            [typeof(decimal)] = new(() => new DecimalConverter()),
-            [typeof(string)] = new(() => new StringConverter()),
-            [typeof(ReadOnlyMemory<byte>)] = new(() => new ReadOnlyMemoryConverter()),
-            [typeof(byte[])] = new(() => new ByteArrayConverter()),
-        };
-
         public override ICborConverter? GetConverter(Type type, CborOptions options)
         {
-            if (_lazyConverterTypes.TryGetValue(type, out var converterType))
+            switch (Type.GetTypeCode(type))
             {
-                return converterType.Value;
+                case TypeCode.Boolean:
+                    return new BooleanConverter();
+                case TypeCode.Byte:
+                    return new ByteConverter();
+                case TypeCode.Char:
+                    return new CharConverter();
+                case TypeCode.DateTime:
+                    return new DateTimeConverter(options);
+                case TypeCode.Decimal:
+                    return new DecimalConverter();
+                case TypeCode.Double:
+                    return new DoubleConverter();
+                case TypeCode.Int16:
+                    return new Int16Converter();
+                case TypeCode.Int32:
+                    return new Int32Converter();
+                case TypeCode.Int64:
+                    return new Int64Converter();
+                case TypeCode.SByte:
+                    return new SByteConverter();
+                case TypeCode.Single:
+                    return new SingleConverter();
+                case TypeCode.String:
+                    return new StringConverter();
+                case TypeCode.UInt16:
+                    return new UInt16Converter();
+                case TypeCode.UInt32:
+                    return new UInt32Converter();
+                case TypeCode.UInt64:
+                    return new UInt64Converter();
             }
 
-            if (type == typeof(DateTime))
+            if (type == typeof(ReadOnlyMemory<byte>))
             {
-                return new DateTimeConverter(options);
+                return new ReadOnlyMemoryConverter();
+            }
+
+            if (type == typeof(byte[]))
+            {
+                return new ByteArrayConverter();
             }
 
             if (type.IsEnum)

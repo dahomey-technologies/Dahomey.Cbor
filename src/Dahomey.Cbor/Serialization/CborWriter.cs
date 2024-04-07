@@ -211,6 +211,23 @@ namespace Dahomey.Cbor.Serialization
             _bufferWriter.Write(value);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void WriteChar(char value)
+        {
+            Span<byte> bytes = stackalloc byte[4];
+            int len;
+            unsafe
+            {
+                fixed (byte* rawBytes = bytes)
+                {
+                    len = Encoding.UTF8.GetBytes(&value, 1, rawBytes, 4);
+                    ReadOnlySpan<byte> exactBytes = bytes.Slice(0, len);
+                    WriteInteger(CborMajorType.TextString, (ulong)len);
+                    _bufferWriter.Write(exactBytes);
+                }
+            }
+        }
+
         /// <summary>
         /// Write the string header with a given size.
         /// This leaves the writer in an invalid state and must be accompanied with a write to <see cref="BufferWriter"/> with exactly <paramref name="size"/> bytes.

@@ -377,5 +377,14 @@ namespace Dahomey.Cbor.Tests
         {
             Helper.TestRead(nameof(CborReader.ReadNull), hexBuffer, expectedValue, expectedExceptionType);
         }
+
+        [Theory]
+        [InlineData("62C3A9", 'é', null)] // "à"
+        [InlineData("6165", 'e', null)] // "a"
+        [InlineData("626162", ' ', typeof(CborException))] // "ab"
+        public void ReadChar(string hexBuffer, char expectedValue, Type expectedExceptionType)
+        {
+             Helper.TestRead(nameof(CborReader.ReadChar), hexBuffer, expectedValue, expectedExceptionType);
+        }
     }
 }

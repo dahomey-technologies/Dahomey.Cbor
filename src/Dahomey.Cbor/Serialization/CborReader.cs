@@ -329,6 +329,28 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public char ReadChar()
+        {
+            ReadOnlySpan<byte> bytes = ReadRawString();
+            char result;
+            unsafe
+            {
+                fixed (byte* rawBytes = bytes)
+                {
+                    try
+                    {
+                        Encoding.UTF8.GetChars(rawBytes, bytes.Length, &result, 1);
+                    }
+                    catch (ArgumentException)
+                    {
+                        throw new CborException("Cannot read single char from buffer");
+                    }
+                }
+            }
+            return result;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ReadOnlySpan<byte> ReadRawString()
         {
             if (ReadNull())
@@ -368,7 +390,7 @@ namespace Dahomey.Cbor.Serialization
                     return (Half)ReadInteger();
 
                 case CborMajorType.NegativeInteger:
-                    return (Half)(- 1L - (long)ReadInteger());
+                    return (Half)(-1L - (long)ReadInteger());
 
                 case CborMajorType.TextString:
                     ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
@@ -880,7 +902,7 @@ namespace Dahomey.Cbor.Serialization
         public void SkipDataItem()
         {
             SkipSemanticTag();
-            
+
             CborReaderHeader header = GetHeader();
 
             switch (header.MajorType)
