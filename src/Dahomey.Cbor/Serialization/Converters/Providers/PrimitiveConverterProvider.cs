@@ -24,7 +24,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 case TypeCode.Int16:
                     return new Int16Converter();
                 case TypeCode.Int32:
-                    return new Int32Converter();
+                    if (type.IsEnum)
+                    {
+                        return CreateGenericConverter(options, typeof(EnumConverter<>), type);
+                    }
+                    else if (type == typeof(int))
+                    {
+                        return new Int32Converter();
+                    }
+                    break;
                 case TypeCode.Int64:
                     return new Int64Converter();
                 case TypeCode.SByte:
