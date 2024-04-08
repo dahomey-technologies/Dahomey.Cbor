@@ -7,6 +7,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
     {
         public override ICborConverter? GetConverter(Type type, CborOptions options)
         {
+            if (type.IsEnum)
+            {
+                return CreateGenericConverter(options, typeof(EnumConverter<>), type);
+            }
+            
             switch (Type.GetTypeCode(type))
             {
                 case TypeCode.Boolean:
@@ -24,15 +29,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 case TypeCode.Int16:
                     return new Int16Converter();
                 case TypeCode.Int32:
-                    if (type.IsEnum)
-                    {
-                        return CreateGenericConverter(options, typeof(EnumConverter<>), type);
-                    }
-                    else if (type == typeof(int))
-                    {
-                        return new Int32Converter();
-                    }
-                    break;
+                    return new Int32Converter();
                 case TypeCode.Int64:
                     return new Int64Converter();
                 case TypeCode.SByte:
