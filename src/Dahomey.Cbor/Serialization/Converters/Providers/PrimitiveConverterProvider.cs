@@ -56,11 +56,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 return new ByteArrayConverter();
             }
 
-            if (type.IsEnum)
-            {
-                return CreateGenericConverter(options, typeof(EnumConverter<>), type);
-            }
-
             if (typeof(CborValue).IsAssignableFrom(type))
             {
                 return CreateConverter(options, typeof(CborValueConverter));
