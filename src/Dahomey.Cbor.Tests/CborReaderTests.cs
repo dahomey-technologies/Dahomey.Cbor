@@ -1,7 +1,6 @@
 using Dahomey.Cbor.Serialization;
 using Xunit;
 using System;
-using Dahomey.Cbor.Util;
 using System.Globalization;
 using System.Buffers;
 using Dahomey.Cbor.Tests.Extensions;
@@ -335,6 +334,37 @@ namespace Dahomey.Cbor.Tests
 
             var resultValueItem = reader.ReadDataItem();
             Assert.Equal(expectedResultValue, resultValueItem.BytesToHex());
+        }
+
+        [Theory]
+        [InlineData("a262696468366534306233336266726573756c74c6f6", "683665343062333362", "c6f6")]
+        [InlineData("a262696468366534306233336266726573756c74182a", "683665343062333362", "182a")]
+        [InlineData("A262696468376235356365363566726573756C7463657965", "683762353563653635", "63657965")]
+        public void ReadDataItemButWithoutAdvance(string hexBuffer, string expectedIdValue, string expectedResultValue)
+        {
+            var reader = new CborReader(hexBuffer.HexToBytes());
+
+            reader.ReadBeginMap();
+
+            int remainingItemCount = reader.ReadSize();
+
+            reader.MoveNextMapItem(ref remainingItemCount);
+            var key1 = reader.ReadString();
+            Assert.Equal("id", key1);
+
+            var idValueItem1 = reader.ReadDataItem(false);
+            var idValueItem2 = reader.ReadDataItem();
+            Assert.Equal(expectedIdValue, idValueItem1.BytesToHex());
+            Assert.Equal(expectedIdValue, idValueItem2.BytesToHex());
+
+            reader.MoveNextMapItem(ref remainingItemCount);
+            var key2 = reader.ReadString();
+            Assert.Equal("result", key2);
+
+            var resultValueItem1 = reader.ReadDataItem(false);
+            var resultValueItem2 = reader.ReadDataItem();
+            Assert.Equal(expectedResultValue, resultValueItem1.BytesToHex());
+            Assert.Equal(expectedResultValue, resultValueItem2.BytesToHex());
         }
 
         [Theory]

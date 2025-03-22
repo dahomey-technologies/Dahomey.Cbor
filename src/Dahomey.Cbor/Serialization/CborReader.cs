@@ -3,7 +3,6 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Buffers.Text;
-using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -799,14 +798,23 @@ namespace Dahomey.Cbor.Serialization
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ReadOnlySpan<byte> ReadDataItem()
+        public ReadOnlySpan<byte> ReadDataItem(bool advance = true)
         {
+            int positionBefore = _currentPos;
+            var stateBefore = _state;
+            
             int headerOffset = _state == CborReaderState.Header ? 1 : 0;
             int currentDataItemPos = _currentPos - headerOffset;
 
             SkipDataItem();
 
             int size = _currentPos - currentDataItemPos;
+
+            if (!advance)
+            {
+                _currentPos = positionBefore;
+                _state = stateBefore;
+            }
 
             return _buffer.Slice(currentDataItemPos, size);
         }
