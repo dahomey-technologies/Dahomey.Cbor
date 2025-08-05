@@ -1,12 +1,12 @@
-﻿using System;
-using System.Text;
+﻿using System.Reflection;
 
 namespace Dahomey.Cbor.Serialization.Conventions
 {
     public class CamelCaseNamingConvention : INamingConvention
     {
-        public string GetPropertyName(string reflectionName)
+        public string GetPropertyName(MemberInfo member)
         {
+            string reflectionName = member.Name;
             if (string.IsNullOrEmpty(reflectionName) || char.IsLower(reflectionName[0]))
             {
                 return reflectionName;
