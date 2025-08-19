@@ -1,19 +1,30 @@
-﻿using Dahomey.Cbor.Serialization.Conventions;
+﻿using System.Linq;
+using Dahomey.Cbor.Serialization.Conventions;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests;
 
 public class NamingConventionTests
 {
+    private class TestObject
+    {
+        public string FooBar { get; set; }
+        public string fooBar { get; set; }
+        public string FooBAR { get; set; }
+        public string FooBARFoo { get; set; }
+        public string Foo { get; set; }
+        public string foo { get; set; }
+    }
+    
     [Theory]
     [InlineData("FooBar", "fooBar")]
     [InlineData("fooBar", "fooBar")]
     [InlineData("Foo", "foo")]
     [InlineData("foo", "foo")]
-    [InlineData("", "")]
     public void CamelCase(string srcName, string expectedName)
     {
-        string actualName = new CamelCaseNamingConvention().GetPropertyName(srcName);
+        var memberInfo = typeof(TestObject).GetMember(srcName).Single();
+        string actualName = new CamelCaseNamingConvention().GetPropertyName(memberInfo);
         Assert.Equal(expectedName, actualName);
     }
 
@@ -24,10 +35,10 @@ public class NamingConventionTests
     [InlineData("FooBARFoo", "foo_bar_foo")]
     [InlineData("Foo", "foo")]
     [InlineData("foo", "foo")]
-    [InlineData("", "")]
     public void SnakeCase(string srcName, string expectedName)
     {
-        string actualName = new SnakeCaseNamingConvention().GetPropertyName(srcName);
+        var memberInfo = typeof(TestObject).GetMember(srcName).Single();
+        string actualName = new SnakeCaseNamingConvention().GetPropertyName(memberInfo);
         Assert.Equal(expectedName, actualName);
     }
 
@@ -38,10 +49,10 @@ public class NamingConventionTests
     [InlineData("FooBARFoo", "FOO_BAR_FOO")]
     [InlineData("Foo", "FOO")]
     [InlineData("foo", "FOO")]
-    [InlineData("", "")]
     public void UpperSnakeCase(string srcName, string expectedName)
     {
-        string actualName = new UpperSnakeCaseNamingConvention().GetPropertyName(srcName);
+        var memberInfo = typeof(TestObject).GetMember(srcName).Single();
+        string actualName = new UpperSnakeCaseNamingConvention().GetPropertyName(memberInfo);
         Assert.Equal(expectedName, actualName);
     }
 
@@ -52,10 +63,10 @@ public class NamingConventionTests
     [InlineData("FooBARFoo", "foo-bar-foo")]
     [InlineData("Foo", "foo")]
     [InlineData("foo", "foo")]
-    [InlineData("", "")]
     public void KebabCase(string srcName, string expectedName)
     {
-        string actualName = new KebabCaseNamingConvention().GetPropertyName(srcName);
+        var memberInfo = typeof(TestObject).GetMember(srcName).Single();
+        string actualName = new KebabCaseNamingConvention().GetPropertyName(memberInfo);
         Assert.Equal(expectedName, actualName);
     }
 
@@ -66,10 +77,10 @@ public class NamingConventionTests
     [InlineData("FooBARFoo", "FOO-BAR-FOO")]
     [InlineData("Foo", "FOO")]
     [InlineData("foo", "FOO")]
-    [InlineData("", "")]
     public void UpperKebabCase(string srcName, string expectedName)
     {
-        string actualName = new UpperKebabCaseNamingConvention().GetPropertyName(srcName);
+        var memberInfo = typeof(TestObject).GetMember(srcName).Single();
+        string actualName = new UpperKebabCaseNamingConvention().GetPropertyName(memberInfo);
         Assert.Equal(expectedName, actualName);
     }
 
@@ -80,10 +91,10 @@ public class NamingConventionTests
     [InlineData("FooBARFoo", "foobarfoo")]
     [InlineData("Foo", "foo")]
     [InlineData("foo", "foo")]
-    [InlineData("", "")]
     public void LowerCase(string srcName, string expectedName)
     {
-        string actualName = new LowerCaseNamingConvention().GetPropertyName(srcName);
+        var memberInfo = typeof(TestObject).GetMember(srcName).Single();
+        string actualName = new LowerCaseNamingConvention().GetPropertyName(memberInfo);
         Assert.Equal(expectedName, actualName);
     }
 
@@ -94,10 +105,10 @@ public class NamingConventionTests
     [InlineData("FooBARFoo", "FOOBARFOO")]
     [InlineData("Foo", "FOO")]
     [InlineData("foo", "FOO")]
-    [InlineData("", "")]
     public void UpperCase(string srcName, string expectedName)
     {
-        string actualName = new UpperCaseNamingConvention().GetPropertyName(srcName);
+        var memberInfo = typeof(TestObject).GetMember(srcName).Single();
+        string actualName = new UpperCaseNamingConvention().GetPropertyName(memberInfo);
         Assert.Equal(expectedName, actualName);
     }
 }

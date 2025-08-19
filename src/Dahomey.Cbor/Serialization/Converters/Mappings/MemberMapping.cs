@@ -188,7 +188,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 }
                 else if (_objectMapping.NamingConvention != null)
                 {
-                    _memberName = _objectMapping.NamingConvention.GetPropertyName(MemberInfo.Name);
+                    _memberName = _objectMapping.NamingConvention.GetPropertyName(MemberInfo);
                 }
                 else
                 {

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Reflection;
 using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Serialization.Converters.Mappings;
@@ -13,9 +14,9 @@ namespace Dahomey.Cbor.Tests.Issues
     {
         public class LowerCaseNamingConvention : INamingConvention
         {
-            public string GetPropertyName(string name)
+            public string GetPropertyName(MemberInfo memberInfo)
             {
-                return name.ToLowerInvariant();
+                return memberInfo.Name.ToLowerInvariant();
             }
         }
 

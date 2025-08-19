@@ -1,9 +1,11 @@
-﻿namespace Dahomey.Cbor.Serialization.Conventions;
+﻿using System.Reflection;
+
+namespace Dahomey.Cbor.Serialization.Conventions;
 
 public class SnakeCaseNamingConvention : INamingConvention
 {
-    public string GetPropertyName(string name)
+    public string GetPropertyName(MemberInfo member)
     {
-        return NamingConventionExtensions.GetPropertyName(name, (byte)'_');
+        return NamingConventionExtensions.GetPropertyName(member.Name, (byte)'_');
     }
 }

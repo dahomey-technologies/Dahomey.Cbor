@@ -1,4 +1,6 @@
-﻿namespace Dahomey.Cbor.Serialization.Conventions
+﻿using System.Reflection;
+
+namespace Dahomey.Cbor.Serialization.Conventions
 {
     /// <summary>
     /// Convert all names to upper case when serializing
@@ -9,11 +11,11 @@
         /// <summary>
         /// Get property name according convention
         /// </summary>
-        /// <param name="name"> Property raw-name</param>
+        /// <param name="member">Property member info</param>
         /// <returns>Property name according convention</returns>
-        public string GetPropertyName(string name)
+        public string GetPropertyName(MemberInfo member)
         {
-            return name.ToUpper();
+            return member.Name.ToUpper();
         }
     }
 }
