@@ -104,7 +104,7 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public async Task SerializeOBjectToMemoryStreamAsync()
+        public async Task SerializeObjectToMemoryStreamAsync()
         {
             MemoryStream stream = new MemoryStream();
             await Cbor.SerializeAsync(SimpleObject, typeof(SimpleObject), stream, Options);
@@ -337,6 +337,54 @@ namespace Dahomey.Cbor.Tests
                 var deserialized = Cbor.Deserialize(input.GetType(), bufferWriter.WrittenSpan, Options);
                 var list = Assert.IsType<List<string>>(deserialized);
                 Assert.Single(list, "hello");
+            }
+        }
+
+        [Fact]
+        public void SerializeCollectionExpression_Empty()
+        {
+            using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
+            {
+                IEnumerable<string> input = [];
+
+                Cbor.Serialize(input, input.GetType(), bufferWriter, Options);
+                Assert.Equal("80", BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", ""));
+
+                var deserialized = Cbor.Deserialize(input.GetType(), bufferWriter.WrittenSpan, Options);
+                var array = Assert.IsType<string[]>(deserialized);
+                Assert.Empty(array);
+            }
+        }
+
+        [Fact]
+        public void SerializeCollectionExpression_Single()
+        {
+            using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
+            {
+                IEnumerable<string> input = ["hello"];
+
+                Cbor.Serialize(input, input.GetType(), bufferWriter, Options);
+                Assert.Equal("816568656C6C6F", BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", ""));
+
+                var deserialized = Cbor.Deserialize(input.GetType(), bufferWriter.WrittenSpan, Options);
+                var list = Assert.IsType<List<string>>(deserialized);
+                Assert.Single(list, "hello");
+            }
+        }
+
+        [Fact]
+        public void SerializeCollectionExpression_Multiple()
+        {
+            using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
+            {
+                IEnumerable<string> input = ["hello", "world"];
+
+                Cbor.Serialize(input, input.GetType(), bufferWriter, Options);
+                Assert.Equal("826568656C6C6F65776F726C64", BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", ""));
+
+                var deserialized = Cbor.Deserialize(input.GetType(), bufferWriter.WrittenSpan, Options);
+                var list = Assert.IsType<List<string>>(deserialized);
+                Assert.Equal(["hello", "world"], list);
             }
         }
 
