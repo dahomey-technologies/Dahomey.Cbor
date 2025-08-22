@@ -98,7 +98,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 }
 
                 var enumerableInterfaceType = typeInterfaces.FirstOrDefault(t => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(IEnumerable<>));
-                if (type.Namespace == "System.Linq" && enumerableInterfaceType is not null)
+                if ((type.Namespace is null or "System.Linq") && enumerableInterfaceType is not null)
                 {
                     Type itemType = enumerableInterfaceType.GetGenericArguments()[0];
                     return CreateGenericConverter(
