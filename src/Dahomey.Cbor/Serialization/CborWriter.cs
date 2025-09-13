@@ -201,7 +201,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteString(ReadOnlySpan<byte> value)
         {
-            if (value == null)
+            if (value.IsEmpty)
             {
                 WriteNull();
                 return;
