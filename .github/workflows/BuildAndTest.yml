@@ -3,39 +3,39 @@ name: Build and Test
 on:
   push:
     paths:
-      - 'src/**'
-      - '.github/workflows/**'
+      - "src/**"
+      - ".github/workflows/**"
     branches:
-      - '**'
+      - "**"
     tags-ignore:
-      - '*.*.*'
+      - "*.*.*"
   pull_request:
     paths:
-      - 'src/**'
-      - '.github/workflows/**'
+      - "src/**"
+      - ".github/workflows/**"
     branches:
-      - '**'
+      - "**"
     tags-ignore:
-      - '*.*.*'
+      - "*.*.*"
 
 jobs:
   build_and_test:
-
     runs-on: ubuntu-latest
 
     steps:
-    - name: checkout
-      uses: actions/checkout@v2
+      - name: checkout
+        uses: actions/checkout@v2
 
-    - name: setup .NET
-      uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: | 
-          8.0.x
-          9.0.x
+      - name: setup .NET
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
 
-    - name: build
-      run: dotnet build -c Release src/Dahomey.Cbor
+      - name: build
+        run: dotnet build -c Release src/Dahomey.Cbor
 
-    - name: test
-      run: dotnet test -c Release src/Dahomey.Cbor.Tests
+      - name: test
+        run: dotnet test -c Release src/Dahomey.Cbor.Tests
