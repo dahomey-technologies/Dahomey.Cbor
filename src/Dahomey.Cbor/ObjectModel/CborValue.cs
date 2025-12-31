@@ -10,6 +10,7 @@ namespace Dahomey.Cbor.ObjectModel
     public abstract class CborValue : DynamicObject, IComparable<CborValue>, IEquatable<CborValue>
     {
         public abstract CborValueType Type { get; }
+        public ulong? SemanticTag { get; internal set; }
 
         private static readonly CborNull s_Null = new CborNull();
         public static CborNull Null { get; } = s_Null;
@@ -19,7 +20,7 @@ namespace Dahomey.Cbor.ObjectModel
             throw new NotSupportedException(
                 string.Format("type {0} not supported in {1}", typeof(T).Name, GetType().Name));
         }
-
+        
         public static implicit operator CborValue(string? value)
         {
             return value == null ? (CborValue)Null : (CborString)value;
