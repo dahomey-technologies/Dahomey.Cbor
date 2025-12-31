@@ -46,6 +46,19 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override CborValue Read(ref CborReader reader)
         {
+            bool hasSemanticTag = reader.TryReadSemanticTag(out ulong semanticTag);
+
+            var cborValue = ReadCborValue(ref reader);
+            if (hasSemanticTag)
+            {
+                cborValue.SemanticTag = semanticTag;
+            }
+
+            return cborValue;
+        }
+
+        private CborValue ReadCborValue(ref CborReader reader)
+        {
             switch (reader.GetCurrentDataItemType())
             {
                 case CborDataItemType.Boolean:
