@@ -79,5 +79,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
             return memberConverter;
         }
+
+        public string? GetMemberNameForConverter(ICborConverter converter)
+        {
+            EnsureInitialize();
+            return _memberName;
+        }
     }
 }

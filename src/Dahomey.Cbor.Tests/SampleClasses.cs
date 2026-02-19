@@ -195,4 +195,10 @@ namespace Dahomey.Cbor.Tests
         [CborConverter(typeof(GuidConverter))]
         public Guid Guid { get; set; }
     }
+    
+    public class RecursiveStructure
+    {
+        public string Name { get; set; } = string.Empty;
+        public RecursiveStructure? Inner { get; set; }
+    }
 }

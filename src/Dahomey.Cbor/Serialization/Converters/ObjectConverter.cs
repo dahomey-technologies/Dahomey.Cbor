@@ -84,7 +84,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             _memberConvertersForWrite = new List<IMemberConverter>();
 
-            foreach (IMemberMapping memberMapping in _objectMapping.MemberMappings)
+            foreach (IMemberMapping memberMapping in _objectMapping.GetMemberMappingsForConverter(this))
             {
                 IMemberConverter memberConverter = memberMapping.GenerateMemberConverter();
 

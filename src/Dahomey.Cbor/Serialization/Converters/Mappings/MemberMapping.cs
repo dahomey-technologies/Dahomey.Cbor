@@ -128,7 +128,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return this;
         }
 
-        public void EnsureInitialize()
+        public void EnsureInitialize(ICborConverter? converter = null)
         {
             if (!_isInitialized)
             {
@@ -137,7 +137,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     if (!_isInitialized)
                     {
                         InitializeMemberName();
-                        InitializeConverter();
+                        InitializeConverter(converter);
                         InitializeCanBeDeserialized();
                         InitializeCanBeSerialized();
                         ValidateDefaultValue();
@@ -172,6 +172,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return memberConverter;
         }
 
+        public string? GetMemberNameForConverter(ICborConverter converter)
+        {
+            EnsureInitialize(converter);
+            return _memberName;
+        }
+
         private void InitializeMemberName()
         {
             CborPropertyAttribute? cborPropertyAttribute = MemberInfo.GetCustomAttribute<CborPropertyAttribute>();
@@ -202,7 +208,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
         }
 
-        private void InitializeConverter()
+        private void InitializeConverter(ICborConverter? parentConverter = null)
         {
             if (_converter == null)
             {
@@ -218,16 +224,29 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     {
                         throw new CborException($"Cannot instantiate {converterType}");
                     }
+
+                    return;
                 }
-                else
+                
+                if (parentConverter is not null)
                 {
-                    _converter = _converterRegistry.Lookup(MemberType);
+                    var parentConverterType = parentConverter.GetType();
+                    var parentConverterToType = parentConverterType.IsGenericType
+                        ? parentConverterType.GenericTypeArguments[0]
+                        : null;
+
+                    if (parentConverterToType is not null && parentConverterToType == MemberType)
+                    {
+                        _converter = parentConverter;
+                        return;
+                    }
                 }
+                
+                _converter = _converterRegistry.Lookup(MemberType);
+                return;
             }
-            else
-            {
-                VerifyMemberConverterType(_converter.GetType());
-            }
+            
+            VerifyMemberConverterType(_converter.GetType());
         }
 
         private void InitializeCanBeDeserialized()

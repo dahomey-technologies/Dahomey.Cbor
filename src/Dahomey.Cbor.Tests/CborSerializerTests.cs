@@ -533,6 +533,34 @@ namespace Dahomey.Cbor.Tests
             TestMultipleSimpleObject(obj);
         }
 
+        [Fact]
+        public async Task SerializeRecursiveObjectAsync()
+        {
+            string tempFileName = Path.GetTempFileName();
+            var o = new RecursiveStructure();
+            
+            try
+            {
+                {
+                    await using var stream = File.OpenWrite(tempFileName);
+                    await Cbor.SerializeAsync(o, stream, Options);
+                }
+
+                byte[] actualBuffer = await File.ReadAllBytesAsync(tempFileName);
+                TestBuffer(actualBuffer, "A2644E616D656065496E6E6572F6");
+            }
+            finally
+            {
+                File.Delete(tempFileName);
+            }
+        }
+        
+        private void TestBuffer(byte[] actualBuffer, string expectedHexBuffer)
+        {
+            string actualHexBuffer = BitConverter.ToString(actualBuffer).Replace("-", "");
+            Assert.Equal(expectedHexBuffer, actualHexBuffer);
+        }
+        
         private void TestBuffer(byte[] actualBuffer)
         {
             string actualHexBuffer = BitConverter.ToString(actualBuffer).Replace("-", "");

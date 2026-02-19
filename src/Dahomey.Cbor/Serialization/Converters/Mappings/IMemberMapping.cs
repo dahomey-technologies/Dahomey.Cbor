@@ -19,5 +19,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         LengthMode LengthMode { get; }
         RequirementPolicy RequirementPolicy { get; }
         IMemberConverter GenerateMemberConverter();
+        string? GetMemberNameForConverter(ICborConverter converter);
     }
 }

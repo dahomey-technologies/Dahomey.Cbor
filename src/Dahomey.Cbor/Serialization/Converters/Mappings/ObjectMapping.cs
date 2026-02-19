@@ -306,8 +306,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             ObjectFormat = objectFormat;
         }
+        
+        public IReadOnlyCollection<IMemberMapping> GetMemberMappingsForConverter(ICborConverter converter)
+        {
+            EnsureInitialize(converter);
+            return _memberMappings;
+        }
 
-        private void EnsureInitialize()
+        private void EnsureInitialize(ICborConverter? converter = null)
         {
             if (!_isInitialized)
             {
@@ -316,7 +322,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     if (!_isInitialized)
                     {
                         _orderByAction?.Invoke();
-                        ValidateMemberNamesAndindexes();
+                        ValidateMemberNamesAndindexes(converter);
 
                         _isInitialized = true;
                     }
@@ -324,9 +330,13 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
         }
 
-        private void ValidateMemberNamesAndindexes()
+        private void ValidateMemberNamesAndindexes(ICborConverter? converter = null)
         {
-            int memberNameCount = _memberMappings.Count(m => m.MemberName != null);
+            int memberNameCount = _memberMappings.Count(m =>
+            {
+                var memberName = converter is null ? m.MemberName : m.GetMemberNameForConverter(converter);
+                return memberName != null;
+            });
             int memberIndexCount = _memberMappings.Count(m => m.MemberIndex.HasValue);
 
             switch (ObjectFormat)

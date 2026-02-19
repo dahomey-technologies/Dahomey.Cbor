@@ -23,5 +23,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         void AutoMap();
         bool IsCreatorMember(ReadOnlySpan<byte> memberName);
         bool IsCreatorMember(int memberIndex);
+        IReadOnlyCollection<IMemberMapping> GetMemberMappingsForConverter(ICborConverter converter);
     }
 }
