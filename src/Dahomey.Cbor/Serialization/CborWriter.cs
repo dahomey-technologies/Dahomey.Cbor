@@ -84,7 +84,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteUInt32(uint value)
         {
-            WriteSigned(value);
+            WriteUnsigned(value);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -452,7 +452,6 @@ namespace Dahomey.Cbor.Serialization
         {
             WritePrimitive(CborPrimitive.DecimalFloat);
 
-            Span<byte> bytes = _bufferWriter.GetSpan(16);
             var span = _bufferWriter.GetSpan(16);
 
             if (BitConverter.IsLittleEndian)
