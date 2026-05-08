@@ -201,4 +201,10 @@ namespace Dahomey.Cbor.Tests
         public string Name { get; set; } = string.Empty;
         public RecursiveStructure? Inner { get; set; }
     }
+    
+    public class RecursiveWithArrayStructure
+    {
+        public string Name { get; set; } = string.Empty;
+        public IList<RecursiveWithArrayStructure> Children { get; set; } = [];
+    }
 }

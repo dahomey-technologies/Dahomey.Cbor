@@ -22,13 +22,13 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         private readonly CborOptions _options;
-        private readonly ICborConverter<TI> _itemConverter;
 
         public ArrayConverter(CborOptions options)
         {
             _options = options;
-            _itemConverter = options.Registry.ConverterRegistry.Lookup<TI>();
         }
+
+        private ICborConverter<TI> ItemConverter => field ??= _options.Registry.ConverterRegistry.Lookup<TI>();
 
         public override TI[]? Read(ref CborReader reader)
         {
@@ -82,7 +82,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadArrayItem(ref CborReader reader, ref ReaderContext context)
         {
-            TI item = _itemConverter.Read(ref reader);
+            TI item = ItemConverter.Read(ref reader);
 
             if (context.array != null)
             {
@@ -106,7 +106,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return false;
             }
 
-            _itemConverter.Write(ref writer, context.array[context.index++]);
+            ItemConverter.Write(ref writer, context.array[context.index++]);
             return context.index < context.array.Length;
         }
     }

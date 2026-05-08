@@ -22,8 +22,6 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         private readonly CborOptions _options;
-        private readonly ICborConverter<TK> _keyConverter;
-        private readonly ICborConverter<TV> _valueConverter;
 
         protected abstract IDictionary<TK, TV> InstantiateTempCollection();
         protected abstract TC InstantiateCollection(IDictionary<TK, TV> tempCollection);
@@ -31,9 +29,10 @@ namespace Dahomey.Cbor.Serialization.Converters
         public AbstractDictionaryConverter(CborOptions options)
         {
             _options = options;
-            _keyConverter = options.Registry.ConverterRegistry.Lookup<TK>();
-            _valueConverter = options.Registry.ConverterRegistry.Lookup<TV>();
         }
+
+        private ICborConverter<TK> KeyConverter => field ??= _options.Registry.ConverterRegistry.Lookup<TK>();
+        private ICborConverter<TV> ValueConverter => field ??= _options.Registry.ConverterRegistry.Lookup<TV>();
 
         public override TC Read(ref CborReader reader)
         {
@@ -73,8 +72,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadMapItem(ref CborReader reader, ref ReaderContext context)
         {
-            TK key = _keyConverter.Read(ref reader);
-            TV value = _valueConverter.Read(ref reader);
+            TK key = KeyConverter.Read(ref reader);
+            TV value = ValueConverter.Read(ref reader);
 
             context.dict.Add(key, value);
         }
@@ -88,8 +87,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (context.enumerator.MoveNext())
             {
-                _keyConverter.Write(ref writer, context.enumerator.Current.Key);
-                _valueConverter.Write(ref writer, context.enumerator.Current.Value);
+                KeyConverter.Write(ref writer, context.enumerator.Current.Key);
+                ValueConverter.Write(ref writer, context.enumerator.Current.Value);
                 return true;
             }
             else
