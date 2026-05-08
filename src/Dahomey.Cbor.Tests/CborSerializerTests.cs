@@ -1,4 +1,4 @@
-﻿using Dahomey.Cbor.Util;
+using Dahomey.Cbor.Util;
 using Xunit;
 using System;
 using System.IO;
@@ -537,17 +537,52 @@ namespace Dahomey.Cbor.Tests
         public async Task SerializeRecursiveObjectAsync()
         {
             string tempFileName = Path.GetTempFileName();
-            var o = new RecursiveStructure();
+            var structure = new RecursiveStructure
+            {
+                Inner = new RecursiveStructure()
+            };
             
             try
             {
                 {
                     await using var stream = File.OpenWrite(tempFileName);
-                    await Cbor.SerializeAsync(o, stream, Options);
+                    await Cbor.SerializeAsync(structure, stream, Options);
                 }
 
                 byte[] actualBuffer = await File.ReadAllBytesAsync(tempFileName);
-                TestBuffer(actualBuffer, "A2644E616D656065496E6E6572F6");
+                TestBuffer(actualBuffer, "A2644E616D656065496E6E6572A2644E616D656065496E6E6572F6");
+            }
+            finally
+            {
+                File.Delete(tempFileName);
+            }
+        }
+
+        [Fact]
+        public async Task SerializeWithArrayRecursiveAsync()
+        {
+            string tempFileName = Path.GetTempFileName();
+            var structure = new RecursiveWithArrayStructure
+            {
+                Children = [
+                    new RecursiveWithArrayStructure
+                    {
+                        Name = "Hello",
+                        Children = [],
+                    },
+                    new RecursiveWithArrayStructure(),
+                ]
+            };
+            
+            try
+            {
+                {
+                    await using var stream = File.OpenWrite(tempFileName);
+                    await Cbor.SerializeAsync(structure, stream, Options);
+                }
+
+                byte[] actualBuffer = await File.ReadAllBytesAsync(tempFileName);
+                TestBuffer(actualBuffer, "A2644E616D6560684368696C6472656E82A2644E616D656548656C6C6F684368696C6472656E80A2644E616D6560684368696C6472656E80");
             }
             finally
             {
