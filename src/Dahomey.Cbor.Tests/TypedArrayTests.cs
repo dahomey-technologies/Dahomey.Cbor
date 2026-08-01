@@ -174,5 +174,37 @@ namespace Dahomey.Cbor.Tests
             int[] value = Helper.Read<int[]>("D827820102");
             Assert.Equal(new[] { 1, 2 }, value);
         }
+
+        [Fact]
+        public void ReadFloatArrayBigEndian()
+        {
+            // D851 tag(81) 48 bytes(8) -> 1.5f, 2.5f big endian
+            float[] value = Helper.Read<float[]>("D851483FC0000040200000");
+            Assert.Equal(new[] { 1.5f, 2.5f }, value);
+        }
+
+        [Fact]
+        public void ReadInt16ArrayBigEndian()
+        {
+            // D849 tag(73) 44 bytes(4) -> 1, -2 big endian
+            short[] value = Helper.Read<short[]>("D849440001FFFE");
+            Assert.Equal(new short[] { 1, -2 }, value);
+        }
+
+        [Fact]
+        public void ReadDoubleArrayBigEndian()
+        {
+            // D852 tag(82) 48 bytes(8) -> 1.5d big endian
+            double[] value = Helper.Read<double[]>("D852483FF8000000000000");
+            Assert.Equal(new[] { 1.5d }, value);
+        }
+
+        [Fact]
+        public void BigEndianAndLittleEndianDecodeIdentically()
+        {
+            Assert.Equal(
+                Helper.Read<float[]>("D855480000C03F00002040"),
+                Helper.Read<float[]>("D851483FC0000040200000"));
+        }
     }
 }
