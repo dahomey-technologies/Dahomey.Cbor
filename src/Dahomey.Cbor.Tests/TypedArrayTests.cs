@@ -1,3 +1,4 @@
+using Dahomey.Cbor.Util;
 using System;
 using Xunit;
 
@@ -5,6 +6,71 @@ namespace Dahomey.Cbor.Tests
 {
     public class TypedArrayTests
     {
+        private static CborOptions TypedArrayOptions()
+        {
+            return new CborOptions { TypedArrayMode = TypedArrayMode.LittleEndian };
+        }
+
+        [Fact]
+        public void WriteFloatArrayAsTypedArray()
+        {
+            // D855 tag(85) 48 bytes(8) -> 1.5f, 2.5f little endian
+            Helper.TestWrite(new[] { 1.5f, 2.5f }, "D855480000C03F00002040", null, TypedArrayOptions());
+        }
+
+        [Fact]
+        public void WriteDoubleArrayAsTypedArray()
+        {
+            // D856 tag(86) 48 bytes(8) -> 1.5d little endian
+            Helper.TestWrite(new[] { 1.5d }, "D85648000000000000F83F", null, TypedArrayOptions());
+        }
+
+        [Fact]
+        public void WriteInt16ArrayAsTypedArray()
+        {
+            // D84D tag(77) 44 bytes(4) -> 1, -2 little endian
+            Helper.TestWrite(new short[] { 1, -2 }, "D84D440100FEFF", null, TypedArrayOptions());
+        }
+
+        [Fact]
+        public void WriteEmptyArrayAsTypedArray()
+        {
+            // D855 tag(85) 40 bytes(0)
+            Helper.TestWrite(new float[0], "D85540", null, TypedArrayOptions());
+        }
+
+        [Fact]
+        public void WriteNullArrayIsStillNull()
+        {
+            // F6 null
+            Helper.TestWrite<float[]>(null, "F6", null, TypedArrayOptions());
+        }
+
+        [Fact]
+        public void DefaultOptionsStillWritePlainArrays()
+        {
+            // 82 array(2) F93E00 1.5 F94100 2.5  -- unchanged from before this feature existed
+            Helper.TestWrite(new[] { 1.5f, 2.5f }, "82F93E00F94100");
+        }
+
+        [Fact]
+        public void TypedArrayRoundTrips()
+        {
+            CborOptions options = TypedArrayOptions();
+            float[] expected = new[] { 1.5f, 2.5f, float.MaxValue, float.Epsilon };
+
+            byte[] bytes;
+            using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
+            {
+                Cbor.Serialize(expected, bufferWriter, options);
+                bytes = bufferWriter.WrittenSpan.ToArray();
+            }
+
+            float[] actual = Cbor.Deserialize<float[]>(bytes, options);
+
+            Assert.Equal(expected, actual);
+        }
+
         [Fact]
         public void ReadFloatArrayLittleEndian()
         {

@@ -9,11 +9,14 @@ namespace Dahomey.Cbor.Serialization.Converters
     /// </summary>
     public class TypedArrayConverter<TI> : ArrayConverter<TI> where TI : unmanaged
     {
+        private readonly CborOptions _options;
         private readonly TypedArrayTagInfo _tagInfo;
 
         public TypedArrayConverter(CborOptions options)
             : base(options)
         {
+            _options = options;
+
             if (!TypedArrayTags.TryGetByElementType(typeof(TI), out _tagInfo))
             {
                 throw new CborException($"{typeof(TI)} is not a typed array element type.");
@@ -35,6 +38,37 @@ namespace Dahomey.Cbor.Serialization.Converters
             // Either there was no tag, or it was a tag this converter does not recognise, which CBOR
             // says to ignore. Both cases are an ordinary array — or a null, which base.Read handles.
             return base.Read(ref reader);
+        }
+
+        public override void Write(ref CborWriter writer, TI[]? value, LengthMode lengthMode)
+        {
+            if (value == null)
+            {
+                writer.WriteNull();
+                return;
+            }
+
+            if (_options.TypedArrayMode != TypedArrayMode.LittleEndian)
+            {
+                base.Write(ref writer, value, lengthMode);
+                return;
+            }
+
+            writer.WriteSemanticTag(_tagInfo.LittleEndianTag);
+
+            ReadOnlySpan<byte> bytes = MemoryMarshal.AsBytes(value.AsSpan());
+
+            if (BitConverter.IsLittleEndian || _tagInfo.ElementSize == 1)
+            {
+                writer.WriteByteString(bytes);
+                return;
+            }
+
+            // Big-endian host writing a little-endian tag: swap into a copy so the caller's array is
+            // left alone.
+            TI[] swapped = (TI[])value.Clone();
+            ReverseElements(swapped);
+            writer.WriteByteString(MemoryMarshal.AsBytes(swapped.AsSpan()));
         }
 
         private TI[] ReadTypedArray(ref CborReader reader, ulong tag)
