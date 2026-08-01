@@ -252,5 +252,28 @@ namespace Dahomey.Cbor.Tests
             // D853 tag(83) 40 bytes(0) -- binary128, which has no .NET type
             AssertThrowsCborException(() => Helper.Read<double[]>("D85340"));
         }
+
+        [Fact]
+        public void ReadByteArrayWithUint8Tag()
+        {
+            // D840 tag(64) 42 bytes(2) -> 1, 2
+            byte[] value = Helper.Read<byte[]>("D840420102");
+            Assert.Equal(new byte[] { 1, 2 }, value);
+        }
+
+        [Fact]
+        public void ReadByteArrayWithClampedUint8Tag()
+        {
+            // D844 tag(68) 42 bytes(2) -> 1, 2
+            byte[] value = Helper.Read<byte[]>("D844420102");
+            Assert.Equal(new byte[] { 1, 2 }, value);
+        }
+
+        [Fact]
+        public void ByteArrayIsStillWrittenAsAPlainByteString()
+        {
+            // 42 bytes(2) 0102 -- never tag 64, because the plain form is shorter and idiomatic
+            Helper.TestWrite(new byte[] { 1, 2 }, "420102", null, TypedArrayOptions());
+        }
     }
 }
