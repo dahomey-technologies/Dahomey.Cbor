@@ -1,5 +1,4 @@
 using System;
-using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 
 namespace Dahomey.Cbor.Serialization.Converters
@@ -10,40 +9,31 @@ namespace Dahomey.Cbor.Serialization.Converters
     /// </summary>
     public class TypedArrayConverter<TI> : ArrayConverter<TI> where TI : unmanaged
     {
-        private static readonly TypedArrayTagInfo _tagInfo = GetTagInfo();
-
-        private readonly CborOptions _options;
+        private readonly TypedArrayTagInfo _tagInfo;
 
         public TypedArrayConverter(CborOptions options)
             : base(options)
         {
-            _options = options;
-        }
-
-        private static TypedArrayTagInfo GetTagInfo()
-        {
-            if (!TypedArrayTags.TryGetByElementType(typeof(TI), out TypedArrayTagInfo info))
+            if (!TypedArrayTags.TryGetByElementType(typeof(TI), out _tagInfo))
             {
                 throw new CborException($"{typeof(TI)} is not a typed array element type.");
             }
-
-            return info;
         }
 
         public override TI[]? Read(ref CborReader reader)
         {
-            if (reader.ReadNull())
-            {
-                return null;
-            }
-
+            // The tag must be read before anything else. Every other CborReader entry point —
+            // ReadNull included — begins with SkipSemanticTag(), which consumes the tag and discards
+            // the number, so a null check here would destroy the tag this converter needs.
+            // TryReadSemanticTag consumes nothing when the next item is not a tag, so the null case
+            // is handled correctly by base.Read below.
             if (reader.TryReadSemanticTag(out ulong tag) && TypedArrayTags.IsTypedArrayTag(tag))
             {
                 return ReadTypedArray(ref reader, tag);
             }
 
             // Either there was no tag, or it was a tag this converter does not recognise, which CBOR
-            // says to ignore. Both cases are an ordinary array.
+            // says to ignore. Both cases are an ordinary array — or a null, which base.Read handles.
             return base.Read(ref reader);
         }
 
@@ -86,7 +76,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             return result;
         }
 
-        private static void ReverseElements(TI[] values)
+        private void ReverseElements(TI[] values)
         {
             Span<byte> bytes = MemoryMarshal.AsBytes(values.AsSpan());
 
