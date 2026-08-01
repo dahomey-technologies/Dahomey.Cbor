@@ -206,5 +206,51 @@ namespace Dahomey.Cbor.Tests
                 Helper.Read<float[]>("D855480000C03F00002040"),
                 Helper.Read<float[]>("D851483FC0000040200000"));
         }
+
+        private static void AssertThrowsCborException(Action action)
+        {
+            // Converters are built through Activator.CreateInstance, so a CborException thrown while
+            // building a mapping arrives wrapped in TargetInvocationException.
+            Exception exception = Record.Exception(action);
+            Assert.NotNull(exception);
+
+            for (Exception current = exception; current != null; current = current.InnerException)
+            {
+                if (current is CborException)
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail($"Expected a CborException, got {exception}");
+        }
+
+        [Fact]
+        public void PayloadLengthNotAMultipleOfElementSizeThrows()
+        {
+            // D855 tag(85) 43 bytes(3) -- 3 is not divisible by 4
+            AssertThrowsCborException(() => Helper.Read<float[]>("D85543000000"));
+        }
+
+        [Fact]
+        public void WrongElementTypeThrows()
+        {
+            // D856 tag(86) is binary64; reading it into float[] is corrupt data, not a conversion
+            AssertThrowsCborException(() => Helper.Read<float[]>("D85648000000000000F83F"));
+        }
+
+        [Fact]
+        public void ReservedTag76Throws()
+        {
+            // D84C tag(76) is reserved by RFC 8746
+            AssertThrowsCborException(() => Helper.Read<short[]>("D84C4401000200"));
+        }
+
+        [Fact]
+        public void Binary128TagThrows()
+        {
+            // D853 tag(83) 40 bytes(0) -- binary128, which has no .NET type
+            AssertThrowsCborException(() => Helper.Read<double[]>("D85340"));
+        }
     }
 }
