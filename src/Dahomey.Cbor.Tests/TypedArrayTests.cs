@@ -1,5 +1,8 @@
+using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Tests.Extensions;
 using Dahomey.Cbor.Util;
 using System;
+using System.Collections.Generic;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -299,6 +302,246 @@ namespace Dahomey.Cbor.Tests
             // the test states the guarantee instead of pinning an incidental encoding detail.
             Assert.True(plainBytes > typedBytes,
                 $"expected the typed array to be smaller; plain={plainBytes} typed={typedBytes}");
+        }
+
+        // A typed array is almost always reached as a member of an object rather than as the root
+        // value, so the tag has to survive every probe the object read path performs before the
+        // member's own converter runs. The three object formats take three different code paths.
+
+        public class SamplesHolder
+        {
+            public float[] Samples { get; set; }
+            public string Unit { get; set; }
+        }
+
+        [CborObjectFormat(CborObjectFormat.IntKeyMap)]
+        public class SamplesHolderIntKeyMap
+        {
+            [CborProperty(1)]
+            public float[] Samples { get; set; }
+            [CborProperty(2)]
+            public string Unit { get; set; }
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class SamplesHolderArray
+        {
+            [CborProperty(0)]
+            public float[] Samples { get; set; }
+            [CborProperty(1)]
+            public string Unit { get; set; }
+        }
+
+        [Fact]
+        public void StringKeyMapMemberRoundTrips()
+        {
+            // A2 map(2) 6753616D706C6573 "Samples" D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //           64556E6974 "Unit" 6156 "V"
+            const string hexBuffer = "A26753616D706C6573D855480000C03F0000204064556E69746156";
+            CborOptions options = TypedArrayOptions();
+
+            SamplesHolder value = new SamplesHolder { Samples = new[] { 1.5f, 2.5f }, Unit = "V" };
+            Helper.TestWrite(value, hexBuffer, null, options);
+
+            SamplesHolder actual = Helper.Read<SamplesHolder>(hexBuffer, options);
+            Assert.Equal(new[] { 1.5f, 2.5f }, actual.Samples);
+            Assert.Equal("V", actual.Unit);
+        }
+
+        [Fact]
+        public void IntKeyMapMemberRoundTrips()
+        {
+            // A2 map(2) 01 1 D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //           02 2 6156 "V"
+            const string hexBuffer = "A201D855480000C03F00002040026156";
+            CborOptions options = TypedArrayOptions();
+
+            SamplesHolderIntKeyMap value = new SamplesHolderIntKeyMap { Samples = new[] { 1.5f, 2.5f }, Unit = "V" };
+            Helper.TestWrite(value, hexBuffer, null, options);
+
+            SamplesHolderIntKeyMap actual = Helper.Read<SamplesHolderIntKeyMap>(hexBuffer, options);
+            Assert.Equal(new[] { 1.5f, 2.5f }, actual.Samples);
+            Assert.Equal("V", actual.Unit);
+        }
+
+        [Fact]
+        public void ArrayFormatMemberRoundTrips()
+        {
+            // 82 array(2) D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //             6156 "V"
+            const string hexBuffer = "82D855480000C03F000020406156";
+            CborOptions options = TypedArrayOptions();
+
+            SamplesHolderArray value = new SamplesHolderArray { Samples = new[] { 1.5f, 2.5f }, Unit = "V" };
+            Helper.TestWrite(value, hexBuffer, null, options);
+
+            SamplesHolderArray actual = Helper.Read<SamplesHolderArray>(hexBuffer, options);
+            Assert.Equal(new[] { 1.5f, 2.5f }, actual.Samples);
+            Assert.Equal("V", actual.Unit);
+        }
+
+        public struct SamplesStruct
+        {
+            public float[] Samples { get; set; }
+            public int Id { get; set; }
+        }
+
+        [Fact]
+        public void StructMemberRoundTrips()
+        {
+            // Structs go through StructMemberConverter, a separate read path from the class one.
+            // A2 map(2) 6753616D706C6573 "Samples" D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //           624964 "Id" 0C 12
+            const string hexBuffer = "A26753616D706C6573D855480000C03F000020406249640C";
+            CborOptions options = TypedArrayOptions();
+
+            SamplesStruct value = new SamplesStruct { Samples = new[] { 1.5f, 2.5f }, Id = 12 };
+            Helper.TestWrite(value, hexBuffer, null, options);
+
+            SamplesStruct actual = Helper.Read<SamplesStruct>(hexBuffer, options);
+            Assert.Equal(new[] { 1.5f, 2.5f }, actual.Samples);
+            Assert.Equal(12, actual.Id);
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class Signal
+        {
+            [CborProperty(1)]
+            public float[] Samples { get; set; }
+        }
+
+        [CborDiscriminator("Analog")]
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class AnalogSignal : Signal
+        {
+            [CborProperty(2)]
+            public string Unit { get; set; }
+        }
+
+        private static CborOptions PolymorphicArrayOptions()
+        {
+            CborOptions options = new CborOptions
+            {
+                TypedArrayMode = TypedArrayMode.LittleEndian,
+                DiscriminatorPolicy = CborDiscriminatorPolicy.Always
+            };
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<AnalogSignal>();
+            return options;
+        }
+
+        [Fact]
+        public void ArrayFormatWithDiscriminatorTagRoundTripsTypedArrayMember()
+        {
+            // Two tags in one document: the discriminator tag on the object and an RFC 8746 tag on
+            // the member nested inside it.
+            // 83 array(3) D827 tag(39) 66416E616C6F67 "Analog"
+            //             D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //             6156 "V"
+            const string hexBuffer = "83D82766416E616C6F67D855480000C03F000020406156";
+            CborOptions options = PolymorphicArrayOptions();
+
+            Signal value = new AnalogSignal { Samples = new[] { 1.5f, 2.5f }, Unit = "V" };
+            Helper.TestWrite(value, hexBuffer, null, options);
+
+            Signal actual = Helper.Read<Signal>(hexBuffer, options);
+            AnalogSignal analog = Assert.IsType<AnalogSignal>(actual);
+            Assert.Equal(new[] { 1.5f, 2.5f }, analog.Samples);
+            Assert.Equal("V", analog.Unit);
+        }
+
+        [Fact]
+        public void ArrayFormatKeepsANonDiscriminatorTagForTheFirstItem()
+        {
+            // The object expects a discriminator tag as its first item but the document carries none,
+            // so the RFC 8746 tag it finds instead belongs to the first member and must be left in
+            // place for that member's converter.
+            // 82 array(2) D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //             6156 "V"
+            const string hexBuffer = "82D855480000C03F000020406156";
+
+            AnalogSignal actual = Helper.Read<AnalogSignal>(hexBuffer, PolymorphicArrayOptions());
+            Assert.Equal(new[] { 1.5f, 2.5f }, actual.Samples);
+            Assert.Equal("V", actual.Unit);
+        }
+
+        [Fact]
+        public void TypedArrayAsDictionaryValueRoundTrips()
+        {
+            // A1 map(1) 6161 "a" D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            const string hexBuffer = "A16161D855480000C03F00002040";
+            CborOptions options = TypedArrayOptions();
+
+            Dictionary<string, float[]> value = new Dictionary<string, float[]>
+            {
+                ["a"] = new[] { 1.5f, 2.5f }
+            };
+            Helper.TestWrite(value, hexBuffer, null, options);
+
+            // Helper.Read compares the results of three readers for equality, which a collection of
+            // arrays cannot satisfy - float[] has no value equality. Deserialize once instead.
+            Dictionary<string, float[]> actual = Cbor.Deserialize<Dictionary<string, float[]>>(
+                hexBuffer.HexToBytes(), options);
+            Assert.Equal(new[] { 1.5f, 2.5f }, actual["a"]);
+        }
+
+        [Fact]
+        public void TypedArrayInAListRoundTrips()
+        {
+            // 82 array(2) D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //             D85548000040400000A040 tag(85) bytes(8) 3f, 5f
+            const string hexBuffer = "82D855480000C03F00002040D85548000040400000A040";
+            CborOptions options = TypedArrayOptions();
+
+            List<float[]> value = new List<float[]>
+            {
+                new[] { 1.5f, 2.5f },
+                new[] { 3f, 5f }
+            };
+            Helper.TestWrite(value, hexBuffer, null, options);
+
+            List<float[]> actual = Cbor.Deserialize<List<float[]>>(hexBuffer.HexToBytes(), options);
+            Assert.Equal(new[] { 1.5f, 2.5f }, actual[0]);
+            Assert.Equal(new[] { 3f, 5f }, actual[1]);
+        }
+
+        [Fact]
+        public void TypedArrayInAnIndefiniteLengthArrayRoundTrips()
+        {
+            // An indefinite-length container probes for the break marker before every item, and that
+            // probe must not consume the item's own tag.
+            // 9F array(*) D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //             FF break
+            const string hexBuffer = "9FD855480000C03F00002040FF";
+
+            List<float[]> actual = Cbor.Deserialize<List<float[]>>(hexBuffer.HexToBytes(), TypedArrayOptions());
+            Assert.Single(actual);
+            Assert.Equal(new[] { 1.5f, 2.5f }, actual[0]);
+        }
+
+        [Fact]
+        public void TypedArrayInAnIndefiniteLengthMapRoundTrips()
+        {
+            // BF map(*) 6161 "a" D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //           FF break
+            const string hexBuffer = "BF6161D855480000C03F00002040FF";
+
+            Dictionary<string, float[]> actual = Cbor.Deserialize<Dictionary<string, float[]>>(
+                hexBuffer.HexToBytes(), TypedArrayOptions());
+            Assert.Equal(new[] { 1.5f, 2.5f }, actual["a"]);
+        }
+
+        [Fact]
+        public void TypedArrayInAnIndefiniteLengthTupleRoundTrips()
+        {
+            // Tuples run their own break probe before every item, on the same terms.
+            // 9F array(*) D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //             6156 "V" FF break
+            const string hexBuffer = "9FD855480000C03F000020406156FF";
+
+            (float[] samples, string unit) = Cbor.Deserialize<ValueTuple<float[], string>>(
+                hexBuffer.HexToBytes(), TypedArrayOptions());
+            Assert.Equal(new[] { 1.5f, 2.5f }, samples);
+            Assert.Equal("V", unit);
         }
     }
 }
