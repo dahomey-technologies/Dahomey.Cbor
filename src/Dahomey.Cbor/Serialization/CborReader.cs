@@ -85,6 +85,8 @@ namespace Dahomey.Cbor.Serialization
         private CborReaderHeader _header;
         private int _remainingItemCount;
         private byte[]? _scratchBuffer;
+        private readonly int _maxDepth;
+        private int _depth;
 
         public bool DataAvailable => _currentPos < _length;
 
@@ -92,8 +94,26 @@ namespace Dahomey.Cbor.Serialization
             ? throw new InvalidOperationException("Buffer is not available when reader is operating on a sequence buffer")
             : _buffer.Slice(_currentPos);
 
+        /// <summary>Maximum permitted nesting depth of maps and arrays.</summary>
+        public int MaxDepth => _maxDepth;
+
         public CborReader(ReadOnlySpan<byte> buffer)
+            : this(buffer, CborWriter.DefaultMaxDepth)
         {
+        }
+
+        /// <param name="maxDepth">
+        /// Maximum nesting depth of maps and arrays. Exceeding it throws a <see cref="CborException"/>
+        /// rather than recursing until the stack is exhausted, which is what deeply nested hostile
+        /// input would otherwise cause. Must be positive.
+        /// </param>
+        public CborReader(ReadOnlySpan<byte> buffer, int maxDepth)
+        {
+            if (maxDepth <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxDepth), maxDepth, "maxDepth must be positive.");
+            }
+
             _buffer = buffer;
             _sequence = null;
             _currentPos = 0;
@@ -103,10 +123,23 @@ namespace Dahomey.Cbor.Serialization
             _header = new CborReaderHeader();
             _remainingItemCount = 0;
             _scratchBuffer = null;
+            _maxDepth = maxDepth;
+            _depth = 0;
         }
 
         public CborReader(ReadOnlySequence<byte> buffer)
+            : this(buffer, CborWriter.DefaultMaxDepth)
         {
+        }
+
+        /// <inheritdoc cref="CborReader(ReadOnlySpan{byte}, int)"/>
+        public CborReader(ReadOnlySequence<byte> buffer, int maxDepth)
+        {
+            if (maxDepth <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxDepth), maxDepth, "maxDepth must be positive.");
+            }
+
             _buffer = ReadOnlySpan<byte>.Empty;
             _sequence = buffer;
             _currentPos = 0;
@@ -116,6 +149,8 @@ namespace Dahomey.Cbor.Serialization
             _header = new CborReaderHeader();
             _remainingItemCount = 0;
             _scratchBuffer = null;
+            _maxDepth = maxDepth;
+            _depth = 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -583,6 +618,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReadMap<TC>(ICborMapReader<TC> mapReader, ref TC context)
         {
+            EnterNestedItem();
             ReadBeginMap();
 
             int previousRemainingItemCount = _remainingItemCount;
@@ -597,6 +633,7 @@ namespace Dahomey.Cbor.Serialization
 
             _state = CborReaderState.Start;
             _remainingItemCount = previousRemainingItemCount;
+            _depth--;
         }
 
         public bool MoveNextMapItem()
@@ -618,6 +655,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReadArray<TC>(ICborArrayReader<TC> arrayReader, ref TC context)
         {
+            EnterNestedItem();
             ReadBeginArray();
 
             int size = ReadSize();
@@ -631,6 +669,23 @@ namespace Dahomey.Cbor.Serialization
             }
 
             _state = CborReaderState.Start;
+            _depth--;
+        }
+
+        /// <summary>
+        /// Accounts for entering a nested map or array, and refuses to go deeper than
+        /// <see cref="MaxDepth"/>. Bounds stack use on untrusted input, where a few bytes can
+        /// describe arbitrarily deep nesting.
+        /// </summary>
+        private void EnterNestedItem()
+        {
+            if (++_depth > _maxDepth)
+            {
+                ThrowCbor(
+                    $"CBOR nesting depth exceeded the configured maximum of {_maxDepth}. " +
+                    $"Raise {nameof(CborOptions)}.{nameof(CborOptions.MaxDepth)} if the data is genuinely " +
+                    "this deeply nested.");
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

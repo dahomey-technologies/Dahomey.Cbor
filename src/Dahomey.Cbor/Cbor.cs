@@ -304,7 +304,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer);
+            CborReader reader = new CborReader(buffer, options.MaxDepth);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             return converter.Read(ref reader);
         }
@@ -315,7 +315,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer);
+            CborReader reader = new CborReader(buffer, options.MaxDepth);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             return converter.Read(ref reader);
         }
@@ -327,7 +327,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer);
+            CborReader reader = new CborReader(buffer, options.MaxDepth);
             ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
             return cborConverter.Read(ref reader);
         }
@@ -339,7 +339,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer);
+            CborReader reader = new CborReader(buffer, options.MaxDepth);
             ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
             return cborConverter.Read(ref reader);
         }
@@ -351,7 +351,7 @@ namespace Dahomey.Cbor
         {
             var list = new List<T>();
             options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer);
+            CborReader reader = new CborReader(buffer, options.MaxDepth);
             while (reader.DataAvailable)
             {
                 ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
@@ -367,7 +367,7 @@ namespace Dahomey.Cbor
         {
             var list = new List<T>();
             options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer);
+            CborReader reader = new CborReader(buffer, options.MaxDepth);
             while (reader.DataAvailable)
             {
                 ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
@@ -384,7 +384,7 @@ namespace Dahomey.Cbor
         {
             var list = new List<object>();
             options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer);
+            CborReader reader = new CborReader(buffer, options.MaxDepth);
             while (reader.DataAvailable)
             {
                 ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
@@ -406,7 +406,7 @@ namespace Dahomey.Cbor
         {
             var list = new List<object>();
             options ??= CborOptions.Default;
-            CborReader reader = new CborReader(buffer);
+            CborReader reader = new CborReader(buffer, options.MaxDepth);
             while (reader.DataAvailable)
             {
                 ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
@@ -491,7 +491,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborWriter writer = new CborWriter(buffer);
+            CborWriter writer = new CborWriter(buffer, options.MaxDepth);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             converter.Write(ref writer, input);
         }
@@ -503,7 +503,7 @@ namespace Dahomey.Cbor
             in IBufferWriter<byte> buffer,
             CborOptions? options = null)
         {
-            CborWriter writer = new CborWriter(buffer);
+            CborWriter writer = new CborWriter(buffer, options.MaxDepth);
             if (input is null)
             {
                 writer.WriteNull();
@@ -523,7 +523,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborWriter writer = new CborWriter(buffer);
+            CborWriter writer = new CborWriter(buffer, options.MaxDepth);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             for (int i = 0; i < input.Length; i++)
             {
@@ -539,7 +539,7 @@ namespace Dahomey.Cbor
             in IBufferWriter<byte> buffer,
             CborOptions? options = null)
         {
-            CborWriter writer = new CborWriter(buffer);
+            CborWriter writer = new CborWriter(buffer, options.MaxDepth);
             if (input is null)
             {
                 writer.WriteNull();
@@ -619,7 +619,7 @@ namespace Dahomey.Cbor
                 out TItem? item,
                 out int consumed)
             {
-                CborReader reader = new CborReader(sequence);
+                CborReader reader = new CborReader(sequence, options.MaxDepth);
                 ICborConverter<TItem> converter = options.Registry.ConverterRegistry.Lookup<TItem>();
 
                 try
