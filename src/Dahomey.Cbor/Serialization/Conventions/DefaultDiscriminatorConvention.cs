@@ -14,6 +14,7 @@ namespace Dahomey.Cbor.Serialization.Conventions
         private readonly ConcurrentDictionary<T, Type> _typesByDiscriminator = new();
         private readonly ConcurrentDictionary<Type, T> _discriminatorsByType = new();
         private readonly ICborConverter<T> _converter;
+        private readonly Type? _fallbackType;
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
 
@@ -23,10 +24,29 @@ namespace Dahomey.Cbor.Serialization.Conventions
         }
 
         public DefaultDiscriminatorConvention(SerializationRegistry serializationRegistry, string memberName)
+            : this(serializationRegistry, memberName, null)
+        {
+        }
+
+        /// <param name="fallbackType">
+        /// Type to resolve to when a discriminator value has no registered type — typically data
+        /// written by a newer build that added a subtype this build does not know about. Leave null to
+        /// throw on an unknown discriminator, which is the default.
+        /// </param>
+        /// <remarks>
+        /// The fallback must be assignable to the declared type being read, or the read fails with the
+        /// usual "is not assignable from" error. Members the fallback does not declare are handled by
+        /// <see cref="CborOptions.UnhandledNameMode"/> — so forward compatibility generally also wants
+        /// <see cref="UnhandledNameMode.Silent"/>, otherwise the unknown subtype's extra members throw
+        /// instead of being skipped.
+        /// </remarks>
+        public DefaultDiscriminatorConvention(
+            SerializationRegistry serializationRegistry, string memberName, Type? fallbackType)
         {
             _serializationRegistry = serializationRegistry;
             _memberName = memberName.AsBinaryMemory();
             _converter = serializationRegistry.ConverterRegistry.Lookup<T>();
+            _fallbackType = fallbackType;
         }
 
 
@@ -53,12 +73,17 @@ namespace Dahomey.Cbor.Serialization.Conventions
                 throw new CborException("Null discriminator");
             }
 
-            if (!_typesByDiscriminator.TryGetValue(discriminator, out Type? type))
+            if (_typesByDiscriminator.TryGetValue(discriminator, out Type? type))
             {
-                throw new CborException($"Unknown type discriminator: {discriminator}");
+                return type;
             }
 
-            return type;
+            if (_fallbackType != null)
+            {
+                return _fallbackType;
+            }
+
+            throw new CborException($"Unknown type discriminator: {discriminator}");
         }
 
         public void WriteDiscriminator(ref CborWriter writer, Type actualType)

@@ -260,6 +260,75 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(7, rehydrated.Id);
         }
 
+        // ---- forward compatibility: unknown discriminator falls back to a designated type ----
+
+        /// <summary>
+        /// Reading data written by a newer build that added a subtype this build does not know about.
+        /// Without a fallback the unknown discriminator throws; with one it materialises as the
+        /// designated type, so the members this build does understand still round-trip.
+        /// </summary>
+        [Fact]
+        public void UnknownDiscriminatorResolvesToFallbackType()
+        {
+            CborOptions options = new CborOptions
+            {
+                // The unknown subtype's extra members must be skipped rather than throwing.
+                UnhandledNameMode = UnhandledNameMode.Silent,
+            };
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.ClearConventions();
+            registry.RegisterConvention(
+                new DefaultDiscriminatorConvention<int>(options.Registry, "_t", typeof(IntNameObject)));
+            registry.RegisterType<IntNameObject>();
+
+            // {"_t": 999, "Name": "foo", "Id": 1} - discriminator 999 is not registered
+            IntBaseObject obj = Deserialize<IntBaseObject>(
+                "A3625F741903E7644E616D6563666F6F62496401", options);
+
+            IntNameObject fallback = Assert.IsType<IntNameObject>(obj);
+            Assert.Equal("foo", fallback.Name);
+            Assert.Equal(1, fallback.Id);
+        }
+
+        /// <summary>
+        /// Members that exist only on the real (unrecognised) subtype are skipped, not fatal.
+        /// </summary>
+        [Fact]
+        public void FallbackTypeSkipsMembersItDoesNotDeclare()
+        {
+            CborOptions options = new CborOptions
+            {
+                UnhandledNameMode = UnhandledNameMode.Silent,
+            };
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.ClearConventions();
+            registry.RegisterConvention(
+                new DefaultDiscriminatorConvention<int>(options.Registry, "_t", typeof(IntNameObject)));
+            registry.RegisterType<IntNameObject>();
+
+            // {"_t": 999, "Name": "foo", "Id": 1, "FutureField": 7}
+            IntBaseObject obj = Deserialize<IntBaseObject>(
+                "A4625F741903E7644E616D6563666F6F624964016B4675747572654669656C6407", options);
+
+            IntNameObject fallback = Assert.IsType<IntNameObject>(obj);
+            Assert.Equal("foo", fallback.Name);
+            Assert.Equal(1, fallback.Id);
+        }
+
+        /// <summary>Without a fallback the behaviour is unchanged: unknown discriminators throw.</summary>
+        [Fact]
+        public void NoFallbackKeepsThrowingOnUnknownDiscriminator()
+        {
+            CborOptions options = new CborOptions();
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.ClearConventions();
+            registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "_t"));
+            registry.RegisterType<IntNameObject>();
+
+            Assert.ThrowsAny<CborException>(
+                () => Deserialize<IntBaseObject>("A2625F741903E762496401", options));
+        }
+
         [Fact]
         public void UnknownDiscriminatorThrows()
         {
