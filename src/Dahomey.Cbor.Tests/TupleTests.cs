@@ -1,3 +1,4 @@
+using Dahomey.Cbor.Attributes;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -58,6 +59,68 @@ namespace Dahomey.Cbor.Tests
             };
 
             Helper.TestWrite(obj, hexBuffer);
+        }
+
+        public class TaggedTupleObject
+        {
+            public (int, int) T { get; set; }
+        }
+
+        [Fact]
+        public void ReadTaggedTupleMember()
+        {
+            // Tuple converters reach the reader below its tag-skipping entry points, so they skip
+            // their own tag. An irrelevant tag in front of a tuple is ignored, as CBOR requires.
+            // A1 6154 "T" C1 tag(1) 820102 [1, 2]
+            TaggedTupleObject obj = Helper.Read<TaggedTupleObject>("A16154C1820102");
+            Assert.Equal((1, 2), obj.T);
+
+            // A1 6154 "T" 820102 [1, 2] -- the tuple is written back with no tag of its own
+            Helper.TestWrite(obj, "A16154820102");
+            Assert.Equal((1, 2), Helper.Read<TaggedTupleObject>("A16154820102").T);
+        }
+
+        [Fact]
+        public void ReadTaggedTupleAtRoot()
+        {
+            // C1 tag(1) 820102 [1, 2]
+            Assert.Equal((1, 2), Helper.Read<(int, int)>("C1820102"));
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class TupleRange
+        {
+            [CborProperty(1)]
+            public (int, int) Range { get; set; }
+        }
+
+        [CborDiscriminator("Named")]
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class NamedTupleRange : TupleRange
+        {
+            [CborProperty(2)]
+            public string Name { get; set; }
+        }
+
+        [Fact]
+        public void ReadArrayFormatObjectWhoseFirstItemIsATaggedTuple()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<NamedTupleRange>();
+
+            // The object looks for a discriminator tag as its first item and finds a tag that belongs
+            // to the tuple instead, which therefore has to reach the tuple's own converter.
+            // 82 array(2) C1 tag(1) 820102 [1, 2] 63666F6F "foo"
+            NamedTupleRange obj = Helper.Read<NamedTupleRange>("82C182010263666F6F", options);
+            Assert.Equal((1, 2), obj.Range);
+            Assert.Equal("foo", obj.Name);
+
+            // Both tags at once, nested.
+            // 83 array(3) D827 tag(39) 654E616D6564 "Named" C1 tag(1) 820102 [1, 2] 63666F6F "foo"
+            TupleRange polymorphic = Helper.Read<TupleRange>("83D827654E616D6564C182010263666F6F", options);
+            NamedTupleRange named = Assert.IsType<NamedTupleRange>(polymorphic);
+            Assert.Equal((1, 2), named.Range);
+            Assert.Equal("foo", named.Name);
         }
     }
 }

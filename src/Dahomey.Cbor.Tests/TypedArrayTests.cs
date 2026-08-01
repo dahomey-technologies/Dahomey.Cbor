@@ -543,5 +543,64 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(new[] { 1.5f, 2.5f }, samples);
             Assert.Equal("V", unit);
         }
+
+        public class NullableSamplesHolder
+        {
+            public float[] S { get; set; }
+        }
+
+        [Fact]
+        public void NullTypedArrayMemberRoundTripsAsNull()
+        {
+            // The member probe that finds this null is the one that must not consume a tag, so the
+            // null case is worth pinning on its own.
+            // A1 map(1) 6153 "S" F6 null
+            const string hexBuffer = "A16153F6";
+            CborOptions options = TypedArrayOptions();
+
+            Helper.TestWrite(new NullableSamplesHolder { S = null }, hexBuffer, null, options);
+
+            NullableSamplesHolder actual = Helper.Read<NullableSamplesHolder>(hexBuffer, options);
+            Assert.Null(actual.S);
+        }
+
+        [Fact]
+        public void NullTypedArrayMemberStillHonoursDisallowNull()
+        {
+            CborOptions options = TypedArrayOptions();
+            options.Registry.ObjectMappingRegistry.Register<NullableSamplesHolder>(objectMapping =>
+                objectMapping
+                    .AutoMap()
+                    .ClearMemberMappings()
+                    .MapMember(o => o.S).SetRequired(RequirementPolicy.DisallowNull)
+            );
+
+            // A1 map(1) 6153 "S" F6 null
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<NullableSamplesHolder>("A16153F6".HexToBytes(), options));
+            Assert.Equal("Property 'S' cannot be null.", exception.Message);
+        }
+
+        [Fact]
+        public void TypedArrayReadsUnderDefaultOptions()
+        {
+            // TypedArrayMode governs writing only. Reading a typed array needs no configuration, so
+            // a document from a producer that uses them is readable by a consumer that does not.
+            CborOptions options = new CborOptions();
+            Assert.Equal(TypedArrayMode.Never, options.TypedArrayMode);
+
+            // D855 tag(85) 48 bytes(8) -> 1.5f, 2.5f little endian
+            Assert.Equal(new[] { 1.5f, 2.5f }, Helper.Read<float[]>("D855480000C03F00002040", options));
+
+            // A2 map(2) 6753616D706C6573 "Samples" D855480000C03F00002040 tag(85) bytes(8) 1.5f, 2.5f
+            //           64556E6974 "Unit" 6156 "V"
+            SamplesHolder holder = Helper.Read<SamplesHolder>(
+                "A26753616D706C6573D855480000C03F0000204064556E69746156", options);
+            Assert.Equal(new[] { 1.5f, 2.5f }, holder.Samples);
+            Assert.Equal("V", holder.Unit);
+
+            // 82 array(2) F93E00 1.5 F94100 2.5 -- the same options still write the plain form
+            Helper.TestWrite(new[] { 1.5f, 2.5f }, "82F93E00F94100", null, options);
+        }
     }
 }
