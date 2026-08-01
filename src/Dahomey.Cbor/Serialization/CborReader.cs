@@ -197,6 +197,41 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        /// <summary>
+        /// Reports whether the next data item is the break marker that terminates an
+        /// indefinite-length array or map.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately does not skip a semantic tag: a break marker is never tagged, so a tag here
+        /// belongs to the next item and has to survive for that item's converter. A typed array is
+        /// decoded from its RFC 8746 tag, so consuming it would make an indefinite-length container
+        /// of typed arrays unreadable.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool IsBreak()
+        {
+            CborReaderHeader header = GetHeader();
+
+            return header.MajorType == CborMajorType.Primitive && header.Primitive == CborPrimitive.Break;
+        }
+
+        /// <summary>
+        /// Reports the type of the next data item without advancing the reader.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="GetCurrentDataItemType"/> starts by skipping any semantic tag, so callers that
+        /// only want to look - a member probing for null, say - would consume a tag the upcoming
+        /// item's converter still needs. This peeks from a bookmark and rewinds instead.
+        /// </remarks>
+        internal CborDataItemType PeekDataItemType()
+        {
+            CborReaderBookmark bookmark = GetBookmark();
+            CborDataItemType dataItemType = GetCurrentDataItemType();
+            ReturnToBookmark(bookmark);
+
+            return dataItemType;
+        }
+
         public CborReaderBookmark GetBookmark()
         {
             CborReaderBookmark bookmark;
@@ -606,7 +641,7 @@ namespace Dahomey.Cbor.Serialization
 
         public bool MoveNextMapItem(ref int remainingItemCount)
         {
-            if (remainingItemCount == 0 || remainingItemCount < 0 && GetCurrentDataItemType() == CborDataItemType.Break)
+            if (remainingItemCount == 0 || remainingItemCount < 0 && IsBreak())
             {
                 return false;
             }
@@ -624,7 +659,7 @@ namespace Dahomey.Cbor.Serialization
 
             arrayReader.ReadBeginArray(size, ref context);
 
-            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
+            while (size > 0 || size < 0 && !IsBreak())
             {
                 arrayReader.ReadArrayItem(ref this, ref context);
                 size--;
@@ -988,7 +1023,7 @@ namespace Dahomey.Cbor.Serialization
         {
             int size = ReadSize();
 
-            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
+            while (size > 0 || size < 0 && !IsBreak())
             {
                 SkipDataItem();
                 size--;
@@ -1002,7 +1037,7 @@ namespace Dahomey.Cbor.Serialization
         {
             int size = ReadSize();
 
-            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
+            while (size > 0 || size < 0 && !IsBreak())
             {
                 SkipDataItem();
                 SkipDataItem();

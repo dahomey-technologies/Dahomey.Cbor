@@ -519,30 +519,38 @@ namespace Dahomey.Cbor.Serialization.Converters
                                 break;
                             case CborObjectFormat.Array:
                             default:
-                                // discriminator is always the first item
-                                // we need a Semantic Tag to check if the discriminator is present
-                                if (reader.TryReadSemanticTag(out ulong semanticTag) && semanticTag == _options.DiscriminatorSemanticTag)
                                 {
-                                    // discriminator value
-                                    Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
+                                    // discriminator is always the first item
+                                    // we need a Semantic Tag to check if the discriminator is present
+                                    CborReaderBookmark bookmark = reader.GetBookmark();
 
-                                    if (!_objectMapping.ObjectType.IsAssignableFrom(actualType))
+                                    if (reader.TryReadSemanticTag(out ulong semanticTag) && semanticTag == _options.DiscriminatorSemanticTag)
                                     {
-                                        throw new CborException($"expected type {_objectMapping.ObjectType} is not assignable from actual type {actualType}");
+                                        // discriminator value
+                                        Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
+
+                                        if (!_objectMapping.ObjectType.IsAssignableFrom(actualType))
+                                        {
+                                            throw new CborException($"expected type {_objectMapping.ObjectType} is not assignable from actual type {actualType}");
+                                        }
+
+                                        context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
+                                        ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
+                                        context.creatorValuesByIndex = creatorMapping != null ? new() : null;
+                                        context.regularValuesByIndex = creatorMapping != null ? new() : null;
+                                    }
+                                    else
+                                    {
+                                        // Any tag read here was not the discriminator tag, so it belongs to the
+                                        // first item and must survive for that item's own converter — an RFC 8746
+                                        // typed array is decoded from its tag.
+                                        reader.ReturnToBookmark(bookmark);
+                                        context.converter = this;
                                     }
 
-                                    context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
-                                    ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
-                                    context.creatorValuesByIndex = creatorMapping != null ? new() : null;
-                                    context.regularValuesByIndex = creatorMapping != null ? new() : null;
+                                    // increment to skip discriminator index even when the semantic tag is not present
+                                    context.memberIndex++;
                                 }
-                                else
-                                {
-                                    context.converter = this;
-                                }
-
-                                // increment to skip discriminator index even when the semantic tag is not present
-                                context.memberIndex++;
                                 break;
                         }
                     }

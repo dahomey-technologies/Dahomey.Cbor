@@ -22,13 +22,13 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 2");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 2");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 2");
             }
@@ -73,19 +73,19 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 3");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 3");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 3");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 3");
             }
@@ -133,25 +133,25 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 4");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
             T3 item3 = _item3Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
@@ -202,31 +202,31 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 5");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
             T3 item3 = _item3Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
             T4 item4 = _item4Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
@@ -280,37 +280,37 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 6");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
             T3 item3 = _item3Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
             T4 item4 = _item4Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
             T5 item5 = _item5Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
@@ -367,43 +367,43 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 7");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T3 item3 = _item3Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T4 item4 = _item4Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T5 item5 = _item5Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T6 item6 = _item6Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
@@ -462,50 +462,50 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 8");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T3 item3 = _item3Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T4 item4 = _item4Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T5 item5 = _item5Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T6 item6 = _item6Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T7 item7 = _item7Converter.Read(ref reader);
 
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
