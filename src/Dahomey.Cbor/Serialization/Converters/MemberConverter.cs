@@ -74,6 +74,35 @@ namespace Dahomey.Cbor.Serialization.Converters
             _requirementPolicy = memberMapping.RequirementPolicy;
         }
 
+        /// <summary>
+        /// Builds a member converter from accessor delegates instead of a <see cref="MemberInfo"/>.
+        /// Reflection-free and AOT-safe: no <c>Expression.Compile</c>, no <c>MakeGenericType</c>.
+        /// Used by <see cref="DelegateMemberMapping{T, TM}"/>.
+        /// </summary>
+        internal MemberConverter(
+            ReadOnlyMemory<byte> memberName,
+            int? memberIndex,
+            ICborConverter<TM> converter,
+            Func<T, TM>? memberGetter,
+            Action<T, TM>? memberSetter,
+            TM defaultValue,
+            bool ignoreIfDefault,
+            Func<object, bool>? shouldSerializeMethod,
+            LengthMode lengthMode,
+            RequirementPolicy requirementPolicy)
+        {
+            _memberName = memberName;
+            _memberIndex = memberIndex;
+            _converter = converter;
+            _memberGetter = memberGetter;
+            _memberSetter = memberSetter;
+            _defaultValue = defaultValue;
+            _ignoreIfDefault = ignoreIfDefault;
+            _shouldSerializeMethod = shouldSerializeMethod;
+            _lengthMode = lengthMode;
+            _requirementPolicy = requirementPolicy;
+        }
+
         public void Read(ref CborReader reader, object obj)
         {
             if (reader.GetCurrentDataItemType() == CborDataItemType.Null)
@@ -237,6 +266,31 @@ namespace Dahomey.Cbor.Serialization.Converters
             _defaultValue = (TM)memberMapping.DefaultValue!;
             _ignoreIfDefault = memberMapping.IgnoreIfDefault;
             _requirementPolicy = memberMapping.RequirementPolicy;
+        }
+
+        /// <summary>
+        /// Builds a struct member converter from accessor delegates instead of a <see cref="MemberInfo"/>.
+        /// Reflection-free and AOT-safe. Used by <see cref="DelegateStructMemberMapping{T, TM}"/>.
+        /// </summary>
+        internal StructMemberConverter(
+            string memberName,
+            int? memberIndex,
+            ICborConverter<TM> converter,
+            StructMemberGetterDelegate<T, TM>? memberGetter,
+            StructMemberSetterDelegate<T, TM>? memberSetter,
+            TM defaultValue,
+            bool ignoreIfDefault,
+            RequirementPolicy requirementPolicy)
+        {
+            MemberNameAsString = memberName;
+            _memberName = Encoding.UTF8.GetBytes(memberName);
+            MemberIndex = memberIndex;
+            _converter = converter;
+            _memberGetter = memberGetter;
+            _memberSetter = memberSetter;
+            _defaultValue = defaultValue;
+            _ignoreIfDefault = ignoreIfDefault;
+            _requirementPolicy = requirementPolicy;
         }
 
         public void Read(ref CborReader reader, object obj)
