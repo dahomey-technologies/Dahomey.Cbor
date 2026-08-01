@@ -15,6 +15,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 2)
@@ -66,6 +71,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2, T3) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 3)
@@ -126,6 +136,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2, T3, T4) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 4)
@@ -195,6 +210,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2, T3, T4, T5) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 5)
@@ -273,6 +293,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2, T3, T4, T5, T6) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 6)
@@ -360,6 +385,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2, T3, T4, T5, T6, T7) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 7)
@@ -455,6 +485,11 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
         public override (T1, T2, T3, T4, T5, T6, T7, T8) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 8)
