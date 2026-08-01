@@ -275,5 +275,30 @@ namespace Dahomey.Cbor.Tests
             // 42 bytes(2) 0102 -- never tag 64, because the plain form is shorter and idiomatic
             Helper.TestWrite(new byte[] { 1, 2 }, "420102", null, TypedArrayOptions());
         }
+
+        [Fact]
+        public void TypedArrayIsSubstantiallySmallerForRealisticSampleData()
+        {
+            // A thousand sensor samples, the shape this feature exists for. Values are deliberately
+            // not representable as binary16, so the plain form cannot shrink each element to 3 bytes
+            // and the comparison reflects real recorded data rather than a best case for either side.
+            float[] samples = new float[1000];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                samples[i] = i * 0.37f;
+            }
+
+            int plainBytes = Helper.Write(samples).Length / 2;
+            int typedBytes = Helper.Write(samples, TypedArrayOptions()).Length / 2;
+
+            // D8 55 (tag 85, 2 bytes) + 59 0F A0 (byte-string header, 3 bytes, since the 4000-byte
+            // payload needs a 2-byte length so the header itself is 3 bytes) + 4 bytes per element.
+            Assert.Equal(2 + 3 + 4 * samples.Length, typedBytes);
+
+            // The plain form pays a per-element header. Assert a floor rather than an exact number so
+            // the test states the guarantee instead of pinning an incidental encoding detail.
+            Assert.True(plainBytes > typedBytes,
+                $"expected the typed array to be smaller; plain={plainBytes} typed={typedBytes}");
+        }
     }
 }
