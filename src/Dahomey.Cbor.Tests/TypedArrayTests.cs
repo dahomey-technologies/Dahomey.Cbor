@@ -17,7 +17,7 @@ namespace Dahomey.Cbor.Tests
         public void ReadDoubleArrayLittleEndian()
         {
             // D856 tag(86) 48 bytes(8) -> 1.5d little endian
-            double[] value = Helper.Read<double[]>("D8564800000000000000F83F");
+            double[] value = Helper.Read<double[]>("D85648000000000000f83f");
             Assert.Equal(new[] { 1.5d }, value);
         }
 
