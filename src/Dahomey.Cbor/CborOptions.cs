@@ -34,6 +34,24 @@ namespace Dahomey.Cbor
         IndefiniteLength = 2
     }
 
+    /// <summary>
+    /// Controls whether numeric arrays are written as RFC 8746 typed arrays.
+    /// Reading typed arrays is always supported and is not affected by this setting.
+    /// </summary>
+    public enum TypedArrayMode
+    {
+        /// <summary>
+        /// Write numeric arrays as ordinary CBOR arrays of individually encoded items.
+        /// </summary>
+        Never,
+
+        /// <summary>
+        /// Write numeric arrays as little-endian typed arrays: tags 72, 69, 77, 70, 78, 71, 79, 84, 85 and 86.
+        /// The payload is a byte-for-byte image of the array on little-endian hardware.
+        /// </summary>
+        LittleEndian,
+    }
+
     public class CborOptions
     {
         public static CborOptions Default { get; } = new CborOptions()
@@ -53,6 +71,7 @@ namespace Dahomey.Cbor
         public CborObjectFormat ObjectFormat { get; set; } = CborObjectFormat.StringKeyMap;
         public LengthMode ArrayLengthMode { get; set; } = LengthMode.DefiniteLength;
         public LengthMode MapLengthMode { get; set; } = LengthMode.DefiniteLength;
+        public TypedArrayMode TypedArrayMode { get; set; } = TypedArrayMode.Never;
         /// <summary>
         /// Semantic Tag to check if the discriminator is present when ObjectFormat is Array
         /// </summary>
