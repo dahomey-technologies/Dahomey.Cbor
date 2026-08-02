@@ -126,3 +126,33 @@ The last two options are useful when you write a custom cbor converter for a cla
 CborConverters are use in the heart of the library for standard types and auto discovered custom classes by reflection.
 It means you will benefit of the same features and performance.
 
+### Deterministic encoding (RFC 8949 §4.2)
+
+```csharp
+CborOptions options = new CborOptions { Deterministic = true };
+await Cbor.SerializeAsync(customObject, stream, options);
+```
+
+Guarantees the four core requirements of RFC 8949 §4.2.1: shortest-form arguments for integers,
+lengths and tags; preferred float serialization; definite lengths; and map keys sorted bytewise on
+their encoded form. The same value always produces the same bytes, which is what makes hashing and
+deduplication meaningful. This is the §4.2.1 ordering rule, not the deprecated length-first variant
+from §4.2.3, which is not implemented.
+
+Key ordering applies to ``StringKeyMap`` and ``IntKeyMap`` objects, ``Dictionary<K,V>``, and
+``CborObject``/``CborValue`` maps; ``CborObjectFormat.Array`` has no map keys and is therefore
+already deterministic. Because ordering is on the *encoded* key, a shorter key always sorts before a
+longer one, so ``"z"`` sorts before ``"aa"``, and negative integer keys sort after all non-negative
+ones, because a negative integer is a different CBOR major type. Supported dictionary key types are
+``string``, ``int``, ``long`` and ``ulong``; any other key type throws a ``CborException`` rather
+than silently emitting unsorted output.
+
+Deterministic mode also rejects any setting that would admit more than one encoding of the same
+value: setting ``ArrayLengthMode`` or ``MapLengthMode`` to ``LengthMode.IndefiniteLength`` while
+``Deterministic`` is enabled throws a ``CborException``.
+
+**When verifying an integrity hash, hash the bytes you received, never a re-serialization.** If
+``UnhandledNameMode.Silent`` is in effect, decoding a document written by a newer version silently
+drops members this version doesn't know about, and re-encoding then produces different — and
+differently hashing — bytes than what was received. Hash the wire bytes directly.
+
