@@ -92,6 +92,38 @@ namespace Dahomey.Cbor.Tests.Cddl
     {
     }
 
+    public interface ICddlNotification
+    {
+        int Sequence { get; set; }
+    }
+
+    [CborDiscriminator("email")]
+    public class CddlEmailNotification : ICddlNotification
+    {
+        public int Sequence { get; set; }
+        public string Address { get; set; }
+    }
+
+    [CborDiscriminator("sms")]
+    public class CddlSmsNotification : ICddlNotification
+    {
+        public int Sequence { get; set; }
+        public string Number { get; set; }
+    }
+
+    public class CddlOutbox
+    {
+        public ICddlNotification Pending { get; set; }
+    }
+
+    [CborSerializable(typeof(CddlOutbox))]
+    [CborSerializable(typeof(CddlEmailNotification))]
+    [CborSerializable(typeof(CddlSmsNotification))]
+    [CborCddlSchema]
+    public partial class CddlInterfacePolyContext : CborSerializerContext
+    {
+    }
+
     public class CddlPolymorphismTests
     {
         private static readonly CddlPolymorphicContext Context =
@@ -156,6 +188,57 @@ namespace Dahomey.Cbor.Tests.Cddl
 
             Assert.Contains("CddlArrayBase = [\n  -2147483648..2147483647,\n]", schema);
             Assert.Contains("CddlArrayBase-poly = CddlArrayBase / CddlArrayDerived-poly", schema);
+        }
+
+        /// <summary>
+        /// An interface is a polymorphic base like any other: it cannot be instantiated, so it has no
+        /// bare rule, and its implementors are the arms of its choice. The library's own suite writes
+        /// polymorphic values through an interface, so treating one as undescribable would make adding
+        /// [CborCddlSchema] to such a project a build error.
+        /// </summary>
+        [Fact]
+        public void InterfaceIsATypeChoiceOverItsImplementors()
+        {
+            string schema = CddlInterfacePolyContext.CddlSchema.Replace("\r\n", "\n");
+
+            Assert.Contains(
+                "ICddlNotification-poly = CddlEmailNotification-poly / CddlSmsNotification-poly\n",
+                schema);
+            Assert.Contains("\"Pending\": ICddlNotification-poly,", schema);
+            Assert.DoesNotContain("ICddlNotification = ", schema);
+        }
+
+        [CddlFact]
+        public void OutputWrittenThroughAnInterfaceValidates()
+        {
+            CddlOutbox value = new CddlOutbox
+            {
+                Pending = new CddlSmsNotification { Sequence = 7, Number = "555" },
+            };
+
+            byte[] cbor = Helper.Write(
+                value, CborSerializerContext.Default<CddlInterfacePolyContext>().Options).HexToBytes();
+
+            CddlResult result = CddlTool.Validate(
+                CddlInterfacePolyContext.CddlSchema, "CddlOutbox", cbor);
+
+            Assert.True(result.Ok, result.Output);
+        }
+
+        /// <summary>
+        /// The other implementor's discriminator has to be rejected, or the choice would describe
+        /// nothing more than "one of these two shapes".
+        /// </summary>
+        [CddlFact]
+        public void InterfaceChoiceRejectsAMismatchedDiscriminator()
+        {
+            // { "_t": "email", "Sequence": 7, "Number": "555" } -- email's tag on the SMS shape.
+            byte[] cbor = "A3625F7465656D61696C6853657175656E636507664E756D62657263353535".HexToBytes();
+
+            CddlResult result = CddlTool.Validate(
+                CddlInterfacePolyContext.CddlSchema, "ICddlNotification-poly", cbor);
+
+            Assert.False(result.Ok);
         }
 
         /// <summary>

@@ -31,7 +31,8 @@ namespace Dahomey.Cbor.Generator
             }
 
             IReadOnlyDictionary<string, string> ruleNames = CddlNames.BuildRuleNames(ordered);
-            Dictionary<string, PolymorphicShape> shapes = BuildShapes(ordered, byKey, ruleNames);
+            Dictionary<string, PolymorphicShape> shapes =
+                CddlPolymorphism.BuildShapes(ordered, byKey, ruleNames);
 
             // Use sites resolve through their own name table: a member declared as a base type names
             // that base's `-poly` rule, a member declared as a leaf names the leaf's bare rule. Keeping
@@ -150,155 +151,6 @@ namespace Dahomey.Cbor.Generator
             }
         }
 
-        /// <summary>
-        /// Which rules a type contributes, and what a use site referring to it must name.
-        /// </summary>
-        /// <remarks>
-        /// Two shapes exist because <c>DiscriminatorMemberConverter.ShouldSerialize</c> decides on the
-        /// static type at the call site: under the effective default policy of <c>Auto</c> the
-        /// discriminator is written only when <c>obj.GetType() != declaredType</c>, so
-        /// <c>Cbor.Serialize&lt;Shape&gt;(circle)</c> writes it and <c>Cbor.Serialize&lt;Circle&gt;(circle)</c>
-        /// does not.
-        /// </remarks>
-        private sealed class PolymorphicShape
-        {
-            /// <summary>
-            /// Types whose nearest collected ancestor is this one. Nearest rather than transitive, so a
-            /// three-level hierarchy nests (<c>A-poly = B-poly</c>, <c>B-poly = ... / C-poly</c>) instead
-            /// of repeating C in both choices; walking up past uncollected intermediates keeps a base
-            /// declared without its intermediate reachable.
-            /// </summary>
-            public List<TypeModel> Subtypes { get; } = new List<TypeModel>();
-
-            /// <summary>False for abstract classes and interfaces, which are never written as themselves.</summary>
-            public bool IsInstantiable { get; set; }
-
-            /// <summary>
-            /// Whether this type is itself reachable through a base within this schema, which is what
-            /// makes its own discriminated shape writable.
-            /// </summary>
-            public bool HasCollectedBase { get; set; }
-
-            /// <summary>
-            /// Whether <c>ObjectMapping.SetDiscriminator</c> would actually insert the discriminator
-            /// mapping: it does so only for concrete, non-struct classes, so a struct carrying a
-            /// discriminator attribute writes none.
-            /// </summary>
-            public bool WritesDiscriminator { get; set; }
-
-            /// <summary>The effective policy, already resolved to Never / Always / Auto.</summary>
-            public string Policy { get; set; } = "Auto";
-
-            /// <summary>The undiscriminated shape, written when the static type is exactly this type.</summary>
-            public bool EmitsBare { get; set; }
-
-            /// <summary>The through-a-base shape: a discriminated rule, or a type choice over subtypes.</summary>
-            public bool EmitsPoly { get; set; }
-
-            /// <summary>
-            /// What a member declared as this type must name. A member typed as a base may hold any
-            /// subtype, so it names the choice; a member typed as a leaf names that leaf's only rule.
-            /// </summary>
-            public string ReferenceName(string ruleName)
-            {
-                return EmitsPoly && (Subtypes.Count > 0 || !EmitsBare) ? ruleName + "-poly" : ruleName;
-            }
-
-            /// <summary>What an enclosing type choice names for this subtype.</summary>
-            public string ArmName(string ruleName)
-            {
-                return EmitsPoly ? ruleName + "-poly" : ruleName;
-            }
-        }
-
-        private static Dictionary<string, PolymorphicShape> BuildShapes(
-            IReadOnlyList<TypeModel> ordered,
-            IReadOnlyDictionary<string, TypeModel> byKey,
-            IReadOnlyDictionary<string, string> ruleNames)
-        {
-            Dictionary<string, PolymorphicShape> shapes = new Dictionary<string, PolymorphicShape>();
-
-            foreach (TypeModel model in ordered)
-            {
-                if (model.Kind != TypeKind.Object)
-                {
-                    continue;
-                }
-
-                bool isInterface = model.Symbol.TypeKind == Microsoft.CodeAnalysis.TypeKind.Interface;
-
-                shapes[model.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)] =
-                    new PolymorphicShape
-                    {
-                        IsInstantiable = !model.Symbol.IsAbstract && !isInterface,
-                        WritesDiscriminator = model.Discriminator is not null
-                            && !model.Symbol.IsAbstract && !isInterface && !model.Symbol.IsValueType,
-                        Policy = model.DiscriminatorPolicy ?? "Auto",
-                    };
-            }
-
-            foreach (TypeModel model in ordered)
-            {
-                string? parentKey = NearestCollectedBase(model, byKey);
-
-                if (parentKey is not null)
-                {
-                    shapes[parentKey].Subtypes.Add(model);
-                    shapes[model.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)]
-                        .HasCollectedBase = true;
-                }
-            }
-
-            foreach (KeyValuePair<string, PolymorphicShape> entry in shapes)
-            {
-                PolymorphicShape shape = entry.Value;
-
-                // Ordered by rule name rather than by collection order, so the emitted choice is a pure
-                // function of the source and the schema stays byte-stable across builds.
-                shape.Subtypes.Sort((left, right) => string.CompareOrdinal(
-                    ruleNames[left.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)],
-                    ruleNames[right.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)]));
-
-                shape.EmitsBare = shape.IsInstantiable
-                    && !(shape.WritesDiscriminator && shape.Policy == "Always");
-                shape.EmitsPoly = shape.Subtypes.Count > 0
-                    || (shape.WritesDiscriminator && shape.Policy != "Never");
-            }
-
-            return shapes;
-        }
-
-        /// <summary>
-        /// The nearest strict base class of <paramref name="model"/> that this context also collected as
-        /// an object, or null when there is none.
-        /// </summary>
-        /// <remarks>
-        /// Base classes only. An interface declared on a context is therefore not treated as a
-        /// polymorphic base, and reports CBOR1008 instead.
-        /// </remarks>
-        private static string? NearestCollectedBase(
-            TypeModel model, IReadOnlyDictionary<string, TypeModel> byKey)
-        {
-            if (model.Kind != TypeKind.Object)
-            {
-                return null;
-            }
-
-            for (INamedTypeSymbol? current = (model.Symbol as INamedTypeSymbol)?.BaseType;
-                 current is not null;
-                 current = current.BaseType)
-            {
-                string key = current.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
-                if (byKey.TryGetValue(key, out TypeModel? candidate) && candidate.Kind == TypeKind.Object)
-                {
-                    return key;
-                }
-            }
-
-            return null;
-        }
-
         private static void EmitObjectRules(
             StringBuilder builder,
             TypeModel model,
@@ -313,7 +165,11 @@ namespace Dahomey.Cbor.Generator
             string ruleName = ruleNames[key];
             PolymorphicShape shape = shapes[key];
 
-            if (!shape.IsInstantiable && shape.Subtypes.Count == 0)
+            // A type that cannot be instantiated is described only by its subtypes, so it needs a
+            // discriminator somewhere beneath it -- a choice whose arms carry none describes a document
+            // no consumer can tell apart. Deliberately narrow to the non-instantiable case: an ordinary
+            // concrete class with no subtypes is the overwhelmingly common shape and must stay silent.
+            if (!shape.IsInstantiable && !shape.HasDiscriminatedDescendant)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(
                     Diagnostics.IncompletePolymorphicSchema,
