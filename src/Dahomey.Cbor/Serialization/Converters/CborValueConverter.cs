@@ -1,6 +1,7 @@
 ﻿using Dahomey.Cbor.ObjectModel;
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -247,11 +248,69 @@ namespace Dahomey.Cbor.Serialization.Converters
             MapWriterContext mapWriterContext = new MapWriterContext
             {
                 obj = value,
-                enumerator = value.GetEnumerator(),
+                enumerator = _options.Deterministic
+                    ? SortedEntries(value).GetEnumerator()
+                    : value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : _options.MapLengthMode
             };
             writer.WriteMap(this, ref mapWriterContext);
+        }
+
+        // Same shape as AbstractDictionaryConverter.SortedEntries: the key set is only known at write
+        // time, so this materialises and sorts on every write. GetMapSize only reads context.obj.Count,
+        // which sorting cannot change, so it needs no edit -- only which sequence the enumerator walks
+        // differs.
+        private static List<KeyValuePair<CborValue, CborValue>> SortedEntries(CborObject obj)
+        {
+            List<KeyValuePair<CborValue, CborValue>> entries = new List<KeyValuePair<CborValue, CborValue>>(obj);
+
+            try
+            {
+                entries.Sort(CompareEntriesForDeterministicOrder);
+            }
+            catch (InvalidOperationException ex) when (ex.InnerException is CborException cborException)
+            {
+                // List<T>.Sort wraps any exception thrown by the comparison delegate in an
+                // InvalidOperationException; unwrap so callers see the CborException itself, matching
+                // AbstractDictionaryConverter.SortedEntries.
+                throw cborException;
+            }
+
+            return entries;
+        }
+
+        private static int CompareEntriesForDeterministicOrder(
+            KeyValuePair<CborValue, CborValue> x, KeyValuePair<CborValue, CborValue> y)
+        {
+            // CborValue exposes its underlying wire type via Type rather than via a distinct CLR type
+            // per key kind the way Dictionary<TK, TV> did, so dispatch on that discriminator instead of
+            // a CLR `is` pattern.
+            CborValue keyX = x.Key;
+            CborValue keyY = y.Key;
+
+            if (keyX.Type == CborValueType.String && keyY.Type == CborValueType.String)
+            {
+                return CborKeyComparer.CompareTextKeys(
+                    Encoding.UTF8.GetBytes(keyX.Value<string>()),
+                    Encoding.UTF8.GetBytes(keyY.Value<string>()));
+            }
+
+            if (IsIntegerKey(keyX.Type) && IsIntegerKey(keyY.Type))
+            {
+                return CborKeyComparer.CompareIntKeys(keyX.Value<int>(), keyY.Value<int>());
+            }
+
+            throw new CborException(
+                $"Deterministic encoding supports only string and int CborObject keys; found {keyX.Type} key.");
+        }
+
+        // CborPositive (major type 0) and CborNegative (major type 1) are both integer-keyed; CBOR
+        // itself does not distinguish "positive int" and "negative int" as separate key kinds the way
+        // CborValueType does.
+        private static bool IsIntegerKey(CborValueType type)
+        {
+            return type == CborValueType.Positive || type == CborValueType.Negative;
         }
 
         CborArray? ICborConverter<CborArray?>.Read(ref CborReader reader)
