@@ -43,6 +43,12 @@ namespace Dahomey.Cbor.Generator
 
             foreach (TypeModel model in InEmissionOrder(ordered, roots))
             {
+                if (model.Kind == TypeKind.Enum)
+                {
+                    EmitEnumRule(builder, model, ruleNames, options);
+                    continue;
+                }
+
                 if (model.Kind != TypeKind.Object)
                 {
                     continue;
@@ -129,6 +135,66 @@ namespace Dahomey.Cbor.Generator
             }
 
             builder.Append("}\n\n");
+        }
+
+        /// <summary>
+        /// EnumConverter writes the underlying integer by default and the member name when EnumFormat
+        /// is WriteToString. Naming the members rather than emitting a bare <c>int</c> is what makes
+        /// an added enum member show up as a schema diff.
+        /// </summary>
+        private static void EmitEnumRule(
+            StringBuilder builder,
+            TypeModel model,
+            IReadOnlyDictionary<string, string> ruleNames,
+            GenerationOptions options)
+        {
+            string key = model.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+            List<string> members = new List<string>();
+
+            foreach (ISymbol member in model.Symbol.GetMembers())
+            {
+                if (member is IFieldSymbol { IsConst: true, ConstantValue: not null } field)
+                {
+                    members.Add(options.EnumFormat == "WriteToString"
+                        ? "\"" + field.Name + "\""
+                        : field.ConstantValue.ToString());
+                }
+            }
+
+            builder.Append(ruleNames[key]);
+            builder.Append(" = ");
+
+            if (members.Count == 0)
+            {
+                builder.Append("int");
+            }
+            else if (options.EnumFormat == "WriteToString")
+            {
+                builder.Append(string.Join(" / ", members));
+            }
+            else
+            {
+                // A contiguous span of integers reads better as a range than as a long choice.
+                builder.Append(IsContiguousFromZero(members)
+                    ? "0.." + (members.Count - 1)
+                    : string.Join(" / ", members));
+            }
+
+            builder.Append("\n\n");
+        }
+
+        private static bool IsContiguousFromZero(List<string> members)
+        {
+            for (int index = 0; index < members.Count; index++)
+            {
+                if (members[index] != index.ToString())
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>

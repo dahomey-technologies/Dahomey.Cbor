@@ -4,9 +4,10 @@ using System.Collections.Generic;
 namespace Dahomey.Cbor.Generator
 {
     /// <summary>
-    /// Renders the CDDL for a type as it appears at a use site. Objects resolve to a rule name;
-    /// primitives are inlined. Every other kind -- enums included -- has no representation yet and
-    /// returns null, so the caller can report CBOR1007.
+    /// Renders the CDDL for a type as it appears at a use site. Objects and enums resolve to a rule
+    /// name; primitives, byte arrays, nullables, arrays/collections and dictionaries are inlined,
+    /// recursing into their element/value types. A kind with no representation (or an element/value
+    /// type that itself has none) returns null, so the caller can report CBOR1007.
     /// </summary>
     internal static class CddlTypeReference
     {
@@ -32,12 +33,42 @@ namespace Dahomey.Cbor.Generator
             switch (model.Kind)
             {
                 case TypeKind.Primitive:
-                    rendered = RenderPrimitive(type);
+                    rendered = RenderPrimitive(type, options);
                     break;
 
+                case TypeKind.Enum:
                 case TypeKind.Object:
                     rendered = ruleNames.TryGetValue(key, out string? name) ? name : null;
                     break;
+
+                case TypeKind.ByteArray:
+                    rendered = "bstr";
+                    break;
+
+                case TypeKind.Nullable:
+                {
+                    string? underlying = Render(model.UnderlyingType!, byKey, ruleNames, options);
+                    rendered = underlying is null ? null : underlying + " / nil";
+                    break;
+                }
+
+                case TypeKind.Array:
+                case TypeKind.Collection:
+                {
+                    string? element = Render(model.ElementType!, byKey, ruleNames, options);
+                    rendered = element is null ? null : "[* " + element + "]";
+                    break;
+                }
+
+                case TypeKind.Dictionary:
+                {
+                    string? dictionaryKey = Render(model.ElementType!, byKey, ruleNames, options);
+                    string? value = Render(model.ValueType!, byKey, ruleNames, options);
+                    rendered = dictionaryKey is null || value is null
+                        ? null
+                        : "{* " + dictionaryKey + " => " + value + "}";
+                    break;
+                }
 
                 default:
                     return null;
@@ -71,7 +102,7 @@ namespace Dahomey.Cbor.Generator
         /// Narrow integers get a range rather than the prelude's unbounded <c>int</c>, because the
         /// schema is a contract about what is written and a byte is never 256.
         /// </summary>
-        private static string? RenderPrimitive(ITypeSymbol type)
+        private static string? RenderPrimitive(ITypeSymbol type, GenerationOptions options)
         {
             switch (type.SpecialType)
             {
@@ -114,6 +145,17 @@ namespace Dahomey.Cbor.Generator
 
                 case SpecialType.System_Object:
                     return "any";
+
+                case SpecialType.System_DateTime:
+                    // DateTimeConverter tags every form: 0 with an ISO 8601 text string, 1 with
+                    // seconds since the epoch as an integer, and 1 with fractional seconds as a
+                    // float for milliseconds.
+                    return options.DateTimeFormat switch
+                    {
+                        "Unix" => "#6.1(int)",
+                        "UnixMilliseconds" => "#6.1(float)",
+                        _ => "#6.0(tstr)",
+                    };
             }
 
             // System.Decimal is deliberately absent: it is written as 0xFC plus 16 bytes, and
