@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.ObjectModel;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -341,6 +342,71 @@ namespace Dahomey.Cbor.Tests
             {
                 [1.5] = 1,
                 [2.5] = 2,
+            };
+
+            CborOptions options = new CborOptions { Deterministic = true };
+            Assert.Throws<CborException>(() => Helper.Write(value, options));
+        }
+
+        [Fact]
+        public void CborObjectStringKeysAreSortedWhenDeterministic()
+        {
+            CborObject value = new CborObject
+            {
+                ["zebra"] = 1,
+                ["apple"] = 2,
+            };
+
+            // A2 map(2)
+            //   656170706C65 "apple" 02
+            //   657A65627261 "zebra" 01
+            Helper.TestWrite(value,
+                "A2656170706C6502657A6562726101",
+                null,
+                new CborOptions { Deterministic = true });
+
+            // Insertion order is zebra, apple, so the non-deterministic encoding disagrees with the
+            // sorted one above -- pinning that this is actually the sort taking effect, not a
+            // coincidence of Dictionary's default enumeration order.
+            Assert.NotEqual(Helper.Write(value), Helper.Write(value, new CborOptions { Deterministic = true }));
+        }
+
+        [Fact]
+        public void CborObjectIntegerKeysSortMajorTypeZeroBeforeMajorTypeOneWhenDeterministic()
+        {
+            CborObject value = new CborObject
+            {
+                [1] = "one",
+                [-1] = "minus one",
+                [0] = "zero",
+            };
+
+            // Same rule as IntKeyedDictionaryKeysAreSortedWhenDeterministic above: CborPositive (major
+            // type 0) always sorts before CborNegative (major type 1), so 0 and 1 both precede -1
+            // despite -1 > ... being false in plain numeric order.
+            //
+            // A3 map(3)
+            //   00  0   64 7A65726F           "zero"
+            //   01  1   63 6F6E65              "one"
+            //   20 -1   69 6D696E7573206F6E65  "minus one"
+            Helper.TestWrite(value,
+                "A300647A65726F01636F6E6520696D696E7573206F6E65",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void CborObjectWithUnsupportedKeyTypeThrowsUnwrappedWhenDeterministic()
+        {
+            // A boolean key is neither CborValueType.String nor CborValueType.Positive/Negative, so it
+            // must throw CborException -- and, per the List<T>.Sort wrapping bug fixed for
+            // NonStringNonIntDictionaryKeysThrowWhenDeterministic, it must arrive as a CborException,
+            // not wrapped in InvalidOperationException. Assert.Throws<CborException> already fails on a
+            // mismatched exception type, so this pins the unwrap without any extra assertion.
+            CborObject value = new CborObject
+            {
+                [true] = 1,
+                ["ok"] = 2,
             };
 
             CborOptions options = new CborOptions { Deterministic = true };
