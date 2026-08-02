@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -22,6 +23,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         private readonly CborOptions _options;
+        private Func<TK, DeterministicKeyOrder.SortKey>? _decorateKey;
 
         protected abstract IDictionary<TK, TV> InstantiateTempCollection();
         protected abstract TC InstantiateCollection(IDictionary<TK, TV> tempCollection);
@@ -57,12 +59,29 @@ namespace Dahomey.Cbor.Serialization.Converters
             WriterContext context = new WriterContext
             {
                 count = value.Count,
-                enumerator = value.GetEnumerator(),
+                enumerator = _options.Deterministic
+                    ? SortedEntries(value)
+                    : value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : _options.MapLengthMode
             };
 
             writer.WriteMap(this, ref context);
+        }
+
+        // The key set is only known at write time (unlike fixed object members, which ObjectConverter
+        // sorts once per type), so this materialises and sorts on every write. GetMapSize/WriteMapItem
+        // are untouched: they only ever pump context.enumerator, so handing them the sorted sequence's
+        // enumerator instead of the dictionary's is enough.
+        private IEnumerator<KeyValuePair<TK, TV>> SortedEntries(IDictionary<TK, TV> dictionary)
+        {
+            // Held in a field rather than written inline: the lambda closes over _options, so writing it
+            // at the call site would allocate a closure on every write.
+            _decorateKey ??= key => DeterministicKeyOrder.ForDictionaryKey(key, _options);
+
+            KeyValuePair<TK, TV>[] sorted = DeterministicKeyOrder.Sort(dictionary, _decorateKey);
+
+            return ((IEnumerable<KeyValuePair<TK, TV>>)sorted).GetEnumerator();
         }
 
         public void ReadBeginMap(int size, ref ReaderContext context)
