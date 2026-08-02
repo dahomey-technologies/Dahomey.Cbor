@@ -20,11 +20,23 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             List<MemberMapping<T>> memberMappings = new List<MemberMapping<T>>();
 
             CborDiscriminatorAttribute? discriminatorAttribute = type.GetCustomAttribute<CborDiscriminatorAttribute>();
+            CborIntDiscriminatorAttribute? intDiscriminatorAttribute = type.GetCustomAttribute<CborIntDiscriminatorAttribute>();
+
+            if (discriminatorAttribute != null && intDiscriminatorAttribute != null)
+            {
+                throw new CborException(
+                    $"Type {type.FullName} cannot be annotated with both {nameof(CborDiscriminatorAttribute)} and {nameof(CborIntDiscriminatorAttribute)}.");
+            }
 
             if (discriminatorAttribute != null)
             {
                 objectMapping.SetDiscriminator(discriminatorAttribute.Discriminator);
                 objectMapping.SetDiscriminatorPolicy(discriminatorAttribute.Policy);
+            }
+            else if (intDiscriminatorAttribute != null)
+            {
+                objectMapping.SetDiscriminator(intDiscriminatorAttribute.Discriminator);
+                objectMapping.SetDiscriminatorPolicy(intDiscriminatorAttribute.Policy);
             }
 
 

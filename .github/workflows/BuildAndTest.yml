@@ -34,8 +34,18 @@ jobs:
             9.0.x
             10.0.x
 
+      - name: setup Ruby and the cddl gem
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: install cddl
+        run: gem install cddl
+
       - name: build
         run: dotnet build -c Release src/Dahomey.Cbor
 
       - name: test
         run: dotnet test -c Release src/Dahomey.Cbor.Tests
+        env:
+          CDDL_REQUIRED: "1"

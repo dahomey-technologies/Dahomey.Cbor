@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+
+    <!--
+      Roslyn component: consumed as an analyzer, not as a referenceable library.
+      Do NOT set IncludeBuildOutput=false here. It suppresses the build output that an
+      OutputItemType="Analyzer" ProjectReference resolves from, so the generator silently never runs -
+      and the symptom is a baffling CS0534 "does not implement inherited abstract member Configure" on
+      the user's context rather than anything mentioning analyzers. (It is a NuGet packaging knob; when
+      this is packaged, place the dll under analyzers/dotnet/cs instead.)
+    -->
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>false</IsPackable>
+
+    <Authors>Michaël Catanzariti</Authors>
+    <Company>Dahomey Technologies</Company>
+    <Description>Source generator producing reflection-free, Native-AOT-safe CBOR mappings for Dahomey.Cbor.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

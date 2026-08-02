@@ -91,6 +91,29 @@ await Cbor.SerializeAsync(cborObject, stream);
 
 ```
 
+### Typed arrays (RFC 8746)
+
+Numeric arrays can be written as RFC 8746 typed arrays, which encode the whole array as a single byte
+string instead of one headered item per element:
+
+```csharp
+CborOptions options = new CborOptions { TypedArrayMode = TypedArrayMode.LittleEndian };
+await Cbor.SerializeAsync(new[] { 1.5f, 2.5f }, stream, options);
+// writes D8 55 48 00 00 C0 3F 00 00 20 40
+```
+
+Supported element types, with their little-endian tag: `sbyte` (72), `ushort` (69), `short` (77),
+`uint` (70), `int` (78), `ulong` (71), `long` (79), `Half` (84), `float` (85) and `double` (86).
+`byte[]` is deliberately not included: a plain CBOR byte string is shorter and is what the format
+already uses; reading tags 64 and 68 still works.
+
+On a `float[1000]` of realistic sample data, writing it as a typed array produces 4005 bytes versus
+4923 bytes for a plain array of individually headered floats, a saving of 918 bytes. The 5 bytes of
+typed-array overhead are `D8 55` (tag 85) plus `59 0F A0` (byte string, length 4000).
+
+Reading typed arrays needs no configuration and is always enabled, in both byte orders. Writing them
+is opt-in via `CborOptions.TypedArrayMode`, because it changes the bytes on the wire.
+
 ### Custom converters
 
 If you need to write a customer converter for a specific class, you can inherit a custom converter class for CborConverterBase<T>.
@@ -125,4 +148,234 @@ The last two options are useful when you write a custom cbor converter for a cla
 
 CborConverters are use in the heart of the library for standard types and auto discovered custom classes by reflection.
 It means you will benefit of the same features and performance.
+
+### Polymorphism
+
+To deserialize a base class or interface back into the concrete type that was written, the payload must
+carry a *discriminator*. Decorate each concrete type with a discriminator attribute:
+
+```csharp
+public abstract class Shape
+{
+    public int Id { get; set; }
+}
+
+[CborDiscriminator("circle")]      // string discriminator
+public class Circle : Shape
+{
+    public double Radius { get; set; }
+}
+
+[CborIntDiscriminator(2)]          // integer discriminator — more compact on the wire
+public class Square : Shape
+{
+    public double Side { get; set; }
+}
+```
+
+A type must not carry both attributes; doing so throws a `CborException`.
+
+Writing resolves the discriminator from the runtime type automatically. **Reading** needs the concrete
+types registered up front, so that a discriminator value can be mapped back to a type:
+
+```csharp
+CborOptions options = new CborOptions();
+options.Registry.DiscriminatorConventionRegistry.RegisterType<Circle>();
+options.Registry.DiscriminatorConventionRegistry.RegisterType<Square>();
+
+Shape shape = Cbor.Deserialize<Shape>(buffer, options);   // yields a Circle or a Square
+```
+
+#### Where the discriminator is written
+
+The location depends on `CborObjectFormat`:
+
+| Object format | Discriminator location |
+|---|---|
+| `StringKeyMap` (default) | under the member name `"_t"` |
+| `IntKeyMap` | under key `0` |
+| `Array` | first item, wrapped in the `DiscriminatorSemanticTag` (default `39`) |
+
+```csharp
+// StringKeyMap: {"_t": 2, "Side": 3.0, "Id": 1}
+// IntKeyMap:    {0: 2, 1: 1, 2: 3.0}
+// Array:        [39(2), 1, 3.0]
+```
+
+#### Controlling when the discriminator is written
+
+`CborDiscriminatorPolicy` (per type via the attribute's `Policy` property, or globally via
+`CborOptions.DiscriminatorPolicy`):
+
+* `Auto` (the effective default) — written only when the declared type differs from the actual type
+* `Always` — always written, even when serializing the concrete type directly
+* `Never` — never written
+
+#### Using a different member name
+
+Both discriminator kinds default to the `"_t"` member name. Register the convention explicitly to
+change it:
+
+```csharp
+DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+registry.ClearConventions();
+registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "t"));
+```
+
+For a discriminator that is neither a plain string nor a plain int, implement `IDiscriminatorConvention`
+and register it the same way.
+
+> **Note:** the registry caches one convention per declared type, so a single hierarchy cannot mix
+> string- and int-keyed discriminators. Independent hierarchies may each use their own kind within the
+> same `CborOptions`.
+
+### CDDL schemas
+
+Add `[CborCddlSchema]` to a source-generated context and it gains a `CddlSchema` constant holding an
+[RFC 8610](https://www.rfc-editor.org/rfc/rfc8610) schema for every type it declares:
+
+```csharp
+[CborSerializable(typeof(CddlPerson))]
+[CborCddlSchema]
+public partial class CddlTestContext : CborSerializerContext { }
+
+File.WriteAllText("person.cddl", CddlTestContext.CddlSchema);
+```
+
+For
+
+```csharp
+public class CddlPerson
+{
+    public string Name { get; set; }
+    public int Age { get; set; }
+    public byte Rating { get; set; }
+    public bool Active { get; set; }
+    public double Score { get; set; }
+}
+```
+
+`CddlSchema` is:
+
+```cddl
+; Generated by Dahomey.Cbor. Do not edit.
+; Describes what the serializer WRITES, closed over the declared members, exact except
+; where a converter's own output is not: `any` for object, the open uint/int form for a
+; [Flags] enum, any length for [* X] and {* K => V}, and a member declared as a polymorphic
+; base admitting every subtype the context declares. One case is narrower than the writer:
+; a uint-backed [Flags] value above int.MaxValue is written as a negative integer, which
+; `uint` rejects.
+; Member types follow their nullable annotations. A member declared non-nullable but left
+; null at run time is written as F6 and will NOT validate against this schema.
+
+CddlPerson = {
+  "Name": tstr,
+  "Age": -2147483648..2147483647,
+  "Rating": 0..255,
+  "Active": bool,
+  "Score": float,
+}
+```
+
+A few things to know about what gets emitted:
+
+* **It describes what the serializer writes, not what the reader accepts.** `UnhandledNameMode`
+  defaults to `Silent`, so unknown keys are tolerated on read but never emitted — the schema is closed
+  over the declared members, matching the writer, not a looser description of everything the reader
+  tolerates. It is exact except where a converter's own output is not, and the header lists those
+  cases: `object` is `any`, a `[Flags]` enum is the open `uint`/`int` form, `[* X]` and `{* K => V}`
+  admit any length, and a member declared as a polymorphic base admits every subtype the context
+  declares.
+* **Member types follow their nullable annotations.** A member whose type is annotated nullable (or
+  left in an unannotated context) renders as `X / nil`; a member annotated non-nullable renders as the
+  bare rule `X`. The same rule reaches collection elements and dictionary values, which follow their
+  own annotation rather than the member's. Dictionary *keys* never render as nilable: RFC 8610's
+  `memberkey` production admits only a `type1`, so a `/` choice there is a parse error, and
+  `Dictionary<TKey,TValue>` throws on a null key anyway. `byte`, `short`, `int` and their unsigned
+  counterparts get their exact range rather than the prelude's unbounded `int`/`uint`; `long` and
+  `ulong` get `int` and `uint`, which is already exact for them.
+* **Collection, array and dictionary roots get a rule of their own.**
+  `[CborSerializable(typeof(List<Person>))]` emits `ListOfPerson = [* Person]` alongside `Person`, so
+  the schema describes the document actually written and not only its element type.
+* **Polymorphic types get a `-poly` rule, and concrete ones a rule pair.** `X-poly` is the type
+  choice `X-poly = A-poly / B-poly / ...` over the discriminated subtypes, and a member typed as the
+  polymorphic base references `X-poly`, not `X`. A *concrete* base also gets the bare rule `X`,
+  describing what is written when the static type at the call site is exactly `X` — the discriminator
+  is suppressed there — and that bare rule joins its own choice as an arm, alongside an anonymous arm
+  for the same type reached through a base of its own and therefore carrying a discriminator. An
+  abstract class or an interface cannot be written as itself and correctly gets no bare rule. An
+  abstract type or interface with no discriminated subtype reachable from the context is a build error
+  (`CBOR1008`) — a type choice with nothing to distinguish its arms describes a document nothing can
+  actually tell apart.
+* **Settings that change the wire format must be declared on the context**, since the generator runs at
+  compile time and cannot see run-time `CborOptions`:
+
+  ```csharp
+  [CborSourceGenerationOptions(
+      EnumFormat = ValueFormat.WriteToString,
+      DateTimeFormat = DateTimeFormat.Unix,
+      TypedArrayMode = TypedArrayMode.LittleEndian)]
+  ```
+
+* **A type with no CDDL representation is a build error (`CBOR1007`)**, not a silent omission — a
+  schema that quietly drops a member is worse than no schema at all.
+
+The output uses core RFC 8610 grammar only — prelude types, arrays, maps, `*`, `/`, ranges and
+`#6.n(...)` — so it can be checked with any conformant CDDL tool; this repository's own tests validate
+it against the reference [`cddl`](https://rubygems.org/gems/cddl) Ruby gem, both by parsing every
+emitted schema and by checking real serializer output against it.
+
+### Deterministic encoding (RFC 8949 §4.2)
+
+```csharp
+CborOptions options = new CborOptions { Deterministic = true };
+await Cbor.SerializeAsync(customObject, stream, options);
+```
+
+Guarantees the four core requirements of RFC 8949 §4.2.1: shortest-form arguments for integers,
+lengths and tags; preferred float serialization; definite lengths; and map keys sorted bytewise on
+their encoded form. The same value always produces the same bytes, which is what makes hashing and
+deduplication meaningful. This is the §4.2.1 ordering rule, not the deprecated length-first variant
+from §4.2.3, which is not implemented.
+
+Key ordering applies to ``StringKeyMap`` and ``IntKeyMap`` objects, ``Dictionary<K,V>``, and
+``CborObject``/``CborValue`` maps. ``CborObjectFormat.Array`` writes its members positionally and has
+no map keys at all, so its bytes are identical with and without ``Deterministic``.
+
+Because ordering is on the *encoded* key, a shorter key always sorts before a longer one, so ``"z"``
+sorts before ``"aa"``. Keys of different CBOR major types order by major type first — unsigned
+integer, then negative integer, then byte string, then text string — which is why negative integer
+keys sort after all non-negative ones.
+
+Supported dictionary key types are ``string``, ``char``, ``byte[]``/``ReadOnlyMemory<byte>``, every
+integral type (``byte``, ``sbyte``, ``short``, ``ushort``, ``int``, ``uint``, ``long``, ``ulong``)
+and enums — each ordered as its own converter writes it. For an enum that means: with
+``EnumFormat.WriteToString`` a value that *has* a name is written and ordered as that name, and a
+value that has none (a combination of flags, or a cast from an unlisted number) falls back to the
+integer form in both. ``CborObject`` keys may be text strings, byte strings and integers, mixed
+freely within one map, which is what lets a document read off the wire be re-encoded
+deterministically. Any other key type throws a ``CborException`` rather than silently emitting
+unsorted output.
+
+**An enum key whose underlying type is wider than 32 bits is written truncated to 32 bits**, and is
+therefore ordered that way too — the ordering follows the bytes actually emitted. Two enum values
+that differ only above bit 31 collide into the same map key, producing a map with duplicate keys that
+is neither deterministic nor valid to hash. This is how enums are written with or without
+``Deterministic``; if your enum is backed by ``long``/``ulong`` and its values exceed 32 bits, key
+the map by the underlying integer instead.
+
+``Deterministic`` may be set at any point in an options object's life, including on the long-lived
+``CborOptions.Default`` — but not while a write using those options is in flight. It is read when a
+write starts, not when converters are built, so it takes effect on the very next write; a change made
+*during* a write (from a property getter, a custom converter, or another thread) is picked up by the
+write after it, and the write in progress finishes on the ordering it started with.
+
+Deterministic mode also rejects any setting that would admit more than one encoding of the same
+value: setting ``ArrayLengthMode`` or ``MapLengthMode`` to ``LengthMode.IndefiniteLength`` while
+``Deterministic`` is enabled throws a ``CborException``.
+
+**When verifying an integrity hash, hash the bytes you received, never a re-serialization.** If
+``UnhandledNameMode.Silent`` is in effect, decoding a document written by a newer version silently
+drops members this version doesn't know about, and re-encoding then produces different — and
+differently hashing — bytes than what was received. Hash the wire bytes directly.
 

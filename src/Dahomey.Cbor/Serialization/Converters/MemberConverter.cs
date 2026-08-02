@@ -74,9 +74,40 @@ namespace Dahomey.Cbor.Serialization.Converters
             _requirementPolicy = memberMapping.RequirementPolicy;
         }
 
+        /// <summary>
+        /// Builds a member converter from accessor delegates instead of a <see cref="MemberInfo"/>.
+        /// Reflection-free and AOT-safe: no <c>Expression.Compile</c>, no <c>MakeGenericType</c>.
+        /// Used by <see cref="DelegateMemberMapping{T, TM}"/>.
+        /// </summary>
+        internal MemberConverter(
+            ReadOnlyMemory<byte> memberName,
+            int? memberIndex,
+            ICborConverter<TM> converter,
+            Func<T, TM>? memberGetter,
+            Action<T, TM>? memberSetter,
+            TM defaultValue,
+            bool ignoreIfDefault,
+            Func<object, bool>? shouldSerializeMethod,
+            LengthMode lengthMode,
+            RequirementPolicy requirementPolicy)
+        {
+            _memberName = memberName;
+            _memberIndex = memberIndex;
+            _converter = converter;
+            _memberGetter = memberGetter;
+            _memberSetter = memberSetter;
+            _defaultValue = defaultValue;
+            _ignoreIfDefault = ignoreIfDefault;
+            _shouldSerializeMethod = shouldSerializeMethod;
+            _lengthMode = lengthMode;
+            _requirementPolicy = requirementPolicy;
+        }
+
         public void Read(ref CborReader reader, object obj)
         {
-            if (reader.GetCurrentDataItemType() == CborDataItemType.Null)
+            // Peek rather than read: this only asks whether the member is null, and the member's
+            // own converter may still need the semantic tag that sits in front of the value.
+            if (reader.PeekDataItemType() == CborDataItemType.Null)
             {
                 if (_requirementPolicy == RequirementPolicy.DisallowNull || _requirementPolicy == RequirementPolicy.Always)
                 {
@@ -239,6 +270,31 @@ namespace Dahomey.Cbor.Serialization.Converters
             _requirementPolicy = memberMapping.RequirementPolicy;
         }
 
+        /// <summary>
+        /// Builds a struct member converter from accessor delegates instead of a <see cref="MemberInfo"/>.
+        /// Reflection-free and AOT-safe. Used by <see cref="DelegateStructMemberMapping{T, TM}"/>.
+        /// </summary>
+        internal StructMemberConverter(
+            string memberName,
+            int? memberIndex,
+            ICborConverter<TM> converter,
+            StructMemberGetterDelegate<T, TM>? memberGetter,
+            StructMemberSetterDelegate<T, TM>? memberSetter,
+            TM defaultValue,
+            bool ignoreIfDefault,
+            RequirementPolicy requirementPolicy)
+        {
+            MemberNameAsString = memberName;
+            _memberName = Encoding.UTF8.GetBytes(memberName);
+            MemberIndex = memberIndex;
+            _converter = converter;
+            _memberGetter = memberGetter;
+            _memberSetter = memberSetter;
+            _defaultValue = defaultValue;
+            _ignoreIfDefault = ignoreIfDefault;
+            _requirementPolicy = requirementPolicy;
+        }
+
         public void Read(ref CborReader reader, object obj)
         {
             throw new NotSupportedException();
@@ -266,7 +322,9 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void Read(ref CborReader reader, ref T instance)
         {
-            if (reader.GetCurrentDataItemType() == CborDataItemType.Null)
+            // Peek rather than read: this only asks whether the member is null, and the member's
+            // own converter may still need the semantic tag that sits in front of the value.
+            if (reader.PeekDataItemType() == CborDataItemType.Null)
             {
                 if (_requirementPolicy == RequirementPolicy.DisallowNull || _requirementPolicy == RequirementPolicy.Always)
                 {
