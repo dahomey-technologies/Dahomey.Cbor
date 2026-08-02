@@ -56,6 +56,21 @@ namespace Dahomey.Cbor.Serialization.Converters
             public T obj;
             public int memberIndex;
             public IObjectConverter objectConverter;
+            /// <summary>
+            /// The member list this write runs on, read from
+            /// <see cref="IObjectConverter.MemberConvertersForWrite"/> once, when the write starts.
+            /// </summary>
+            /// <remarks>
+            /// That property answers from <see cref="CborOptions.Deterministic"/>, which any code
+            /// running during the write -- a property getter, a custom converter, another thread
+            /// sharing <see cref="CborOptions.Default"/> -- is free to change. Consulting it per item
+            /// would let one write start on one ordering and finish on the other, writing some members
+            /// twice and dropping others while the map header still claims the original count: a
+            /// structurally corrupt document that nothing downstream can detect. Snapshotting also
+            /// keeps the property off the per-member path, where it costs a non-inlineable call on
+            /// every object write, deterministic or not.
+            /// </remarks>
+            public IReadOnlyList<IMemberConverter> memberConvertersForWrite;
             public LengthMode lengthMode;
         }
 
@@ -443,6 +458,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                 context.objectConverter = this;
             }
 
+            // One read, here, now that the converter this write runs on is settled -- see
+            // WriterContext.memberConvertersForWrite.
+            context.memberConvertersForWrite = context.objectConverter.MemberConvertersForWrite;
+
             switch (_objectMapping.ObjectFormat)
             {
                 case CborObjectFormat.StringKeyMap:
@@ -802,7 +821,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             int writableMembersCount = 0;
 
-            foreach (IMemberConverter memberConverter in context.objectConverter.MemberConvertersForWrite)
+            foreach (IMemberConverter memberConverter in context.memberConvertersForWrite)
             {
                 if (_isStruct)
                 {
@@ -824,9 +843,9 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private bool WriteItem(ref CborWriter writer, ref WriterContext context)
         {
-            while (context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count)
+            while (context.memberIndex < context.memberConvertersForWrite.Count)
             {
-                IMemberConverter memberConverter = context.objectConverter.MemberConvertersForWrite[context.memberIndex++];
+                IMemberConverter memberConverter = context.memberConvertersForWrite[context.memberIndex++];
                 if (_isStruct)
                 {
                     IMemberConverter<T> typedMemberConverter = (IMemberConverter<T>)memberConverter;
@@ -876,7 +895,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
             }
 
-            return context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count;
+            return context.memberIndex < context.memberConvertersForWrite.Count;
         }
 
         private void HandleUnknownName(ref CborReader reader, Type type, ReadOnlySpan<byte> rawName)
