@@ -63,6 +63,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly Dictionary<int, IMemberConverter> _memberConvertersForReadByIndex = new();
         public List<IMemberConverter> _requiredMemberConvertersForRead = new List<IMemberConverter>();
         private readonly List<IMemberConverter> _memberConvertersForWrite;
+        private List<IMemberConverter>? _deterministicMemberConvertersForWrite;
         private readonly CborOptions _options;
         private readonly SerializationRegistry _registry;
         private readonly IObjectMapping _objectMapping;
@@ -71,7 +72,50 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly bool _isStruct;
         private readonly IDiscriminatorConvention? _discriminatorConvention = null;
 
-        public IReadOnlyList<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
+        /// <summary>
+        /// The members to write, in the order to write them: declaration order normally, deterministic
+        /// key order when <see cref="CborOptions.Deterministic"/> is set.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The flag is read here, where the list is consumed, rather than in the constructor where it is
+        /// built. A converter is built once per type and then cached in
+        /// <see cref="CborConverterRegistry"/> for the lifetime of the options, so an order chosen at
+        /// construction would be frozen at whatever the flag happened to be the first time that type was
+        /// serialized -- and silently wrong, not loudly wrong, for every write after the flag changed.
+        /// <see cref="CborOptions.Default"/> being a process-wide singleton makes that ordinary rather
+        /// than exotic. Reading the flag per write costs a branch and keeps the guarantee honest.
+        /// </para>
+        /// <para>
+        /// <see cref="CborObjectFormat.Array"/> is excluded because it writes members positionally and
+        /// emits no keys at all. There is nothing to order, and reordering would move values between
+        /// array positions -- changing what the document means rather than only how it is spelled.
+        /// </para>
+        /// </remarks>
+        public IReadOnlyList<IMemberConverter> MemberConvertersForWrite
+        {
+            get
+            {
+                if (!_options.Deterministic || _objectMapping.ObjectFormat == CborObjectFormat.Array)
+                {
+                    return _memberConvertersForWrite;
+                }
+
+                // The member set itself is fixed at construction, so its sorted permutation is too, and
+                // is computed once. Two threads racing here build identical lists; the reference
+                // assignment is atomic, so the loser's copy is simply dropped.
+                List<IMemberConverter>? sorted = _deterministicMemberConvertersForWrite;
+
+                if (sorted == null)
+                {
+                    sorted = new List<IMemberConverter>(_memberConvertersForWrite);
+                    sorted.Sort(CompareMembersForDeterministicOrder);
+                    _deterministicMemberConvertersForWrite = sorted;
+                }
+
+                return sorted;
+            }
+        }
         public ByteBufferDictionary<IMemberConverter> MemberConvertersForRead => _memberConvertersForRead;
         public Dictionary<int, IMemberConverter> MemberConvertersForReadByIndex => _memberConvertersForReadByIndex;
         public IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead => _requiredMemberConvertersForRead;
@@ -130,11 +174,6 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     _memberConvertersForWrite.Add(memberConverter);
                 }
-            }
-
-            if (options.Deterministic)
-            {
-                _memberConvertersForWrite.Sort(CompareMembersForDeterministicOrder);
             }
 
             _isInterfaceOrAbstract = typeof(T).IsInterface || typeof(T).IsAbstract;
