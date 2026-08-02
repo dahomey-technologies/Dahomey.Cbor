@@ -108,8 +108,26 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return CborKeyComparer.CompareIntKeys(intX, intY);
             }
 
+            // long/ulong fall out of the same widened comparer used for CborObject keys
+            // (CborValueConverter.TryGetIntegerKeyArgument): int alone cannot address CBOR's full
+            // integer key range (a negative argument reaches -2^64), so once CompareIntegerKeys existed
+            // to handle that, extending it to these two CLR types cost nothing extra here.
+            if (x.Key is long longX && y.Key is long longY)
+            {
+                bool negativeX = longX < 0;
+                bool negativeY = longY < 0;
+                ulong argumentX = negativeX ? (ulong)(-1L - longX) : (ulong)longX;
+                ulong argumentY = negativeY ? (ulong)(-1L - longY) : (ulong)longY;
+                return CborKeyComparer.CompareIntegerKeys(negativeX, argumentX, negativeY, argumentY);
+            }
+
+            if (x.Key is ulong ulongX && y.Key is ulong ulongY)
+            {
+                return CborKeyComparer.CompareIntegerKeys(false, ulongX, false, ulongY);
+            }
+
             throw new CborException(
-                $"Deterministic encoding supports only string and int dictionary keys; found {typeof(TK)}.");
+                $"Deterministic encoding supports only string and int/long/ulong dictionary keys; found {typeof(TK)}.");
         }
 
         public void ReadBeginMap(int size, ref ReaderContext context)
