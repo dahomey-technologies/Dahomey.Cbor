@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -142,6 +143,18 @@ namespace Dahomey.Cbor.Generator
         /// is WriteToString. Naming the members rather than emitting a bare <c>int</c> is what makes
         /// an added enum member show up as a schema diff.
         /// </summary>
+        /// <remarks>
+        /// <see cref="System.FlagsAttribute"/> enums are the exception to "closed": a bitwise
+        /// combination (<c>Colours.Red | Colours.Green</c>) is a value <c>EnumConverter&lt;T&gt;</c>
+        /// writes unconditionally that need not equal any single declared member, so a rule closed
+        /// over the declared values would reject the serializer's own output. Under the default
+        /// format (<c>WriteInt32</c>) that means falling back to the open <c>uint</c>/<c>int</c>
+        /// prelude type. Under <c>WriteToString</c>, <c>EnumConverter&lt;T&gt;.WriteString</c> looks
+        /// the value up in a value-&gt;name dictionary built from the declared members only and, on a
+        /// miss, itself falls back to <c>WriteInt32</c> -- so a flags enum in string mode can still
+        /// write a bare integer for any combination that doesn't exactly match one declared member,
+        /// and the schema has to admit both the named choices and the integer form.
+        /// </remarks>
         private static void EmitEnumRule(
             StringBuilder builder,
             TypeModel model,
@@ -150,45 +163,85 @@ namespace Dahomey.Cbor.Generator
         {
             string key = model.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-            List<string> members = new List<string>();
+            List<string> values = new List<string>();
+            List<string> names = new List<string>();
+            bool hasNegative = false;
 
             foreach (ISymbol member in model.Symbol.GetMembers())
             {
                 if (member is IFieldSymbol { IsConst: true, ConstantValue: not null } field)
                 {
-                    members.Add(options.EnumFormat == "WriteToString"
-                        ? "\"" + field.Name + "\""
-                        : field.ConstantValue.ToString());
+                    string valueText = FormatConstant(field.ConstantValue);
+
+                    if (valueText.Length > 0 && valueText[0] == '-')
+                    {
+                        hasNegative = true;
+                    }
+
+                    // Preserves first-seen order; an alias (`B = 1` alongside `A = 1`) would
+                    // otherwise render as a noisy "1 / 1" in the choice/range form below.
+                    if (!values.Contains(valueText))
+                    {
+                        values.Add(valueText);
+                    }
+
+                    names.Add("\"" + field.Name + "\"");
                 }
             }
 
             builder.Append(ruleNames[key]);
             builder.Append(" = ");
 
-            if (members.Count == 0)
+            bool isFlags = model.Symbol.GetAttributes().Any(attribute =>
+                attribute.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    == "global::System.FlagsAttribute");
+
+            if (isFlags)
+            {
+                string integerForm = hasNegative ? "int" : "uint";
+
+                builder.Append(options.EnumFormat == "WriteToString"
+                    ? string.Join(" / ", names) + " / " + integerForm
+                    : integerForm);
+            }
+            else if (values.Count == 0)
             {
                 builder.Append("int");
             }
             else if (options.EnumFormat == "WriteToString")
             {
-                builder.Append(string.Join(" / ", members));
+                builder.Append(string.Join(" / ", names));
             }
             else
             {
                 // A contiguous span of integers reads better as a range than as a long choice.
-                builder.Append(IsContiguousFromZero(members)
-                    ? "0.." + (members.Count - 1)
-                    : string.Join(" / ", members));
+                builder.Append(IsContiguousFromZero(values)
+                    ? "0.." + (values.Count - 1).ToString(CultureInfo.InvariantCulture)
+                    : string.Join(" / ", values));
             }
 
             builder.Append("\n\n");
         }
 
-        private static bool IsContiguousFromZero(List<string> members)
+        /// <summary>
+        /// Enum member constants arrive as a boxed <c>sbyte</c>/<c>byte</c>/.../<c>ulong</c> (whatever
+        /// the enum's underlying type is); all of those implement <see cref="System.IFormattable"/>.
+        /// Formatting explicitly against <see cref="CultureInfo.InvariantCulture"/> -- rather than the
+        /// culture-sensitive <c>object.ToString()</c> -- matters because .NET substitutes
+        /// <see cref="System.Globalization.NumberFormatInfo.NegativeSign"/> for the ASCII '-' under
+        /// some ICU locales (U+2212 MINUS SIGN), which would both emit invalid RFC 8610 and make the
+        /// schema depend on the machine's locale rather than being a pure function of the source.
+        /// </summary>
+        private static string FormatConstant(object constantValue)
         {
-            for (int index = 0; index < members.Count; index++)
+            return ((System.IFormattable)constantValue).ToString(null, CultureInfo.InvariantCulture);
+        }
+
+        private static bool IsContiguousFromZero(List<string> values)
+        {
+            for (int index = 0; index < values.Count; index++)
             {
-                if (members[index] != index.ToString())
+                if (values[index] != index.ToString(CultureInfo.InvariantCulture))
                 {
                     return false;
                 }
