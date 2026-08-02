@@ -51,8 +51,80 @@ namespace Dahomey.Cbor
         public DateTimeKind UnqualifiedTimeZoneDateTimeKind { get; set; }
         public CborDiscriminatorPolicy DiscriminatorPolicy { get; set; }
         public CborObjectFormat ObjectFormat { get; set; } = CborObjectFormat.StringKeyMap;
-        public LengthMode ArrayLengthMode { get; set; } = LengthMode.DefiniteLength;
-        public LengthMode MapLengthMode { get; set; } = LengthMode.DefiniteLength;
+
+        private LengthMode _arrayLengthMode = LengthMode.DefiniteLength;
+        private LengthMode _mapLengthMode = LengthMode.DefiniteLength;
+        private bool _deterministic;
+
+        public LengthMode ArrayLengthMode
+        {
+            get => _arrayLengthMode;
+            set
+            {
+                if (_deterministic)
+                {
+                    RejectIndefinite(value, nameof(ArrayLengthMode));
+                }
+
+                _arrayLengthMode = value;
+            }
+        }
+
+        public LengthMode MapLengthMode
+        {
+            get => _mapLengthMode;
+            set
+            {
+                if (_deterministic)
+                {
+                    RejectIndefinite(value, nameof(MapLengthMode));
+                }
+
+                _mapLengthMode = value;
+            }
+        }
+
+        /// <summary>
+        /// Produce RFC 8949 section 4.2.1 deterministic output: shortest-form arguments, preferred
+        /// float serialization, definite lengths, and map keys sorted bytewise on their encoded form.
+        /// </summary>
+        /// <remarks>
+        /// Deterministic mode refuses any setting that admits more than one encoding of the same
+        /// value, because such a setting would leave the bytes — and therefore any hash over them —
+        /// undetermined.
+        /// </remarks>
+        public bool Deterministic
+        {
+            get => _deterministic;
+            set
+            {
+                // Guard on `value`, not on `_deterministic` — the field has not been assigned yet, so
+                // the shared helper below would read the OLD state and never fire while enabling.
+                if (value)
+                {
+                    RejectIndefinite(_arrayLengthMode, nameof(ArrayLengthMode));
+                    RejectIndefinite(_mapLengthMode, nameof(MapLengthMode));
+                }
+
+                _deterministic = value;
+            }
+        }
+
+        /// <summary>
+        /// Rejects a length mode that admits more than one encoding of the same value. Callers decide
+        /// whether deterministic mode is in force; this method does not consult <c>_deterministic</c>,
+        /// because the property setter calls it while that field is still stale.
+        /// </summary>
+        private static void RejectIndefinite(LengthMode lengthMode, string propertyName)
+        {
+            if (lengthMode == LengthMode.IndefiniteLength)
+            {
+                throw new CborException(
+                    $"{propertyName} cannot be {nameof(LengthMode.IndefiniteLength)} when {nameof(Deterministic)} is enabled: "
+                    + "indefinite lengths admit more than one encoding of the same value.");
+            }
+        }
+
         /// <summary>
         /// Semantic Tag to check if the discriminator is present when ObjectFormat is Array
         /// </summary>
