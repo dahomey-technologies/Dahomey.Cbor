@@ -16,16 +16,4 @@ namespace Dahomey.Cbor.Tests.Cddl
             }
         }
     }
-
-    /// <summary>The <see cref="TheoryAttribute"/> equivalent of <see cref="CddlFactAttribute"/>.</summary>
-    public sealed class CddlTheoryAttribute : TheoryAttribute
-    {
-        public CddlTheoryAttribute()
-        {
-            if (!CddlTool.Available)
-            {
-                Skip = "the cddl gem is not installed; set CDDL_REQUIRED=1 to make this a failure";
-            }
-        }
-    }
 }
