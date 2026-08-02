@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
@@ -129,6 +130,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     _memberConvertersForWrite.Add(memberConverter);
                 }
+            }
+
+            if (options.Deterministic)
+            {
+                _memberConvertersForWrite.Sort(CompareMembersForDeterministicOrder);
             }
 
             _isInterfaceOrAbstract = typeof(T).IsInterface || typeof(T).IsAbstract;
@@ -694,6 +700,18 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 reader.SkipDataItem();
             }
+        }
+
+        private static int CompareMembersForDeterministicOrder(IMemberConverter x, IMemberConverter y)
+        {
+            // IntKeyMap members carry an index; StringKeyMap members carry a name. A mapping uses one
+            // or the other, never both, so whichever is present decides the order.
+            if (x.MemberIndex.HasValue && y.MemberIndex.HasValue)
+            {
+                return CborKeyComparer.CompareIntKeys(x.MemberIndex.Value, y.MemberIndex.Value);
+            }
+
+            return CborKeyComparer.CompareTextKeys(x.MemberName, y.MemberName);
         }
 
         private static bool FindItem(ref CborReader reader, ReadOnlySpan<byte> name)

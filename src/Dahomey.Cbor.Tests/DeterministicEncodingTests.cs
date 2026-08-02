@@ -158,5 +158,39 @@ namespace Dahomey.Cbor.Tests
         {
             Assert.Equal(expected, Math.Sign(Dahomey.Cbor.Serialization.CborKeyComparer.CompareIntKeys(a, b)));
         }
+
+        private class OutOfOrderObject
+        {
+            public int Zebra { get; set; }
+            public int Apple { get; set; }
+            public int Mango { get; set; }
+        }
+
+        [Fact]
+        public void StringKeyMapMembersAreSortedWhenDeterministic()
+        {
+            OutOfOrderObject value = new OutOfOrderObject { Zebra = 1, Apple = 2, Mango = 3 };
+
+            // A3 map(3)
+            //   654170706C65 "Apple"  02
+            //   654D616E676F "Mango"  03
+            //   655A65627261 "Zebra"  01
+            Helper.TestWrite(value,
+                "A3654170706C6502654D616E676F03655A6562726101",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void DeclarationOrderIsPreservedWhenNotDeterministic()
+        {
+            OutOfOrderObject value = new OutOfOrderObject { Zebra = 1, Apple = 2, Mango = 3 };
+
+            // A3 map(3)
+            //   655A65627261 "Zebra"  01
+            //   654170706C65 "Apple"  02
+            //   654D616E676F "Mango"  03
+            Helper.TestWrite(value, "A3655A6562726101654170706C6502654D616E676F03");
+        }
     }
 }
