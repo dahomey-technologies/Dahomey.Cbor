@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Dahomey.Cbor.Tests.Cddl
 {
@@ -79,8 +80,24 @@ namespace Dahomey.Cbor.Tests.Cddl
                 startInfo.ArgumentList.Add(cborPath);
 
                 using Process process = Process.Start(startInfo)!;
-                string output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+
+                // Both streams are drained concurrently: reading one to EOF before starting the
+                // other deadlocks as soon as the child fills the unread pipe's buffer, and a
+                // rejected document makes cddl print the whole decoded instance to stderr.
+                Task<string> standardOutput = process.StandardOutput.ReadToEndAsync();
+                Task<string> standardError = process.StandardError.ReadToEndAsync();
+
                 process.WaitForExit();
+                string output = standardOutput.Result + standardError.Result;
+
+                // cddl exits 0 when the instance matches and 1 when it does not. Anything else is
+                // the tool failing, which must not read as a rejection -- that would let a negative
+                // test pass because Ruby crashed rather than because the schema did its job.
+                if (process.ExitCode > 1)
+                {
+                    throw new InvalidOperationException(
+                        $"cddl exited with {process.ExitCode}: {output}");
+                }
 
                 return new CddlResult(process.ExitCode == 0, output);
             }
