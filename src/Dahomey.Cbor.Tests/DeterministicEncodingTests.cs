@@ -515,5 +515,76 @@ namespace Dahomey.Cbor.Tests
                 null,
                 new CborOptions { Deterministic = true });
         }
+
+        // RFC 8949 4.2.1 requirement 1: "Integers must be as small as possible." CborWriter's existing
+        // shortest-form ladder already does this unconditionally (it is not gated on Deterministic at
+        // all) -- these pin that pre-existing behaviour so a future change cannot quietly widen it.
+        // Major type 0 (unsigned), one-byte header 0x00-0x17 for values 0-23, then additional-info
+        // 24/25/26 (prefix 0x18/0x19/0x1A) select the smallest argument width that still fits the value.
+        [Theory]
+        [InlineData(0, "00")]
+        [InlineData(23, "17")]
+        [InlineData(24, "1818")]
+        [InlineData(255, "18FF")]
+        [InlineData(256, "190100")]
+        [InlineData(65536, "1A00010000")]
+        public void IntegersUseShortestForm(int value, string expectedHex)
+        {
+            Helper.TestWrite(value, expectedHex, null, new CborOptions { Deterministic = true });
+        }
+
+        // RFC 8949 4.2.1 requirement 2: "the preferred serialization always uses the shortest form of
+        // representing the argument." For floats this means trying binary16 (Half), then binary32
+        // (Single), then binary64 (Double), taking the first that round-trips exactly -- CborWriter.
+        // WriteSingle/WriteDouble already does this unconditionally. These pin the three tiers:
+        //  - 1.5 is exactly representable in binary16 (Half), so it takes the 3-byte F9 form.
+        //  - float.MaxValue needs the full 24-bit mantissa of binary32, so it takes the 5-byte FA form.
+        //  - 1.1 is not exactly representable in binary16 or binary32, so it takes the 9-byte FB form.
+        [Theory]
+        [InlineData(1.5d, "F93E00")]                          // exactly representable as binary16
+        [InlineData(3.4028234663852886E38d, "FA7F7FFFFF")]    // float.MaxValue: needs binary32
+        [InlineData(1.1d, "FB3FF199999999999A")]               // needs binary64
+        public void FloatsUsePreferredSerialization(double value, string expectedHex)
+        {
+            Helper.TestWrite(value, expectedHex, null, new CborOptions { Deterministic = true });
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        private class ArrayFormatObject
+        {
+            // Deliberately alphabetically out of order, same as OutOfOrderObject above -- Array
+            // format is positional by MemberIndex, not by name, so unlike StringKeyMap/IntKeyMap there
+            // is no name to sort by in the first place.
+            [CborProperty(0)]
+            public int Zebra { get; set; }
+            [CborProperty(1)]
+            public int Apple { get; set; }
+            [CborProperty(2)]
+            public int Mango { get; set; }
+        }
+
+        // RFC 8949 4.2.1 requirement 3: "The keys in every map must be sorted in the bytewise
+        // lexicographic order of their deterministic encodings." CborObjectFormat.Array serializes
+        // members positionally by MemberIndex instead of as a map, so there are no map keys at all --
+        // nothing for the deterministic sort to do, and the output is already deterministic by
+        // construction. Pinned two ways: the encoding matches the plain positional array regardless of
+        // Deterministic, and two writes produce identical bytes.
+        [Fact]
+        public void ArrayFormatObjectsHaveNoKeysToSort()
+        {
+            CborOptions options = new CborOptions
+            {
+                Deterministic = true,
+                ObjectFormat = CborObjectFormat.Array,
+            };
+
+            ArrayFormatObject value = new ArrayFormatObject { Zebra = 1, Apple = 2, Mango = 3 };
+
+            // 83 array(3) 01 02 03 -- positions 0/1/2 are Zebra/Apple/Mango by MemberIndex, unaffected
+            // by Deterministic since there are no keys to sort.
+            Helper.TestWrite(value, "83010203", null, options);
+
+            Assert.Equal(Helper.Write(value, options), Helper.Write(value, options));
+        }
     }
 }
