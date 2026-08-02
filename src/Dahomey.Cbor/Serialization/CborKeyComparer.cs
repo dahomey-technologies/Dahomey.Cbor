@@ -56,6 +56,16 @@ namespace Dahomey.Cbor.Serialization
         /// Compares two arguments by the encoded form the shortest-form ladder gives them: first by
         /// how many bytes they occupy, then by value.
         /// </summary>
+        /// <remarks>
+        /// The tiering is load-bearing for <see cref="CompareTextKeys"/>: there, tier (header length)
+        /// and tiebreaker (name content) are different data, so a shorter-tier key can and does sort
+        /// before a longer-tier one whose content would otherwise compare smaller. For
+        /// <see cref="CompareIntKeys"/> it is redundant but harmless: <see cref="ArgumentEncodedSize"/>
+        /// partitions <see cref="ulong"/> into contiguous, strictly increasing ranges, so a lower tier
+        /// always holds numerically smaller values, which makes this method identical to plain
+        /// <c>a.CompareTo(b)</c> for every <see cref="ulong"/> pair. It is kept anyway so both call
+        /// sites share one implementation of the rule.
+        /// </remarks>
         private static int CompareArgumentEncoding(ulong a, ulong b)
         {
             int sizeComparison = ArgumentEncodedSize(a).CompareTo(ArgumentEncodedSize(b));
