@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.ObjectModel;
+using Dahomey.Cbor.Tests.Extensions;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -335,6 +336,161 @@ namespace Dahomey.Cbor.Tests
                 new CborOptions { Deterministic = true });
         }
 
+        // Every integral CLR type is a working dictionary key without Deterministic, so turning the flag
+        // on must not take any of them away: an opt-in guarantee that breaks working code is a poor
+        // trade. Each is decorated as the major type its own key converter emits, so the order computed
+        // is the order of the bytes actually written -- which is why these expectations are the
+        // converters' own encodings, not a normalisation of them.
+        [Fact]
+        public void ByteKeyedDictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<byte, int> value = new Dictionary<byte, int>
+            {
+                [200] = 1,
+                [1] = 2,
+            };
+
+            // A2 map(2)
+            //   01     1    02
+            //   18C8 200    01
+            Helper.TestWrite(value, "A2010218C801", null, new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void SByteKeyedDictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<sbyte, int> value = new Dictionary<sbyte, int>
+            {
+                [-1] = 1,
+                [2] = 2,
+            };
+
+            // A2 map(2)
+            //   02   2   02
+            //   20  -1   01      -- major type 1 sorts after every major type 0 key
+            Helper.TestWrite(value, "A202022001", null, new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void ShortKeyedDictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<short, int> value = new Dictionary<short, int>
+            {
+                [-2] = 1,
+                [3] = 2,
+            };
+
+            // A2 map(2)
+            //   03   3   02
+            //   21  -2   01
+            Helper.TestWrite(value, "A203022101", null, new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void UShortKeyedDictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<ushort, int> value = new Dictionary<ushort, int>
+            {
+                [65535] = 1,
+                [7] = 2,
+            };
+
+            // A2 map(2)
+            //   07          7   02
+            //   19FFFF  65535   01
+            Helper.TestWrite(value, "A2070219FFFF01", null, new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void UIntKeyedDictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<uint, string> value = new Dictionary<uint, string>
+            {
+                [4294967295] = "big",
+                [1] = "small",
+            };
+
+            // A2 map(2)
+            //   01                    1   65736D616C6C  "small"
+            //   1AFFFFFFFF   4294967295   63626967      "big"
+            Helper.TestWrite(value,
+                "A20165736D616C6C1AFFFFFFFF63626967",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        private enum Signal
+        {
+            Stop = -1,
+            Go = 0,
+            Wait = 1,
+        }
+
+        [Fact]
+        public void EnumKeyedDictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<Signal, int> value = new Dictionary<Signal, int>
+            {
+                [Signal.Stop] = 1,
+                [Signal.Go] = 2,
+                [Signal.Wait] = 3,
+            };
+
+            // With the default EnumFormat (WriteToInt) the keys are plain integers, so Stop (-1) is
+            // major type 1 and sorts last.
+            //
+            // A3 map(3)
+            //   00   Go    0   02
+            //   01   Wait  1   03
+            //   20   Stop -1   01
+            Helper.TestWrite(value, "A3000201032001", null, new CborOptions { Deterministic = true });
+        }
+
+        // A boxed enum is not an `int` -- unboxing is exact-type, so `key is int` is false for
+        // Signal.Go however int-like its underlying type is. That is what made enum keys throw, and it
+        // is why enums get a branch of their own rather than falling into the integral one.
+        [Fact]
+        public void EnumKeyedDictionaryFollowsEnumFormatWhenDeterministic()
+        {
+            Dictionary<Signal, int> value = new Dictionary<Signal, int>
+            {
+                [Signal.Wait] = 1,
+                [Signal.Go] = 2,
+            };
+
+            CborOptions options = new CborOptions
+            {
+                Deterministic = true,
+                EnumFormat = ValueFormat.WriteToString,
+            };
+
+            // WriteToString writes each key as its member name, so these are text keys and are ordered
+            // as text: "Go" encodes in 3 bytes, "Wait" in 5, and shorter encodings sort first.
+            //
+            // A2 map(2)
+            //   62476F      "Go"    02
+            //   6457616974  "Wait"  01
+            Helper.TestWrite(value, "A262476F02645761697401", null, options);
+        }
+
+        [Fact]
+        public void ByteArrayKeyedDictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<byte[], int> value = new Dictionary<byte[], int>
+            {
+                [new byte[] { 1, 1 }] = 1,
+                [new byte[] { 2 }] = 2,
+            };
+
+            // Byte-string keys (major type 2) order exactly like text keys: by encoded length first,
+            // then bytewise on the content. h'02' encodes in 2 bytes, h'0101' in 3.
+            //
+            // A2 map(2)
+            //   4102    h'02'    02
+            //   420101  h'0101'  01
+            Helper.TestWrite(value, "A241020242010101", null, new CborOptions { Deterministic = true });
+        }
+
         [Fact]
         public void NonStringNonIntDictionaryKeysThrowWhenDeterministic()
         {
@@ -391,6 +547,71 @@ namespace Dahomey.Cbor.Tests
             //   20 -1   69 6D696E7573206F6E65  "minus one"
             Helper.TestWrite(value,
                 "A300647A65726F01636F6E6520696D696E7573206F6E65",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void CborObjectByteStringKeysAreSortedWhenDeterministic()
+        {
+            CborObject value = new CborObject
+            {
+                [new ReadOnlyMemory<byte>(new byte[] { 1, 1 })] = 1,
+                [new ReadOnlyMemory<byte>(new byte[] { 2 })] = 2,
+            };
+
+            // Byte strings are legal CBOR map keys (major type 2) and are ordered by the same rule as
+            // text: encoded length first, then bytewise on the content.
+            //
+            // A2 map(2)
+            //   4102    h'02'    02
+            //   420101  h'0101'  01
+            Helper.TestWrite(value, "A241020242010101", null, new CborOptions { Deterministic = true });
+        }
+
+        // A map whose keys are all one kind is the easy case; a map read off the wire is under no
+        // obligation to be one. RFC 8949 4.2.1 orders mixed kinds by major type first, which is just the
+        // leading byte's own order: 0 unsigned, then 1 negative, then 2 byte string, then 3 text.
+        [Fact]
+        public void CborObjectMixedKeyKindsSortByMajorTypeWhenDeterministic()
+        {
+            CborObject value = new CborObject
+            {
+                ["text"] = 1,
+                [new ReadOnlyMemory<byte>(new byte[] { 0xFF })] = 2,
+                [-1] = 3,
+                [7] = 4,
+            };
+
+            // A4 map(4)
+            //   07            7        04
+            //   20           -1        03
+            //   41FF         h'FF'     02
+            //   6474657874   "text"    01
+            Helper.TestWrite(value,
+                "A40704200341FF02647465787401",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        // The headline use case: a document arrives, is decoded, and has to be re-encoded to be hashed.
+        // Its keys are whatever the sender chose, in whatever order the sender wrote them, so the
+        // deterministic path has to accept every key kind the reader can produce -- you cannot hash what
+        // you cannot re-encode.
+        [Fact]
+        public void CborObjectReadFromTheWireReEncodesDeterministically()
+        {
+            // A4 map(4), keys deliberately out of canonical order on the wire:
+            //   6474657874   "text"    01
+            //   41FF         h'FF'     02
+            //   20           -1        03
+            //   07            7        04
+            const string scrambled = "A464746578740141FF0220030704";
+
+            CborObject value = Cbor.Deserialize<CborObject>(scrambled.HexToBytes());
+
+            Helper.TestWrite(value,
+                "A40704200341FF02647465787401",
                 null,
                 new CborOptions { Deterministic = true });
         }
@@ -478,6 +699,50 @@ namespace Dahomey.Cbor.Tests
         {
             Assert.Equal(expected, Math.Sign(
                 Dahomey.Cbor.Serialization.CborKeyComparer.CompareIntegerKeys(negativeA, argumentA, negativeB, argumentB)));
+        }
+
+        // CompareKeys is the one comparison that spans kinds: it takes a major type plus whatever varies
+        // within that type (the argument for integers, the payload for strings). Major types are ordered
+        // by their own numeric order, which is the order of the encoded leading byte -- 0 unsigned, 1
+        // negative, 2 byte string, 3 text string -- so the comparison never has to look at the payload of
+        // two keys of different kinds, however those payloads would compare.
+        [Fact]
+        public void CompareKeysOrdersByMajorTypeBeforeAnythingElse()
+        {
+            ReadOnlySpan<byte> noContent = default;
+            ReadOnlySpan<byte> content = new byte[] { 0x41 };
+
+            // Largest possible unsigned key still sorts before the smallest possible negative key.
+            Assert.True(Serialization.CborKeyComparer.CompareKeys(
+                Serialization.CborMajorType.PositiveInteger, ulong.MaxValue, noContent,
+                Serialization.CborMajorType.NegativeInteger, 0, noContent) < 0);
+
+            // Negative before byte string.
+            Assert.True(Serialization.CborKeyComparer.CompareKeys(
+                Serialization.CborMajorType.NegativeInteger, ulong.MaxValue, noContent,
+                Serialization.CborMajorType.ByteString, 0, content) < 0);
+
+            // Byte string before text string, with identical payloads on both sides -- only the major
+            // type can be deciding this.
+            Assert.True(Serialization.CborKeyComparer.CompareKeys(
+                Serialization.CborMajorType.ByteString, 0, content,
+                Serialization.CborMajorType.TextString, 0, content) < 0);
+
+            // Within one major type the existing rules apply unchanged.
+            Assert.Equal(0, Serialization.CborKeyComparer.CompareKeys(
+                Serialization.CborMajorType.TextString, 0, content,
+                Serialization.CborMajorType.TextString, 0, content));
+        }
+
+        [Fact]
+        public void CompareKeysRejectsMajorTypesThatAreNotKeys()
+        {
+            // Nothing decorates a key as an array, so this is unreachable from the converters; it is
+            // pinned here so the rejection stays a CborException rather than, say, a silent 0 that would
+            // make the sort claim two different keys are equal.
+            Assert.Throws<CborException>(() => Serialization.CborKeyComparer.CompareKeys(
+                Serialization.CborMajorType.Array, 0, default,
+                Serialization.CborMajorType.Array, 0, default));
         }
 
         // OPTIONAL widening that fell out of CompareIntegerKeys existing: long/ulong dictionary keys no
@@ -585,6 +850,75 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(value, "83010203", null, options);
 
             Assert.Equal(Helper.Write(value, options), Helper.Write(value, options));
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        private class ArrayFormatWithNegativeIndex
+        {
+            [CborProperty(-1)]
+            public int Negative { get; set; }
+            [CborProperty(0)]
+            public int Zero { get; set; }
+            [CborProperty(1)]
+            public int One { get; set; }
+        }
+
+        // Array format writes members positionally and emits no keys at all, so the deterministic key
+        // order has nothing to act on: any reordering it performed would move VALUES between array
+        // positions, which changes what the document means. A negative MemberIndex is the case that
+        // exposes it, because it is the one index whose deterministic order (major type 1, so last)
+        // differs from the ascending-int order ObjectMapping already applied. Deterministic and
+        // non-deterministic output must therefore be byte-identical here.
+        [Fact]
+        public void ArrayFormatWithNegativeIndexIsUnaffectedByDeterministic()
+        {
+            ArrayFormatWithNegativeIndex value = new ArrayFormatWithNegativeIndex { Negative = 7, Zero = 8, One = 9 };
+
+            // 83 array(3) 07 08 09 -- positions follow ObjectMapping's ascending-index order (-1, 0, 1),
+            // exactly as they do without Deterministic.
+            Helper.TestWrite(value, "83070809", null, new CborOptions { Deterministic = true });
+
+            Assert.Equal(
+                Helper.Write(value),
+                Helper.Write(value, new CborOptions { Deterministic = true }));
+        }
+
+        // The converter for a type is built once and cached in CborConverterRegistry, so any ordering
+        // decision taken while building it would freeze whatever the flag happened to be at that moment.
+        // CborOptions.Default is a process-wide singleton, which makes "flag set after something was
+        // already serialized" the normal case rather than an exotic one. Deterministic output must
+        // depend only on the flag's value at write time.
+        [Fact]
+        public void DeterministicTakesEffectWhenSetAfterTheConverterIsCached()
+        {
+            CborOptions options = new CborOptions();
+            OutOfOrderObject value = new OutOfOrderObject { Zebra = 1, Apple = 2, Mango = 3 };
+
+            // Builds and caches ObjectConverter<OutOfOrderObject> while Deterministic is still false.
+            Assert.Equal("A3655A6562726101654170706C6502654D616E676F03", Helper.Write(value, options));
+
+            options.Deterministic = true;
+
+            // A3 map(3)
+            //   654170706C65 "Apple"  02
+            //   654D616E676F "Mango"  03
+            //   655A65627261 "Zebra"  01
+            Assert.Equal("A3654170706C6502654D616E676F03655A6562726101", Helper.Write(value, options));
+        }
+
+        // ... and back again: clearing the flag on options whose converters were built while it was set
+        // must restore declaration order, so the flag is never a one-way latch.
+        [Fact]
+        public void ClearingDeterministicRestoresDeclarationOrder()
+        {
+            CborOptions options = new CborOptions { Deterministic = true };
+            OutOfOrderObject value = new OutOfOrderObject { Zebra = 1, Apple = 2, Mango = 3 };
+
+            Assert.Equal("A3654170706C6502654D616E676F03655A6562726101", Helper.Write(value, options));
+
+            options.Deterministic = false;
+
+            Assert.Equal("A3655A6562726101654170706C6502654D616E676F03", Helper.Write(value, options));
         }
     }
 }
