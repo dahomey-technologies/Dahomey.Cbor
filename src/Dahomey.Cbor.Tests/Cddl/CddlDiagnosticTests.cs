@@ -95,5 +95,151 @@ namespace Harness
 
             Assert.Empty(diagnostics);
         }
+
+        /// <summary>
+        /// System.Decimal is written as 0xFC plus 16 bytes, where additional information 28 is reserved
+        /// and ill-formed under RFC 8949 section 3 -- no conforming decoder can read it, so no CDDL can
+        /// describe it. <see cref="CddlTypeReference"/>'s primitive switch has no case for it, which is
+        /// what CBOR1007 exists to catch rather than silently omitting the member.
+        /// </summary>
+        [Fact]
+        public void DecimalHasNoCddlRepresentation()
+        {
+            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
+    public class Money { public decimal Amount { get; set; } }
+
+    [CborSerializable(typeof(Money))]
+    [CborCddlSchema]
+    public partial class HarnessContext : CborSerializerContext { }
+}
+");
+
+            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1007");
+            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
+        }
+
+        /// <summary>Guid has no scalar CBOR converter at all, so it falls through the same way.</summary>
+        [Fact]
+        public void GuidHasNoCddlRepresentation()
+        {
+            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
+    public class Keyed { public System.Guid Key { get; set; } }
+
+    [CborSerializable(typeof(Keyed))]
+    [CborCddlSchema]
+    public partial class HarnessContext : CborSerializerContext { }
+}
+");
+
+            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1007");
+            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
+        }
+
+        /// <summary>char has no scalar CBOR converter either.</summary>
+        [Fact]
+        public void CharHasNoCddlRepresentation()
+        {
+            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
+    public class Letter { public char Value { get; set; } }
+
+    [CborSerializable(typeof(Letter))]
+    [CborCddlSchema]
+    public partial class HarnessContext : CborSerializerContext { }
+}
+");
+
+            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1007");
+            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
+        }
+
+        /// <summary>
+        /// DateTimeOffset has no scalar converter either -- only System.DateTime does, via
+        /// DateTimeConverter.
+        /// </summary>
+        [Fact]
+        public void DateTimeOffsetHasNoCddlRepresentation()
+        {
+            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
+    public class Logged { public System.DateTimeOffset When { get; set; } }
+
+    [CborSerializable(typeof(Logged))]
+    [CborCddlSchema]
+    public partial class HarnessContext : CborSerializerContext { }
+}
+");
+
+            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1007");
+            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
+        }
+
+        /// <summary>
+        /// Scalar System.Half has no converter either -- the only place the library references it is the
+        /// RFC 8746 typed-array element path, a different representation entirely (`#6.84(bstr)`), not a
+        /// scalar member's.
+        /// </summary>
+        [Fact]
+        public void ScalarHalfHasNoCddlRepresentation()
+        {
+            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
+    public class Measurement { public System.Half Value { get; set; } }
+
+    [CborSerializable(typeof(Measurement))]
+    [CborCddlSchema]
+    public partial class HarnessContext : CborSerializerContext { }
+}
+");
+
+            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1007");
+            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
+        }
+
+        /// <summary>
+        /// A context with no [CborCddlSchema] never runs the CDDL half of the generator at all, so
+        /// opting out is genuinely free -- even a member type with no CDDL representation raises nothing.
+        /// </summary>
+        [Fact]
+        public void NoSchemaAttributeMeansNoCddlDiagnostics()
+        {
+            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
+    public class Money { public decimal Amount { get; set; } }
+
+    [CborSerializable(typeof(Money))]
+    public partial class HarnessContext : CborSerializerContext { }
+}
+");
+
+            Assert.DoesNotContain(diagnostics, d => d.Id == "CBOR1007");
+        }
+
+        /// <summary>
+        /// Two types named "Node" in different namespaces must both get a rule -- and the result must
+        /// not depend on which the collector happened to see first. Asserting no errors would also pass
+        /// if both collapsed onto one rule, so this checks the two distinct, qualified rule names are
+        /// actually present in what the generator emitted.
+        /// </summary>
+        [Fact]
+        public void CollidingSimpleNamesAreQualifiedByNamespace()
+        {
+            (ImmutableArray<Diagnostic> diagnostics, string generatedText) =
+                CddlGeneratorHarness.RunAndGetGeneratedSources(Preamble + @"
+    namespace Left { public class Node { public int Id { get; set; } } }
+    namespace Right { public class Node { public string Name { get; set; } } }
+
+    public class Pair
+    {
+        public Left.Node First { get; set; }
+        public Right.Node Second { get; set; }
+    }
+
+    [CborSerializable(typeof(Pair))]
+    [CborCddlSchema]
+    public partial class HarnessContext : CborSerializerContext { }
+}
+");
+
+            Assert.Empty(diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error));
+            Assert.Contains("Harness-Left-Node", generatedText);
+            Assert.Contains("Harness-Right-Node", generatedText);
+        }
     }
 }

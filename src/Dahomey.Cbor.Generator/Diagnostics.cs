@@ -95,7 +95,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor IncompletePolymorphicSchema = new(
             id: "CBOR1008",
             title: "Polymorphic schema is incomplete",
-            messageFormat: "'{0}' is polymorphic but no subtype carrying a discriminator is reachable from this context; declare each subtype with [CborSerializable] so the type choice is complete",
+            messageFormat: "'{0}' is polymorphic but no subtype carrying a discriminator is reachable from this context; give each subtype a [CborDiscriminator] or [CborIntDiscriminator] so the type choice can tell them apart",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);

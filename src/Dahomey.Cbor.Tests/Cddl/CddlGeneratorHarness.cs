@@ -15,11 +15,25 @@ namespace Dahomey.Cbor.Tests.Cddl
     /// <remarks>
     /// The only way to assert that a diagnostic <em>fires</em>: a diagnostic raised over this test
     /// project's own sources is a build error, so the failing case cannot be written as an ordinary
-    /// fixture. Deliberately minimal -- diagnostics only, no inspection of the generated sources.
+    /// fixture. <see cref="Run"/> covers the common case -- diagnostics only, no inspection of the
+    /// generated sources; <see cref="RunAndGetGeneratedSources"/> is the escape hatch for the rare
+    /// assertion that needs to see what the generator actually emitted.
     /// </remarks>
     internal static class CddlGeneratorHarness
     {
         public static ImmutableArray<Diagnostic> Run(string source)
+        {
+            return RunAndGetGeneratedSources(source).Diagnostics;
+        }
+
+        /// <summary>
+        /// Same run, but also hands back the text of every source the generator added -- what
+        /// <see cref="Run"/> discards -- for the rare assertion that needs to see the emitted CDDL
+        /// itself rather than just the diagnostics about it (e.g. that two colliding rule names were
+        /// actually disambiguated, not merely that neither raised an error).
+        /// </summary>
+        public static (ImmutableArray<Diagnostic> Diagnostics, string GeneratedText) RunAndGetGeneratedSources(
+            string source)
         {
             CSharpCompilation compilation = CSharpCompilation.Create(
                 "CddlGeneratorHarness",
@@ -29,12 +43,16 @@ namespace Dahomey.Cbor.Tests.Cddl
                     OutputKind.DynamicallyLinkedLibrary,
                     nullableContextOptions: NullableContextOptions.Annotations));
 
-            CSharpGeneratorDriver
+            GeneratorDriver driver = CSharpGeneratorDriver
                 .Create(new CborSourceGenerator())
                 .RunGeneratorsAndUpdateCompilation(
                     compilation, out _, out ImmutableArray<Diagnostic> diagnostics);
 
-            return diagnostics;
+            string generatedText = string.Concat(driver.GetRunResult().Results
+                .SelectMany(result => result.GeneratedSources)
+                .Select(generated => generated.SourceText.ToString()));
+
+            return (diagnostics, generatedText);
         }
 
         /// <summary>
