@@ -6,18 +6,51 @@ using Xunit;
 
 namespace Dahomey.Cbor.Tests
 {
+    /// <summary>
+    /// One member per RFC 8746 element type, and no fewer.
+    /// </summary>
+    /// <remarks>
+    /// The ten-type list is duplicated between <c>TypedArrayTags</c> and
+    /// <c>TypeCollector.IsTypedArrayElementType</c>, because the generator is an analyzer assembly and
+    /// cannot reference the runtime library. This model is what makes the MATCHED PAIR comments at
+    /// those two sites true: a type added to or removed from one list alone changes the bytes one path
+    /// writes for the corresponding member here, and the byte-identity tests below fail. Leave a member
+    /// out and that guarantee silently stops covering its type.
+    /// </remarks>
     public class GeneratedTypedArrays
     {
-        public float[] Samples { get; set; }
-        public double[] Precise { get; set; }
+        // Tag 72, sint8.
+        public sbyte[] Deltas { get; set; }
+
+        // Tag 69, uint16 little endian.
+        public ushort[] Ports { get; set; }
+
+        // Tag 77, sint16 little endian.
         public short[] Counts { get; set; }
+
+        // Tag 70, uint32 little endian.
+        public uint[] Checksums { get; set; }
+
+        // Tag 78, sint32 little endian.
+        public int[] Offsets { get; set; }
+
+        // Tag 71, uint64 little endian.
         public ulong[] Ticks { get; set; }
 
+        // Tag 79, sint64 little endian.
+        public long[] Balances { get; set; }
+
         /// <summary>
-        /// The one element type the generator matches by name rather than by
-        /// <c>SpecialType</c>, because it has no special type.
+        /// Tag 84, binary16 little endian. The one element type the generator matches by name rather
+        /// than by <c>SpecialType</c>, because it has none.
         /// </summary>
         public Half[] Coarse { get; set; }
+
+        // Tag 85, binary32 little endian.
+        public float[] Samples { get; set; }
+
+        // Tag 86, binary64 little endian.
+        public double[] Precise { get; set; }
 
         /// <summary>
         /// byte[] is deliberately not a typed array: it stays a plain CBOR byte string, which is both
@@ -58,13 +91,20 @@ namespace Dahomey.Cbor.Tests
         private static CborOptions ReflectionOptions() =>
             new CborOptions { TypedArrayMode = TypedArrayMode.LittleEndian };
 
+        // Each array carries a boundary value, so a wrong element size or a byte-order slip changes
+        // the payload rather than being absorbed by small positive numbers.
         private static GeneratedTypedArrays Sample() => new GeneratedTypedArrays
         {
-            Samples = new[] { 1.5f, 2.5f, float.MaxValue },
-            Precise = new[] { 1.25, -3.5 },
-            Counts = new short[] { 1, -2, 300 },
+            Deltas = new sbyte[] { 0, -1, sbyte.MinValue, sbyte.MaxValue },
+            Ports = new ushort[] { 0, 443, ushort.MaxValue },
+            Counts = new short[] { 1, -2, 300, short.MinValue },
+            Checksums = new uint[] { 0, 1, uint.MaxValue },
+            Offsets = new[] { 0, -1, int.MinValue, int.MaxValue },
             Ticks = new ulong[] { 0, ulong.MaxValue },
+            Balances = new[] { 0L, -1L, long.MinValue, long.MaxValue },
             Coarse = new[] { (Half)1.5f, (Half)(-2f) },
+            Samples = new[] { 1.5f, 2.5f, float.MaxValue },
+            Precise = new[] { 1.25, -3.5, double.MaxValue },
             Payload = new byte[] { 1, 2, 3 },
         };
 
@@ -81,15 +121,30 @@ namespace Dahomey.Cbor.Tests
 
         /// <summary>
         /// Guards the byte-identity assertion above from passing vacuously: if neither path emitted a
-        /// typed array the two would still agree.
+        /// typed array the two would still agree. Naming every tag also pins the ten-type list itself,
+        /// so dropping an element type from both duplicated lists at once — the one desync
+        /// byte-identity alone cannot see — still fails.
         /// </summary>
-        [Fact]
-        public void GeneratedContextEmitsTheTypedArrayTag()
+        [Theory]
+        [InlineData("D848", "sbyte")]   // tag 72, sint8
+        [InlineData("D845", "ushort")]  // tag 69, uint16 little endian
+        [InlineData("D84D", "short")]   // tag 77, sint16 little endian
+        [InlineData("D846", "uint")]    // tag 70, uint32 little endian
+        [InlineData("D84E", "int")]     // tag 78, sint32 little endian
+        [InlineData("D847", "ulong")]   // tag 71, uint64 little endian
+        [InlineData("D84F", "long")]    // tag 79, sint64 little endian
+        [InlineData("D854", "Half")]    // tag 84, binary16 little endian
+        [InlineData("D855", "float")]   // tag 85, binary32 little endian
+        [InlineData("D856", "double")]  // tag 86, binary64 little endian
+        public void GeneratedContextEmitsEveryTypedArrayTag(string tagHex, string elementType)
         {
-            string generated = Helper.Write(new GeneratedTypedArrays { Samples = new[] { 1.5f } }, Context.Options);
+            string generated = Helper.Write(Sample(), Context.Options);
 
-            // D8 55 is tag 85, binary32 little endian.
-            Assert.Contains("D855", generated);
+            Assert.True(
+                generated.Contains(tagHex),
+                $"The generated context did not tag the {elementType}[] member with {tagHex}. "
+                + "Check that the element type is present in both TypedArrayTags and "
+                + "TypeCollector.IsTypedArrayElementType.");
         }
 
         [Fact]
@@ -101,11 +156,16 @@ namespace Dahomey.Cbor.Tests
             GeneratedTypedArrays actual = Cbor.Deserialize<GeneratedTypedArrays>(
                 hexBuffer.HexToBytes(), Context.Options);
 
+            Assert.Equal(value.Deltas, actual.Deltas);
+            Assert.Equal(value.Ports, actual.Ports);
+            Assert.Equal(value.Counts, actual.Counts);
+            Assert.Equal(value.Checksums, actual.Checksums);
+            Assert.Equal(value.Offsets, actual.Offsets);
+            Assert.Equal(value.Ticks, actual.Ticks);
+            Assert.Equal(value.Balances, actual.Balances);
+            Assert.Equal(value.Coarse, actual.Coarse);
             Assert.Equal(value.Samples, actual.Samples);
             Assert.Equal(value.Precise, actual.Precise);
-            Assert.Equal(value.Counts, actual.Counts);
-            Assert.Equal(value.Ticks, actual.Ticks);
-            Assert.Equal(value.Coarse, actual.Coarse);
             Assert.Equal(value.Payload, actual.Payload);
         }
 
@@ -121,7 +181,16 @@ namespace Dahomey.Cbor.Tests
             byte[] bytes = Helper.Write(value, ReflectionOptions()).HexToBytes();
             GeneratedTypedArrays actual = Cbor.Deserialize<GeneratedTypedArrays>(bytes, Context.Options);
 
+            Assert.Equal(value.Deltas, actual.Deltas);
+            Assert.Equal(value.Ports, actual.Ports);
+            Assert.Equal(value.Counts, actual.Counts);
+            Assert.Equal(value.Checksums, actual.Checksums);
+            Assert.Equal(value.Offsets, actual.Offsets);
+            Assert.Equal(value.Ticks, actual.Ticks);
+            Assert.Equal(value.Balances, actual.Balances);
+            Assert.Equal(value.Coarse, actual.Coarse);
             Assert.Equal(value.Samples, actual.Samples);
+            Assert.Equal(value.Precise, actual.Precise);
         }
 
         /// <summary>
@@ -136,6 +205,8 @@ namespace Dahomey.Cbor.Tests
             string reflection = Helper.Write(value, ReflectionOptions());
             string generated = Helper.Write(value, Context.Options);
 
+            // 43 010203 -- major type 2, 3-byte byte string: [1, 2, 3].
+            // Not 83 010203 (a 3-item array), and not D840 43 010203 (tag 64, uint8 typed array).
             Assert.Equal("43010203", reflection, ignoreCase: true);
             Assert.Equal(reflection, generated);
         }
