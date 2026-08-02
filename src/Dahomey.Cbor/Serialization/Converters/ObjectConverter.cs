@@ -704,8 +704,14 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private static int CompareMembersForDeterministicOrder(IMemberConverter x, IMemberConverter y)
         {
-            // IntKeyMap members carry an index; StringKeyMap members carry a name. A mapping uses one
-            // or the other, never both, so whichever is present decides the order.
+            // IntKeyMap/Array members carry an index and no name. Ordinary StringKeyMap members carry
+            // a name and no index. But DiscriminatorMemberConverter.MemberIndex is hardcoded to 0 in
+            // every format, so a StringKeyMap type with a discriminator has one entry with BOTH a
+            // MemberIndex and a MemberName. That still routes correctly, because the two-sided
+            // HasValue test below only takes the int branch when *both* sides carry an index -- an
+            // ordinary StringKeyMap member's MemberIndex is null, so comparing it against the
+            // discriminator entry always falls through to CompareTextKeys, which is the comparison
+            // that matches how the whole map is actually keyed.
             if (x.MemberIndex.HasValue && y.MemberIndex.HasValue)
             {
                 return CborKeyComparer.CompareIntKeys(x.MemberIndex.Value, y.MemberIndex.Value);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Dahomey.Cbor.Attributes;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -191,6 +192,93 @@ namespace Dahomey.Cbor.Tests
             //   654170706C65 "Apple"  02
             //   654D616E676F "Mango"  03
             Helper.TestWrite(value, "A3655A6562726101654170706C6502654D616E676F03");
+        }
+
+        [CborObjectFormat(CborObjectFormat.IntKeyMap)]
+        private class IntKeyMapWithNegativeIndex
+        {
+            [CborProperty(-1)]
+            public int Negative { get; set; }
+            [CborProperty(0)]
+            public int Zero { get; set; }
+            [CborProperty(1)]
+            public int One { get; set; }
+        }
+
+        // ObjectMapping.ValidateMemberNamesAndindexes unconditionally pre-sorts IntKeyMap members by
+        // plain ascending int? (ObjectMapping.cs ~line 369), regardless of Deterministic. Ascending
+        // int treats -1 as less than 0, so a negative index sorts FIRST here -- this is the pre-existing,
+        // non-deterministic behaviour, and it is the control for the next test.
+        [Fact]
+        public void IntKeyMapNegativeIndexSortsFirstWhenNotDeterministic()
+        {
+            IntKeyMapWithNegativeIndex value = new IntKeyMapWithNegativeIndex { Negative = 7, Zero = 8, One = 9 };
+
+            // A3 map(3)
+            //   20 -1   07
+            //   00  0   08
+            //   01  1   09
+            Helper.TestWrite(value, "A3200700080109");
+        }
+
+        // RFC 8949 4.2.1: a negative key is CBOR major type 1, whose leading byte (0x20-0x3B) always
+        // exceeds a major type 0 leading byte (0x00-0x1B), so canonical order puts every negative key
+        // AFTER every non-negative one -- the opposite of plain ascending int order. CborKeyComparer.
+        // CompareIntKeys gets this right; the ascending pre-sort above does not. With Deterministic
+        // = true, ObjectConverter's own sort runs after that pre-sort and corrects it: -1 (encoded
+        // 0x20) moves from first to last, behind 0 (0x00) and 1 (0x01).
+        [Fact]
+        public void IntKeyMapNegativeIndexSortsLastWhenDeterministic()
+        {
+            IntKeyMapWithNegativeIndex value = new IntKeyMapWithNegativeIndex { Negative = 7, Zero = 8, One = 9 };
+
+            // A3 map(3)
+            //   00  0   08
+            //   01  1   09
+            //   20 -1   07
+            Helper.TestWrite(value,
+                "A3000801092007",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        [CborDiscriminator("Disc")]
+        private class DiscriminatedObject
+        {
+            public int Zebra { get; set; }
+            public int Apple { get; set; }
+        }
+
+        // DiscriminatorMemberConverter.MemberIndex is hardcoded to 0 in every format (MemberConverter.cs
+        // ~line 400), so in a StringKeyMap type carrying a discriminator, the discriminator's
+        // IMemberConverter has BOTH a MemberIndex (0) and a MemberName ("_t"). CompareMembersForDeterministicOrder's
+        // two-sided `x.MemberIndex.HasValue && y.MemberIndex.HasValue` guard still routes this correctly:
+        // ordinary StringKeyMap members have MemberIndex == null, so comparing any of them against the
+        // discriminator entry falls through to CompareTextKeys on both MemberNames. "_t" (2 UTF-8 bytes,
+        // header 0x62) is shorter-encoded than "Apple"/"Zebra" (5 bytes, header 0x65), and CompareTextKeys
+        // orders by encoded length before content, so the discriminator sorts first regardless of its
+        // own text, followed by Apple/Zebra alphabetically.
+        [Fact]
+        public void StringKeyMapWithDiscriminatorIsSortedWhenDeterministic()
+        {
+            CborOptions options = new CborOptions { Deterministic = true };
+            options.Registry.DiscriminatorConventionRegistry.RegisterType(typeof(DiscriminatedObject));
+            options.Registry.ObjectMappingRegistry.Register<DiscriminatedObject>(om =>
+            {
+                om.AutoMap();
+                om.SetDiscriminatorPolicy(Dahomey.Cbor.Attributes.CborDiscriminatorPolicy.Always);
+            });
+
+            DiscriminatedObject value = new DiscriminatedObject { Zebra = 1, Apple = 2 };
+
+            // A3 map(3)
+            //   625F74 "_t"          6444697363 "Disc"
+            //   654170706C65 "Apple" 02
+            //   655A65627261 "Zebra" 01
+            Helper.TestWrite(value,
+                "A3625F746444697363654170706C6502655A6562726101",
+                null,
+                options);
         }
     }
 }
