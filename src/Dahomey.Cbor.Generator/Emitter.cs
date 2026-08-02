@@ -77,7 +77,7 @@ namespace Dahomey.Cbor.Generator
                 }
 
                 string fullName = FullName(model.Symbol);
-                string accessorName = CddlNames.AccessorName(model.Symbol);
+                string accessorName = TypeNames.AccessorName(model.Symbol);
                 string fieldName = "_" + char.ToLowerInvariant(accessorName[0]) + accessorName.Substring(1);
 
                 builder.AppendLine($"{indent}    private ICborConverter<{fullName}>? {fieldName};");

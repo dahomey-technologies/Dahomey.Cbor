@@ -194,6 +194,28 @@ namespace Harness
         }
 
         /// <summary>
+        /// A declared root that is a collection gets a rule of its own, so a root whose element has no
+        /// representation has to raise CBOR1007 rather than emit nothing. Neither the collector nor the
+        /// member walk would catch this one: <c>decimal</c> classifies as a primitive, so it draws no
+        /// CBOR1002, and the root has no member above it to report against.
+        /// </summary>
+        [Fact]
+        public void ARootCollectionOfAnUnrepresentableElementIsAnError()
+        {
+            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
+    [CborSerializable(typeof(System.Collections.Generic.List<decimal>))]
+    [CborCddlSchema]
+    public partial class HarnessContext : CborSerializerContext { }
+}
+");
+
+            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1007");
+
+            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
+            Assert.Contains("ListOfDecimal", reported.GetMessage());
+        }
+
+        /// <summary>
         /// A context with no [CborCddlSchema] never runs the CDDL half of the generator at all, so
         /// opting out is genuinely free -- even a member type with no CDDL representation raises nothing.
         /// </summary>

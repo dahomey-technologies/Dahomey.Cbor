@@ -5,7 +5,7 @@ using System.Linq;
 namespace Dahomey.Cbor.Generator
 {
     /// <summary>Identifier construction shared by the registration emitter and the CDDL emitter.</summary>
-    internal static class CddlNames
+    internal static class TypeNames
     {
         /// <summary>
         /// Property name for a type's accessor: <c>Person</c>, and <c>ListOfPerson</c> for

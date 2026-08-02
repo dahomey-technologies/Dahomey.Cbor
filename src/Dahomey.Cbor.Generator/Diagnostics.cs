@@ -76,12 +76,15 @@ namespace Dahomey.Cbor.Generator
 
         /// <summary>
         /// A schema that quietly omits a member is worse than no schema, so a type with no CDDL
-        /// representation is an error rather than a gap in the output.
+        /// representation is an error rather than a gap in the output. <c>{1}</c> is the place that
+        /// would have been omitted, already quoted and phrased by the caller, because the two callers
+        /// describe different places: a member of a type, and a declared root type with no member above
+        /// it to name.
         /// </summary>
         public static readonly DiagnosticDescriptor NoCddlRepresentation = new(
             id: "CBOR1007",
             title: "Type has no CDDL representation",
-            messageFormat: "'{0}' has no CDDL representation, so '{1}.{2}' cannot appear in the emitted schema",
+            messageFormat: "'{0}' has no CDDL representation, so {1} cannot appear in the emitted schema",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -95,7 +98,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor IncompletePolymorphicSchema = new(
             id: "CBOR1008",
             title: "Polymorphic schema is incomplete",
-            messageFormat: "'{0}' is polymorphic but no subtype carrying a discriminator is reachable from this context; give each subtype a [CborDiscriminator] or [CborIntDiscriminator] so the type choice can tell them apart",
+            messageFormat: "'{0}' is polymorphic but no subtype carrying a discriminator is reachable from this context; declare each subtype with [CborSerializable] and give it a [CborDiscriminator] or [CborIntDiscriminator] so the type choice can tell them apart",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
