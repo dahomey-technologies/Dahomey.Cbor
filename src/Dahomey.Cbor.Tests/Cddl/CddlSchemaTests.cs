@@ -62,8 +62,9 @@ namespace Dahomey.Cbor.Tests.Cddl
                 + "; Describes what the serializer WRITES: exact and closed.\n"
                 + "; Member types follow their nullable annotations. A member declared non-nullable but left\n"
                 + "; null at run time is written as F6 and will NOT validate against this schema.\n"
-                + "; Assumes the discriminator key is \"_t\"; a custom discriminator convention is\n"
-                + "; registered at run time and is not visible to the generator.\n"
+                // No discriminator note: the header describes only the placements this schema uses, and
+                // CddlPerson is neither polymorphic nor discriminated. CddlPolymorphismTests covers the
+                // lines that appear when it is.
                 + "\n"
                 + "CddlPerson = {\n"
                 + "  \"Name\": tstr,\n"

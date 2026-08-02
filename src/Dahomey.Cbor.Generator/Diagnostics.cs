@@ -85,5 +85,19 @@ namespace Dahomey.Cbor.Generator
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
+
+        /// <summary>
+        /// A type choice missing a subtype describes a narrower contract than the serializer actually
+        /// writes, which is the quiet failure the schema exists to prevent. Only reachable for a type
+        /// that cannot be instantiated at all -- an abstract class or an interface -- since a concrete
+        /// class with no subtypes is simply described by its own rule.
+        /// </summary>
+        public static readonly DiagnosticDescriptor IncompletePolymorphicSchema = new(
+            id: "CBOR1008",
+            title: "Polymorphic schema is incomplete",
+            messageFormat: "'{0}' is polymorphic but no subtype carrying a discriminator is reachable from this context; declare each subtype with [CborSerializable] so the type choice is complete",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
     }
 }

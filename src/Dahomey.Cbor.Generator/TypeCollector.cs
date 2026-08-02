@@ -252,7 +252,10 @@ namespace Dahomey.Cbor.Generator
                 TypedConstant argument = discriminator.ConstructorArguments[0];
                 model.Discriminator = stringDiscriminator is not null
                     ? Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral((string?)argument.Value ?? string.Empty, quote: true)
-                    : ((int?)argument.Value ?? 0).ToString();
+                    // Invariant, not the compiler host's culture: a negative discriminator would
+                    // otherwise pick up NumberFormatInfo.NegativeSign, which under some ICU locales is
+                    // U+2212 rather than ASCII '-' -- neither compilable C# nor legal RFC 8610.
+                    : ((int?)argument.Value ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
 
             foreach (KeyValuePair<string, TypedConstant> named in discriminator.NamedArguments)
