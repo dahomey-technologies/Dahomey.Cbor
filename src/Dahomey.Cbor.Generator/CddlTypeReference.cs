@@ -12,6 +12,32 @@ namespace Dahomey.Cbor.Generator
     /// </summary>
     internal static class CddlTypeReference
     {
+        /// <summary>Where the rendered text is about to be placed, which decides whether nil is admitted.</summary>
+        private enum Position
+        {
+            /// <summary>An ordinary use site: a member, a collection element or a dictionary value.</summary>
+            Value,
+
+            /// <summary>
+            /// The key half of a map entry. RFC 8610's <c>memberkey</c> production is
+            /// <c>type1 S ["^" S] "=&gt;"</c> -- a <em>type1</em>, not a full <c>type</c> -- so a
+            /// <c>/</c> choice is a parse error there, and <c>{* tstr / nil =&gt; int}</c> is text no
+            /// conformant tool will read. Suppressing nil rather than parenthesising it is also the
+            /// semantically correct call: <c>Dictionary&lt;TKey,TValue&gt;</c> throws on a null key, so
+            /// a nilable key would describe a document the serializer cannot produce.
+            /// </summary>
+            MapKey,
+
+            /// <summary>
+            /// The right-hand side of a rule emitted for a declared root type. A root arrives as a
+            /// <c>typeof(...)</c> argument, which carries no nullable annotation at all, so the
+            /// annotation-driven suffix would fire on every reference-typed root; object and enum roots
+            /// already get a bare rule, and this keeps collection, array and dictionary roots
+            /// consistent with them.
+            /// </summary>
+            Root,
+        }
+
         /// <summary>
         /// Returns null when the type has no CDDL representation, so the caller can report CBOR1007
         /// with the member that reached it.
@@ -21,6 +47,30 @@ namespace Dahomey.Cbor.Generator
             IReadOnlyDictionary<string, TypeModel> byKey,
             IReadOnlyDictionary<string, string> ruleNames,
             GenerationOptions options)
+        {
+            return Render(type, byKey, ruleNames, options, Position.Value);
+        }
+
+        /// <summary>
+        /// Renders a declared root type as the right-hand side of a rule of its own, so that
+        /// <c>[CborSerializable(typeof(List&lt;Person&gt;))]</c> yields <c>ListOfPerson = [* Person]</c>
+        /// rather than a schema describing only <c>Person</c>.
+        /// </summary>
+        public static string? RenderRoot(
+            ITypeSymbol type,
+            IReadOnlyDictionary<string, TypeModel> byKey,
+            IReadOnlyDictionary<string, string> ruleNames,
+            GenerationOptions options)
+        {
+            return Render(type, byKey, ruleNames, options, Position.Root);
+        }
+
+        private static string? Render(
+            ITypeSymbol type,
+            IReadOnlyDictionary<string, TypeModel> byKey,
+            IReadOnlyDictionary<string, string> ruleNames,
+            GenerationOptions options,
+            Position position)
         {
             string key = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
@@ -48,8 +98,14 @@ namespace Dahomey.Cbor.Generator
 
                 case TypeKind.Nullable:
                 {
-                    string? underlying = Render(model.UnderlyingType!, byKey, ruleNames, options);
-                    rendered = underlying is null ? null : underlying + " / nil";
+                    string? underlying = Render(
+                        UnderlyingOf(type, model), byKey, ruleNames, options, position);
+
+                    rendered = underlying is null
+                        ? null
+                        // A `Nullable<T>` key is not nilable either, for the same two reasons MapKey
+                        // documents: `{* 0..255 / nil => tstr}` does not parse, and a null key throws.
+                        : position == Position.MapKey ? underlying : underlying + " / nil";
                     break;
                 }
 
@@ -65,15 +121,18 @@ namespace Dahomey.Cbor.Generator
 
                 case TypeKind.Collection:
                 {
-                    string? element = Render(model.ElementType!, byKey, ruleNames, options);
+                    string? element = Render(
+                        ElementOf(type, model), byKey, ruleNames, options, Position.Value);
                     rendered = element is null ? null : "[* " + element + "]";
                     break;
                 }
 
                 case TypeKind.Dictionary:
                 {
-                    string? dictionaryKey = Render(model.ElementType!, byKey, ruleNames, options);
-                    string? value = Render(model.ValueType!, byKey, ruleNames, options);
+                    string? dictionaryKey = Render(
+                        ElementOf(type, model), byKey, ruleNames, options, Position.MapKey);
+                    string? value = Render(
+                        ValueOf(type, model), byKey, ruleNames, options, Position.Value);
                     rendered = dictionaryKey is null || value is null
                         ? null
                         : "{* " + dictionaryKey + " => " + value + "}";
@@ -100,12 +159,48 @@ namespace Dahomey.Cbor.Generator
             // member: a bare rule would be a schema that rejects the serializer's own output. Value
             // types cannot be null, so they are unaffected; NotAnnotated is the only annotation that
             // promises the reference is never null.
-            if (type.IsReferenceType && type.NullableAnnotation != NullableAnnotation.NotAnnotated)
+            if (position == Position.Value
+                && type.IsReferenceType
+                && type.NullableAnnotation != NullableAnnotation.NotAnnotated)
             {
                 return rendered + " / nil";
             }
 
             return rendered;
+        }
+
+        // The three accessors below read the element, value and underlying types off the symbol at
+        // hand rather than off the shared TypeModel. TypeCollector keys its model table on a display
+        // string that drops the nullable-reference modifier -- deliberately, because the registration
+        // emitter must not emit two RegisterConverter calls for the one runtime type -- so
+        // `List<string>` and `List<string?>` share a model, and whichever was collected first would
+        // otherwise decide the element nilability of both. The model stays the fallback for the shapes
+        // Classify recognises through an interface rather than through the type's own arity.
+
+        private static ITypeSymbol ElementOf(ITypeSymbol type, TypeModel model)
+        {
+            if (type is IArrayTypeSymbol array)
+            {
+                return array.ElementType;
+            }
+
+            return type is INamedTypeSymbol { TypeArguments.Length: > 0 } named
+                ? named.TypeArguments[0]
+                : model.ElementType!;
+        }
+
+        private static ITypeSymbol ValueOf(ITypeSymbol type, TypeModel model)
+        {
+            return type is INamedTypeSymbol { TypeArguments.Length: > 1 } named
+                ? named.TypeArguments[1]
+                : model.ValueType!;
+        }
+
+        private static ITypeSymbol UnderlyingOf(ITypeSymbol type, TypeModel model)
+        {
+            return type is INamedTypeSymbol { TypeArguments.Length: > 0 } named
+                ? named.TypeArguments[0]
+                : model.UnderlyingType!;
         }
 
         /// <summary>

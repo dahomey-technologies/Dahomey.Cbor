@@ -1,5 +1,6 @@
 // See CddlSchemaTests.cs for why "annotations", not plain "enable".
 #nullable enable annotations
+using System.Collections.Generic;
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Tests.Extensions;
@@ -34,6 +35,17 @@ namespace Dahomey.Cbor.Tests.Cddl
         // render `tstr / nil`.
         public string Oblivious { get; set; }
 #nullable enable annotations
+
+        /// <summary>
+        /// RULING B one level down. Elements NotAnnotated, so <c>[* tstr]</c> -- the annotated
+        /// counterparts live in <see cref="CddlNestedNullabilityTests"/> rather than here, because a
+        /// <c>List&lt;string?&gt;</c> member makes the registration emitter raise CS8619 in the
+        /// consuming project and adding a warning to this branch's build is not worth the fixture.
+        /// </summary>
+        public List<string> RequiredItems { get; set; }
+
+        /// <summary>Values NotAnnotated: <c>{* tstr =&gt; tstr}</c>.</summary>
+        public Dictionary<string, string> RequiredValues { get; set; }
     }
 
     [CborSerializable(typeof(CddlNullableAnnotations))]
@@ -71,10 +83,21 @@ namespace Dahomey.Cbor.Tests.Cddl
                 CddlNullableContext.CddlSchema.Replace("\r\n", "\n"));
         }
 
+        [Fact]
+        public void NotAnnotatedElementsAndValuesRenderBare()
+        {
+            string schema = CddlNullableContext.CddlSchema.Replace("\r\n", "\n");
+
+            Assert.Contains("\"RequiredItems\": [* tstr],\n", schema);
+            Assert.Contains("\"RequiredValues\": {* tstr => tstr},\n", schema);
+        }
+
         /// <summary>
-        /// The assertion RULING B exists for: the two members the schema declares nilable really do
-        /// go out as CBOR null (0xF6) when left null, and the gem accepts that against the emitted
-        /// `tstr / nil` schema rather than rejecting it the way a bare `tstr` would.
+        /// The assertion RULING B exists for: the members the schema declares nilable really do go out
+        /// as CBOR null (0xF6) when left null, and the gem accepts that against the emitted
+        /// `tstr / nil` schema rather than rejecting it the way a bare `tstr` would. The nilable
+        /// element and value are exercised here too, since a rule can be nilable in the right place and
+        /// still reject the byte the writer emits.
         /// </summary>
         [CddlFact]
         public void NullNilableMembersValidateAgainstTheSchema()
@@ -84,6 +107,8 @@ namespace Dahomey.Cbor.Tests.Cddl
                 Required = "x",
                 Optional = null,
                 Oblivious = null,
+                RequiredItems = new List<string> { "a" },
+                RequiredValues = new Dictionary<string, string> { ["k"] = "v" },
             };
 
             string hex = Helper.Write(value, Context.Options);
