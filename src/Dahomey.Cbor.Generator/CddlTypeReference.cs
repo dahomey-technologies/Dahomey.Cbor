@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace Dahomey.Cbor.Generator
 {
@@ -53,6 +54,15 @@ namespace Dahomey.Cbor.Generator
                 }
 
                 case TypeKind.Array:
+                    if (model.IsTypedArray && options.TypedArrayMode == "LittleEndian")
+                    {
+                        ulong? tag = LittleEndianTypedArrayTag(model.ElementType!);
+                        rendered = tag is null ? null : "#6." + tag.Value.ToString(CultureInfo.InvariantCulture) + "(bstr)";
+                        break;
+                    }
+
+                    goto case TypeKind.Collection;
+
                 case TypeKind.Collection:
                 {
                     string? element = Render(model.ElementType!, byKey, ruleNames, options);
@@ -166,6 +176,38 @@ namespace Dahomey.Cbor.Generator
             // a different representation entirely, not this method's concern. Each falls through to
             // CBOR1007 rather than asserting a row no converter backs.
             return null;
+        }
+
+        /// <summary>
+        /// The little-endian half of the RFC 8746 tag table.
+        /// </summary>
+        /// <remarks>
+        /// MATCHED PAIR: these numbers duplicate <c>TypedArrayTags</c> in
+        /// <c>src/Dahomey.Cbor/Serialization/Converters/TypedArrayTags.cs</c>. They cannot be shared --
+        /// the generator is an analyzer assembly and must not reference the runtime library -- so the
+        /// two must be edited together. <c>CddlTypedArrayTests.EveryTypedArrayTagIsEmitted</c> names
+        /// every number as a literal, which is what catches an edit applied to both copies at once;
+        /// comparing the two paths against each other cannot.
+        /// <para>
+        /// <c>byte</c> is deliberately absent: <c>byte[]</c> is a plain CBOR byte string.
+        /// </para>
+        /// </remarks>
+        private static ulong? LittleEndianTypedArrayTag(ITypeSymbol element)
+        {
+            switch (element.SpecialType)
+            {
+                case SpecialType.System_SByte: return 72;
+                case SpecialType.System_UInt16: return 69;
+                case SpecialType.System_Int16: return 77;
+                case SpecialType.System_UInt32: return 70;
+                case SpecialType.System_Int32: return 78;
+                case SpecialType.System_UInt64: return 71;
+                case SpecialType.System_Int64: return 79;
+                case SpecialType.System_Single: return 85;
+                case SpecialType.System_Double: return 86;
+            }
+
+            return element.ToDisplayString() == "System.Half" ? 84 : (ulong?)null;
         }
     }
 }
