@@ -1,7 +1,6 @@
 ﻿using Dahomey.Cbor.ObjectModel;
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -249,7 +248,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 obj = value,
                 enumerator = _options.Deterministic
-                    ? SortedEntries(value).GetEnumerator()
+                    ? SortedEntries(value)
                     : value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : _options.MapLengthMode
@@ -260,81 +259,14 @@ namespace Dahomey.Cbor.Serialization.Converters
         // Same shape as AbstractDictionaryConverter.SortedEntries: the key set is only known at write
         // time, so this materialises and sorts on every write. GetMapSize only reads context.obj.Count,
         // which sorting cannot change, so it needs no edit -- only which sequence the enumerator walks
-        // differs.
-        private static List<KeyValuePair<CborValue, CborValue>> SortedEntries(CborObject obj)
+        // differs. A CborObject may mix key kinds, which is why the order comes from
+        // DeterministicKeyOrder (major type first) rather than from a same-kind-only comparison.
+        private static IEnumerator<KeyValuePair<CborValue, CborValue>> SortedEntries(CborObject obj)
         {
-            List<KeyValuePair<CborValue, CborValue>> entries = new List<KeyValuePair<CborValue, CborValue>>(obj);
+            KeyValuePair<CborValue, CborValue>[] sorted =
+                DeterministicKeyOrder.Sort(obj, DeterministicKeyOrder.ForCborValueKey);
 
-            try
-            {
-                entries.Sort(CompareEntriesForDeterministicOrder);
-            }
-            catch (InvalidOperationException ex) when (ex.InnerException is CborException cborException)
-            {
-                // List<T>.Sort wraps any exception thrown by the comparison delegate in an
-                // InvalidOperationException; unwrap so callers see the CborException itself, matching
-                // AbstractDictionaryConverter.SortedEntries.
-                throw cborException;
-            }
-
-            return entries;
-        }
-
-        private static int CompareEntriesForDeterministicOrder(
-            KeyValuePair<CborValue, CborValue> x, KeyValuePair<CborValue, CborValue> y)
-        {
-            // CborValue exposes its underlying wire type via Type rather than via a distinct CLR type
-            // per key kind the way Dictionary<TK, TV> did, so dispatch on that discriminator instead of
-            // a CLR `is` pattern.
-            CborValue keyX = x.Key;
-            CborValue keyY = y.Key;
-
-            if (keyX.Type == CborValueType.String && keyY.Type == CborValueType.String)
-            {
-                return CborKeyComparer.CompareTextKeys(
-                    Encoding.UTF8.GetBytes(keyX.Value<string>()),
-                    Encoding.UTF8.GetBytes(keyY.Value<string>()));
-            }
-
-            if (TryGetIntegerKeyArgument(keyX, out bool negativeX, out ulong argumentX) &&
-                TryGetIntegerKeyArgument(keyY, out bool negativeY, out ulong argumentY))
-            {
-                return CborKeyComparer.CompareIntegerKeys(negativeX, argumentX, negativeY, argumentY);
-            }
-
-            throw new CborException(
-                $"Deterministic encoding supports only string and int CborObject keys; found {keyX.Type} key.");
-        }
-
-        // Reads a CborPositive/CborNegative key at full width -- via Value<ulong>()/Value<long>(),
-        // never Value<int>() -- into the (major-type, argument) shape CborKeyComparer.CompareIntegerKeys
-        // takes. CborPositive stores a ulong directly (Value<ulong>() is an identity conversion, so
-        // "argument" is just the value). CborNegative stores a long (also an identity conversion via
-        // Value<long>()); its CBOR argument is -1-value, which needs the full ulong range because CBOR's
-        // negative major type reaches an argument of ulong.MaxValue (a logical value of -2^64) even
-        // though no CborNegative instance can actually hold anything below long.MinValue -- see
-        // CborNegative's constructor, which takes a `long`. Narrowing through Value<int>() would silently
-        // wrap any key outside int range instead of comparing it correctly; this is precisely the bug
-        // this method exists to avoid.
-        private static bool TryGetIntegerKeyArgument(CborValue key, out bool negative, out ulong argument)
-        {
-            switch (key.Type)
-            {
-                case CborValueType.Positive:
-                    negative = false;
-                    argument = key.Value<ulong>();
-                    return true;
-
-                case CborValueType.Negative:
-                    negative = true;
-                    argument = (ulong)(-1L - key.Value<long>());
-                    return true;
-
-                default:
-                    negative = false;
-                    argument = 0;
-                    return false;
-            }
+            return ((IEnumerable<KeyValuePair<CborValue, CborValue>>)sorted).GetEnumerator();
         }
 
         CborArray? ICborConverter<CborArray?>.Read(ref CborReader reader)

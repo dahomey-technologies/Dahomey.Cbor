@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -24,6 +23,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         private readonly CborOptions _options;
+        private Func<TK, DeterministicKeyOrder.SortKey>? _decorateKey;
 
         protected abstract IDictionary<TK, TV> InstantiateTempCollection();
         protected abstract TC InstantiateCollection(IDictionary<TK, TV> tempCollection);
@@ -60,7 +60,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 count = value.Count,
                 enumerator = _options.Deterministic
-                    ? SortedEntries(value).GetEnumerator()
+                    ? SortedEntries(value)
                     : value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : _options.MapLengthMode
@@ -69,65 +69,19 @@ namespace Dahomey.Cbor.Serialization.Converters
             writer.WriteMap(this, ref context);
         }
 
-        // The key set is only known at write time (unlike fixed object members, which are sorted once
-        // at mapping build time in ObjectConverter), so this materialises and sorts on every write.
-        // GetMapSize/WriteMapItem are untouched: they only ever pump context.enumerator, so handing
-        // them a sorted list's enumerator instead of the dictionary's is enough.
-        private static List<KeyValuePair<TK, TV>> SortedEntries(IDictionary<TK, TV> dictionary)
+        // The key set is only known at write time (unlike fixed object members, which ObjectConverter
+        // sorts once per type), so this materialises and sorts on every write. GetMapSize/WriteMapItem
+        // are untouched: they only ever pump context.enumerator, so handing them the sorted sequence's
+        // enumerator instead of the dictionary's is enough.
+        private IEnumerator<KeyValuePair<TK, TV>> SortedEntries(IDictionary<TK, TV> dictionary)
         {
-            List<KeyValuePair<TK, TV>> entries = new List<KeyValuePair<TK, TV>>(dictionary);
+            // Held in a field rather than written inline: the lambda closes over _options, so writing it
+            // at the call site would allocate a closure on every write.
+            _decorateKey ??= key => DeterministicKeyOrder.ForDictionaryKey(key, _options);
 
-            try
-            {
-                entries.Sort(CompareEntriesForDeterministicOrder);
-            }
-            catch (InvalidOperationException ex) when (ex.InnerException is CborException cborException)
-            {
-                // List<T>.Sort wraps any exception thrown by the comparison delegate in an
-                // InvalidOperationException (mirrors Activator.CreateInstance wrapping construction
-                // failures in TargetInvocationException). Unwrap so callers see the CborException
-                // thrown by CompareEntriesForDeterministicOrder for unsupported key types, not an
-                // opaque "failed to compare two elements" message.
-                throw cborException;
-            }
+            KeyValuePair<TK, TV>[] sorted = DeterministicKeyOrder.Sort(dictionary, _decorateKey);
 
-            return entries;
-        }
-
-        private static int CompareEntriesForDeterministicOrder(KeyValuePair<TK, TV> x, KeyValuePair<TK, TV> y)
-        {
-            if (x.Key is string stringX && y.Key is string stringY)
-            {
-                return CborKeyComparer.CompareTextKeys(
-                    Encoding.UTF8.GetBytes(stringX),
-                    Encoding.UTF8.GetBytes(stringY));
-            }
-
-            if (x.Key is int intX && y.Key is int intY)
-            {
-                return CborKeyComparer.CompareIntKeys(intX, intY);
-            }
-
-            // long/ulong fall out of the same widened comparer used for CborObject keys
-            // (CborValueConverter.TryGetIntegerKeyArgument): int alone cannot address CBOR's full
-            // integer key range (a negative argument reaches -2^64), so once CompareIntegerKeys existed
-            // to handle that, extending it to these two CLR types cost nothing extra here.
-            if (x.Key is long longX && y.Key is long longY)
-            {
-                bool negativeX = longX < 0;
-                bool negativeY = longY < 0;
-                ulong argumentX = negativeX ? (ulong)(-1L - longX) : (ulong)longX;
-                ulong argumentY = negativeY ? (ulong)(-1L - longY) : (ulong)longY;
-                return CborKeyComparer.CompareIntegerKeys(negativeX, argumentX, negativeY, argumentY);
-            }
-
-            if (x.Key is ulong ulongX && y.Key is ulong ulongY)
-            {
-                return CborKeyComparer.CompareIntegerKeys(false, ulongX, false, ulongY);
-            }
-
-            throw new CborException(
-                $"Deterministic encoding supports only string and int/long/ulong dictionary keys; found {typeof(TK)}.");
+            return ((IEnumerable<KeyValuePair<TK, TV>>)sorted).GetEnumerator();
         }
 
         public void ReadBeginMap(int size, ref ReaderContext context)

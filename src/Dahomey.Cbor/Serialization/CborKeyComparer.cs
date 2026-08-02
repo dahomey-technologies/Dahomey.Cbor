@@ -15,9 +15,69 @@ namespace Dahomey.Cbor.Serialization
         /// <param name="b">Raw UTF-8 member name, without the CBOR text-string header.</param>
         public static int CompareTextKeys(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
         {
-            // The encoded key is header || bytes, and the header encodes the length, so a shorter
-            // encoded key always sorts before a longer one. Comparing encoded headers reduces to
-            // comparing the encoded length of each key.
+            return CompareContentKeys(a, b);
+        }
+
+        /// <summary>
+        /// Compares two CBOR map keys of any supported kind by their encoded form: by major type
+        /// first, then within a major type by the rule for that type. Major type order is the byte
+        /// order of the leading byte, which is what puts unsigned (0) before negative (1) before byte
+        /// string (2) before text string (3).
+        /// </summary>
+        /// <remarks>
+        /// Each side is described by a major type plus the data that varies within it, so one method
+        /// covers both a map whose keys are all one kind and a map that mixes kinds — which a
+        /// <see cref="Dahomey.Cbor.ObjectModel.CborObject"/> read off the wire is free to do.
+        /// </remarks>
+        /// <param name="majorTypeA">Key A's CBOR major type.</param>
+        /// <param name="argumentA">
+        /// Key A's CBOR argument when <paramref name="majorTypeA"/> is an integer type, as defined by
+        /// <see cref="CompareIntegerKeys"/>. Ignored for string types, whose argument is their content
+        /// length.
+        /// </param>
+        /// <param name="contentA">
+        /// Key A's raw payload when <paramref name="majorTypeA"/> is a string type: UTF-8 bytes for
+        /// text, the bytes themselves for a byte string, in both cases without the CBOR header.
+        /// Ignored for integer types.
+        /// </param>
+        /// <param name="majorTypeB">Key B's CBOR major type.</param>
+        /// <param name="argumentB">Key B's CBOR argument, as above.</param>
+        /// <param name="contentB">Key B's raw payload, as above.</param>
+        public static int CompareKeys(
+            CborMajorType majorTypeA, ulong argumentA, ReadOnlySpan<byte> contentA,
+            CborMajorType majorTypeB, ulong argumentB, ReadOnlySpan<byte> contentB)
+        {
+            if (majorTypeA != majorTypeB)
+            {
+                return majorTypeA < majorTypeB ? -1 : 1;
+            }
+
+            switch (majorTypeA)
+            {
+                case CborMajorType.PositiveInteger:
+                case CborMajorType.NegativeInteger:
+                    // Same major type on both sides, so the leading byte's high bits agree and only the
+                    // argument distinguishes them -- exactly what CompareIntegerKeys does once it has
+                    // decided the major types match.
+                    return CompareArgumentEncoding(argumentA, argumentB);
+
+                case CborMajorType.ByteString:
+                case CborMajorType.TextString:
+                    return CompareContentKeys(contentA, contentB);
+
+                default:
+                    throw new CborException(
+                        $"CBOR major type {majorTypeA} is not supported as a deterministic map key.");
+            }
+        }
+
+        /// <summary>
+        /// Orders the two string major types (2 and 3), which share one rule: the encoded key is
+        /// header || content and the header encodes the content length, so a shorter encoded key
+        /// always sorts before a longer one and comparing headers reduces to comparing lengths.
+        /// </summary>
+        private static int CompareContentKeys(ReadOnlySpan<byte> a, ReadOnlySpan<byte> b)
+        {
             int headerComparison = CompareArgumentEncoding((ulong)a.Length, (ulong)b.Length);
 
             if (headerComparison != 0)
