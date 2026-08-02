@@ -12,6 +12,13 @@ namespace Dahomey.Cbor.Generator
         Enum,
         Nullable,
         Array,
+
+        /// <summary>
+        /// <c>byte[]</c>, which is a plain CBOR byte string rather than an array — see
+        /// <see cref="TypeModel.IsTypedArray"/> for why it is not an RFC 8746 typed array either.
+        /// </summary>
+        ByteArray,
+
         Collection,
         Dictionary,
         Object,
@@ -99,6 +106,15 @@ namespace Dahomey.Cbor.Generator
 
         /// <summary>Element type for arrays and collections; key type for dictionaries.</summary>
         public ITypeSymbol? ElementType { get; set; }
+
+        /// <summary>
+        /// True when <see cref="Kind"/> is <see cref="TypeKind.Array"/> and the element type is one of
+        /// the RFC 8746 typed array element types, so the emitter registers
+        /// <c>TypedArrayConverter&lt;T&gt;</c> instead of <c>ArrayConverter&lt;T&gt;</c>. The reflection
+        /// path reaches the same converter through <c>MakeGenericType</c>, which under Native AOT never
+        /// emitted the closed generic; naming it in generated code is what makes it exist.
+        /// </summary>
+        public bool IsTypedArray { get; set; }
 
         /// <summary>Value type for dictionaries.</summary>
         public ITypeSymbol? ValueType { get; set; }

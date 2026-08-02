@@ -40,6 +40,7 @@ namespace Dahomey.Cbor.Generator
                 ElementType = element,
                 ValueType = value,
                 UnderlyingType = underlying,
+                IsTypedArray = kind == TypeKind.Array && IsTypedArrayElementType(element!),
             };
 
             // Insert before recursing so a cycle terminates.
@@ -59,6 +60,11 @@ namespace Dahomey.Cbor.Generator
                     break;
 
                 case TypeKind.Enum:
+                    break;
+
+                case TypeKind.ByteArray:
+                    // ByteArrayConverter is concrete and takes no element converter, so there is
+                    // nothing to collect and nothing to order.
                     break;
 
                 case TypeKind.Nullable:
@@ -318,6 +324,14 @@ namespace Dahomey.Cbor.Generator
                 }
 
                 element = array.ElementType;
+
+                // byte[] is a CBOR byte string, not an array of small integers — the reflection path
+                // resolves it to ByteArrayConverter before the typed array provider is ever consulted.
+                if (element.SpecialType == SpecialType.System_Byte)
+                {
+                    return TypeKind.ByteArray;
+                }
+
                 return TypeKind.Array;
             }
 
@@ -400,6 +414,39 @@ namespace Dahomey.Cbor.Generator
             }
 
             return type.ToDisplayString() is "System.Half" or "System.Guid" or "System.DateTimeOffset";
+        }
+
+        /// <summary>
+        /// The ten RFC 8746 typed array element types.
+        /// </summary>
+        /// <remarks>
+        /// MATCHED PAIR: this list duplicates the table in
+        /// <c>src/Dahomey.Cbor/Serialization/Converters/TypedArrayTags.cs</c>. It cannot be shared —
+        /// the generator is an analyzer assembly and must not reference the runtime library — so the
+        /// two must be edited together; changing one alone silently desynchronises the generated path
+        /// from the reflection path. The generated-vs-reflection byte-identity tests in
+        /// <c>GeneratedTypedArrayTests</c> are what catch it.
+        /// <para>
+        /// <c>byte</c> is deliberately absent: <c>byte[]</c> is a plain CBOR byte string.
+        /// </para>
+        /// </remarks>
+        private static bool IsTypedArrayElementType(ITypeSymbol element)
+        {
+            switch (element.SpecialType)
+            {
+                case SpecialType.System_SByte:
+                case SpecialType.System_UInt16:
+                case SpecialType.System_Int16:
+                case SpecialType.System_UInt32:
+                case SpecialType.System_Int32:
+                case SpecialType.System_UInt64:
+                case SpecialType.System_Int64:
+                case SpecialType.System_Single:
+                case SpecialType.System_Double:
+                    return true;
+            }
+
+            return element.ToDisplayString() == "System.Half";
         }
 
         private static bool HasAccessibleParameterlessConstructor(ITypeSymbol type)
