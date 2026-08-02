@@ -906,6 +906,75 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal("A3654170706C6502654D616E676F03655A6562726101", Helper.Write(value, options));
         }
 
+        // Static so that it is not itself a member to serialize: the flip has to happen from inside the
+        // write, and a property getter is the shortest way to get code to run there.
+        private static CborOptions _optionsFlippedMidWrite;
+
+        private class FlipsDeterministicWhileBeingWritten
+        {
+            public int Zebra { get; set; }
+
+            public int Bob
+            {
+                // Writing this member turns the flag on partway through the map, between the header's
+                // member count and the last member.
+                get
+                {
+                    _optionsFlippedMidWrite.Deterministic = true;
+                    return 9;
+                }
+                set { }
+            }
+
+            public int Apple { get; set; }
+            public int Mango { get; set; }
+        }
+
+        // A write must run start to finish on one member ordering. The ordering is chosen from a flag
+        // that anything running during the write can change -- a property getter as here, a custom
+        // converter, or another thread sharing CborOptions.Default -- and the two orderings are
+        // permutations of each other, so switching between them mid-map writes some members twice and
+        // drops others while the map header still claims the original count. That document is
+        // structurally corrupt and nothing downstream can tell: the count matches, every item parses.
+        [Fact]
+        public void FlippingDeterministicDuringAWriteDoesNotChangeThatWritesOrder()
+        {
+            CborOptions options = new CborOptions();
+            _optionsFlippedMidWrite = options;
+
+            FlipsDeterministicWhileBeingWritten value = new FlipsDeterministicWhileBeingWritten
+            {
+                Zebra = 1,
+                Apple = 2,
+                Mango = 3,
+            };
+
+            // The write started with the flag off, so it finishes in declaration order -- four distinct
+            // members, in the order the header's count was computed for.
+            //
+            // A4 map(4)
+            //   655A65627261 "Zebra"  01
+            //   63426F62     "Bob"    09
+            //   654170706C65 "Apple"  02
+            //   654D616E676F "Mango"  03
+            Assert.Equal(
+                "A4655A656272610163426F6209654170706C6502654D616E676F03",
+                Helper.Write(value, options));
+
+            // The flag really did flip, and the next write -- which starts after it -- is sorted:
+            // "Bob" encodes shorter than the others, so it leads.
+            //
+            // A4 map(4)
+            //   63426F62     "Bob"    09
+            //   654170706C65 "Apple"  02
+            //   654D616E676F "Mango"  03
+            //   655A65627261 "Zebra"  01
+            Assert.True(options.Deterministic);
+            Assert.Equal(
+                "A463426F6209654170706C6502654D616E676F03655A6562726101",
+                Helper.Write(value, options));
+        }
+
         // ... and back again: clearing the flag on options whose converters were built while it was set
         // must restore declaration order, so the flag is never a one-way latch.
         [Fact]
