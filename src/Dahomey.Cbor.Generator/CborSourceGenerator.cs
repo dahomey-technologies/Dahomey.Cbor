@@ -22,6 +22,7 @@ namespace Dahomey.Cbor.Generator
         private const string ContextBaseTypeName = "Dahomey.Cbor.Serialization.CborSerializerContext";
         private const string SerializableAttributeName = "Dahomey.Cbor.Attributes.CborSerializableAttribute";
         private const string OptionsAttributeName = "Dahomey.Cbor.Attributes.CborSourceGenerationOptionsAttribute";
+        private const string CddlSchemaAttributeName = "Dahomey.Cbor.Attributes.CborCddlSchemaAttribute";
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -112,6 +113,17 @@ namespace Dahomey.Cbor.Generator
 
             string source = Emitter.Emit(contextSymbol, options, ordered, roots);
             spc.AddSource($"{contextSymbol.Name}.CborContext.g.cs", source);
+
+            bool wantsSchema = contextSymbol.GetAttributes().Any(
+                a => a.AttributeClass?.ToDisplayString() == CddlSchemaAttributeName);
+
+            if (wantsSchema)
+            {
+                string schema = CddlEmitter.EmitSchema(ordered, roots, options, spc);
+                spc.AddSource(
+                    $"{contextSymbol.Name}.CddlSchema.g.cs",
+                    CddlEmitter.EmitSource(contextSymbol, schema));
+            }
         }
 
         private static bool InheritsFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)

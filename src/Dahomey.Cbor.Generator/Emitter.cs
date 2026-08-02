@@ -77,7 +77,7 @@ namespace Dahomey.Cbor.Generator
                 }
 
                 string fullName = FullName(model.Symbol);
-                string accessorName = AccessorName(model.Symbol);
+                string accessorName = CddlNames.AccessorName(model.Symbol);
                 string fieldName = "_" + char.ToLowerInvariant(accessorName[0]) + accessorName.Substring(1);
 
                 builder.AppendLine($"{indent}    private ICborConverter<{fullName}>? {fieldName};");
@@ -292,27 +292,6 @@ namespace Dahomey.Cbor.Generator
         private static string XmlName(string fullName)
         {
             return fullName.Replace("global::", string.Empty).Replace('<', '{').Replace('>', '}');
-        }
-
-        /// <summary>
-        /// Property name for a type's accessor: <c>Person</c>, and <c>ListOfPerson</c> for
-        /// <c>List&lt;Person&gt;</c>, so closed generics get a legal, predictable identifier.
-        /// </summary>
-        private static string AccessorName(ITypeSymbol type)
-        {
-            if (type is IArrayTypeSymbol array)
-            {
-                return "ArrayOf" + AccessorName(array.ElementType);
-            }
-
-            if (type is INamedTypeSymbol { IsGenericType: true } named)
-            {
-                string baseName = named.Name;
-                string arguments = string.Concat(named.TypeArguments.Select(AccessorName));
-                return $"{baseName}Of{arguments}";
-            }
-
-            return type.Name;
         }
     }
 }
