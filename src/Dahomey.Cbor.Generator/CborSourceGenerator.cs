@@ -148,6 +148,9 @@ namespace Dahomey.Cbor.Generator
         public string? DiscriminatorPolicy { get; private set; }
         public ulong? DiscriminatorSemanticTag { get; private set; }
         public int? MaxDepth { get; private set; }
+        public string? EnumFormat { get; private set; }
+        public string? DateTimeFormat { get; private set; }
+        public string? TypedArrayMode { get; private set; }
 
         public static GenerationOptions Read(INamedTypeSymbol contextSymbol, SourceProductionContext spc)
         {
@@ -204,6 +207,31 @@ namespace Dahomey.Cbor.Generator
                         {
                             options.MaxDepth = maxDepth;
                         }
+                        break;
+
+                    case "EnumFormat":
+                        options.EnumFormat = named.Value.Value switch
+                        {
+                            1 => "WriteToString",
+                            _ => null,
+                        };
+                        break;
+
+                    case "DateTimeFormat":
+                        options.DateTimeFormat = named.Value.Value switch
+                        {
+                            1 => "Unix",
+                            2 => "UnixMilliseconds",
+                            _ => null,
+                        };
+                        break;
+
+                    case "TypedArrayMode":
+                        options.TypedArrayMode = named.Value.Value switch
+                        {
+                            1 => "LittleEndian",
+                            _ => null,
+                        };
                         break;
                 }
             }

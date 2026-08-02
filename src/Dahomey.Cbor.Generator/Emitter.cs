@@ -189,6 +189,27 @@ namespace Dahomey.Cbor.Generator
                 wrote = true;
             }
 
+            if (options.EnumFormat is not null)
+            {
+                builder.AppendLine($"{indent}        options.EnumFormat = ValueFormat.{options.EnumFormat};");
+                wrote = true;
+            }
+
+            if (options.DateTimeFormat is not null)
+            {
+                builder.AppendLine($"{indent}        options.DateTimeFormat = DateTimeFormat.{options.DateTimeFormat};");
+                wrote = true;
+            }
+
+            // Assigned last: CborOptions.Deterministic forces TypedArrayMode to LittleEndian, and the
+            // TypedArrayMode setter refuses any other value while Deterministic is set. Writing this
+            // after every other assignment keeps the pair consistent whichever the user declared.
+            if (options.TypedArrayMode is not null)
+            {
+                builder.AppendLine($"{indent}        options.TypedArrayMode = TypedArrayMode.{options.TypedArrayMode};");
+                wrote = true;
+            }
+
             if (wrote)
             {
                 builder.AppendLine();

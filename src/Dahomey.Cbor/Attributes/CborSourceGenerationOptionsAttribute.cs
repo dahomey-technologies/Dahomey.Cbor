@@ -34,5 +34,17 @@ namespace Dahomey.Cbor.Attributes
 
         /// <summary>Maximum nesting depth for reading and writing.</summary>
         public int MaxDepth { get; set; } = 64;
+
+        /// <summary>How enum values are written. Mirrors <see cref="CborOptions.EnumFormat"/>.</summary>
+        public ValueFormat EnumFormat { get; set; } = ValueFormat.WriteToInt;
+
+        /// <summary>How <see cref="System.DateTime"/> is written. Mirrors <see cref="CborOptions.DateTimeFormat"/>.</summary>
+        public DateTimeFormat DateTimeFormat { get; set; } = DateTimeFormat.ISO8601;
+
+        /// <summary>
+        /// Whether numeric arrays are written as RFC 8746 typed arrays. Mirrors
+        /// <see cref="CborOptions.TypedArrayMode"/>.
+        /// </summary>
+        public TypedArrayMode TypedArrayMode { get; set; } = TypedArrayMode.Never;
     }
 }
