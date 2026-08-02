@@ -73,5 +73,17 @@ namespace Dahomey.Cbor.Generator
             Category,
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
+
+        /// <summary>
+        /// A schema that quietly omits a member is worse than no schema, so a type with no CDDL
+        /// representation is an error rather than a gap in the output.
+        /// </summary>
+        public static readonly DiagnosticDescriptor NoCddlRepresentation = new(
+            id: "CBOR1007",
+            title: "Type has no CDDL representation",
+            messageFormat: "'{0}' has no CDDL representation, so '{1}.{2}' cannot appear in the emitted schema",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
     }
 }
