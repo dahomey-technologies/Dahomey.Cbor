@@ -150,15 +150,26 @@ keys sort after all non-negative ones.
 
 Supported dictionary key types are ``string``, ``char``, ``byte[]``/``ReadOnlyMemory<byte>``, every
 integral type (``byte``, ``sbyte``, ``short``, ``ushort``, ``int``, ``uint``, ``long``, ``ulong``)
-and enums — each ordered as its own converter writes it, so an enum is ordered as text when
-``EnumFormat`` is ``WriteToString``. ``CborObject`` keys may be text strings, byte strings and
-integers, mixed freely within one map, which is what lets a document read off the wire be re-encoded
+and enums — each ordered as its own converter writes it. For an enum that means: with
+``EnumFormat.WriteToString`` a value that *has* a name is written and ordered as that name, and a
+value that has none (a combination of flags, or a cast from an unlisted number) falls back to the
+integer form in both. ``CborObject`` keys may be text strings, byte strings and integers, mixed
+freely within one map, which is what lets a document read off the wire be re-encoded
 deterministically. Any other key type throws a ``CborException`` rather than silently emitting
 unsorted output.
 
+**An enum key whose underlying type is wider than 32 bits is written truncated to 32 bits**, and is
+therefore ordered that way too — the ordering follows the bytes actually emitted. Two enum values
+that differ only above bit 31 collide into the same map key, producing a map with duplicate keys that
+is neither deterministic nor valid to hash. This is how enums are written with or without
+``Deterministic``; if your enum is backed by ``long``/``ulong`` and its values exceed 32 bits, key
+the map by the underlying integer instead.
+
 ``Deterministic`` may be set at any point in an options object's life, including on the long-lived
-``CborOptions.Default``: it is read when a value is written, not when converters are built, so it
-takes effect on the very next write.
+``CborOptions.Default`` — but not while a write using those options is in flight. It is read when a
+write starts, not when converters are built, so it takes effect on the very next write; a change made
+*during* a write (from a property getter, a custom converter, or another thread) is picked up by the
+write after it, and the write in progress finishes on the ordering it started with.
 
 Deterministic mode also rejects any setting that would admit more than one encoding of the same
 value: setting ``ArrayLengthMode`` or ``MapLengthMode`` to ``LengthMode.IndefiniteLength`` while
