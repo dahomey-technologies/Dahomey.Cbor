@@ -412,5 +412,108 @@ namespace Dahomey.Cbor.Tests
             CborOptions options = new CborOptions { Deterministic = true };
             Assert.Throws<CborException>(() => Helper.Write(value, options));
         }
+
+        // Reviewer's exact reproduction of the int-narrowing bug: a key that needs the 9-byte
+        // (major-type + 8-byte-argument) form must still sort AFTER a key that fits in 1 byte, per RFC
+        // 8949 4.2.1's "shorter encoding always sorts first" rule -- regardless of numeric magnitude.
+        // Before CborKeyComparer.CompareIntegerKeys, CborValueConverter read both keys through
+        // Value<int>(), which silently wrapped 4294967301 (2^32 + 5) down to 5, comparing it as if it
+        // were smaller than 10 and emitting the 9-byte key first: wrong order, wrong bytes, no
+        // exception. TryGetIntegerKeyArgument now reads the full ulong via Value<ulong>(), so the
+        // 9-byte form correctly sorts last.
+        [Fact]
+        public void CborObjectLargeIntegerKeysSortByEncodedLengthNotNumericValueWhenDeterministic()
+        {
+            CborObject value = new CborObject
+            {
+                [(ulong)4294967301] = "A", // 2^32 + 5: needs the 9-byte (1B + 8-byte) argument form
+                [(ulong)10] = "B",         // fits the 1-byte argument form
+            };
+
+            // A2 map(2)
+            //   0A                   10                  6142 "B"
+            //   1B0000000100000005   4294967301          6141 "A"
+            Helper.TestWrite(value,
+                "A20A61421B00000001000000056141",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void CborObjectUlongMaxValueKeySortsAfterSmallKeyWhenDeterministic()
+        {
+            CborObject value = new CborObject
+            {
+                [ulong.MaxValue] = "big",
+                [(ulong)1] = "small",
+            };
+
+            // A2 map(2)
+            //   01                    1                      65736D616C6C  "small"
+            //   1BFFFFFFFFFFFFFFFF    18446744073709551615   63626967      "big"
+            Helper.TestWrite(value,
+                "A20165736D616C6C1BFFFFFFFFFFFFFFFF63626967",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        // A negative key beyond long.MinValue (down to CBOR's true floor of -2^64) is not exercised
+        // here: CborNegative's constructor takes a `long` and rejects anything a `long` cannot hold,
+        // and the reader path (CborReader.ReadInt64 -> ReadSigned(long.MaxValue)) is bounded the same
+        // way, so no CborValue in this object model can ever hold a value below long.MinValue. There is
+        // no case to construct. CborKeyComparer.CompareIntegerKeys still accepts the full ulong argument
+        // range on its own terms -- verified directly by the CborKeyComparer.CompareIntegerKeys unit
+        // tests below -- it is only CborValue's own representation that stops at long.MinValue.
+
+        [Theory]
+        [InlineData(false, 10ul, false, 4294967301ul, -1)]     // both major type 0: shorter-encoded argument (10, 1 byte) sorts first
+        [InlineData(false, 4294967301ul, false, 10ul, 1)]
+        [InlineData(false, 0ul, true, 0ul, -1)]                // major type 0 (any argument) sorts before major type 1 (any argument)
+        [InlineData(true, 0ul, false, 0ul, 1)]
+        [InlineData(true, 0ul, true, ulong.MaxValue, -1)]      // within major type 1, ascending argument is ascending encoded order
+        [InlineData(true, ulong.MaxValue, true, 0ul, 1)]
+        [InlineData(false, ulong.MaxValue, false, ulong.MaxValue, 0)]
+        public void CompareIntegerKeysOrdersByMajorTypeThenEncodedArgument(
+            bool negativeA, ulong argumentA, bool negativeB, ulong argumentB, int expected)
+        {
+            Assert.Equal(expected, Math.Sign(
+                Dahomey.Cbor.Serialization.CborKeyComparer.CompareIntegerKeys(negativeA, argumentA, negativeB, argumentB)));
+        }
+
+        // OPTIONAL widening that fell out of CompareIntegerKeys existing: long/ulong dictionary keys no
+        // longer have to throw, since the comparer they need already exists for CborObject keys.
+        [Fact]
+        public void LongKeyedDictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<long, string> value = new Dictionary<long, string>
+            {
+                [4294967301L] = "A",
+                [10L] = "B",
+            };
+
+            // Same wire bytes as CborObjectLargeIntegerKeysSortByEncodedLengthNotNumericValueWhenDeterministic --
+            // see that test for the byte-by-byte derivation.
+            Helper.TestWrite(value,
+                "A20A61421B00000001000000056141",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void UlongKeyedDictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<ulong, string> value = new Dictionary<ulong, string>
+            {
+                [ulong.MaxValue] = "big",
+                [1UL] = "small",
+            };
+
+            // Same wire bytes as CborObjectUlongMaxValueKeySortsAfterSmallKeyWhenDeterministic -- see
+            // that test for the byte-by-byte derivation.
+            Helper.TestWrite(value,
+                "A20165736D616C6C1BFFFFFFFFFFFFFFFF63626967",
+                null,
+                new CborOptions { Deterministic = true });
+        }
     }
 }

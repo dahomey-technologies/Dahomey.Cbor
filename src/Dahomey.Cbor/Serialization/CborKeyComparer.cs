@@ -30,26 +30,42 @@ namespace Dahomey.Cbor.Serialization
 
         public static int CompareIntKeys(int a, int b)
         {
-            // Non-negative keys are major type 0 and encode monotonically, so numeric order is
-            // bytewise order. Negative keys are major type 1, whose leading byte is always greater
-            // than any major type 0 leading byte, so every negative key sorts after every
-            // non-negative one. Within the negatives, -1 encodes as 0x20 and -2 as 0x21, so
-            // descending magnitude is ascending bytewise.
-            if (a >= 0 && b >= 0)
+            // A thin wrapper over CompareIntegerKeys, converting each int to the (major-type,
+            // argument) representation CBOR itself uses. Kept as the int-typed public entry point so
+            // existing callers (ObjectConverter's member sort) are untouched; see CompareIntegerKeys
+            // for a key space CBOR allows but int cannot represent (down to -2^64).
+            bool negativeA = a < 0;
+            bool negativeB = b < 0;
+            ulong argumentA = negativeA ? (ulong)(-1L - a) : (ulong)a;
+            ulong argumentB = negativeB ? (ulong)(-1L - b) : (ulong)b;
+            return CompareIntegerKeys(negativeA, argumentA, negativeB, argumentB);
+        }
+
+        /// <summary>
+        /// Compares two CBOR integer keys by their wire representation: a major type (0 for
+        /// non-negative, 1 for negative) plus a <see cref="ulong"/> argument. For major type 0 the
+        /// argument is the value itself; for major type 1 the argument is <c>-1 - value</c>, per RFC
+        /// 8949 -- which is why this takes an argument rather than a signed value: major type 1's
+        /// argument reaches <see cref="ulong.MaxValue"/>, representing values down to -2^64, a range no
+        /// signed 64-bit CLR integer (<see cref="long"/> bottoms out at -2^63) can hold. Any caller that
+        /// already has a CLR integer narrower than that full range -- <see cref="CompareIntKeys"/>
+        /// included -- converts to this shape first.
+        /// </summary>
+        /// <param name="negativeA">Whether key A is CBOR major type 1 (a negative value).</param>
+        /// <param name="argumentA">Key A's CBOR argument, as defined above.</param>
+        /// <param name="negativeB">Whether key B is CBOR major type 1 (a negative value).</param>
+        /// <param name="argumentB">Key B's CBOR argument, as defined above.</param>
+        public static int CompareIntegerKeys(bool negativeA, ulong argumentA, bool negativeB, ulong argumentB)
+        {
+            // Major type 1's leading byte range (0x20-0x3B) is entirely above major type 0's
+            // (0x00-0x1B), so every negative key sorts after every non-negative one regardless of
+            // argument.
+            if (negativeA != negativeB)
             {
-                return a.CompareTo(b);
+                return negativeA ? 1 : -1;
             }
 
-            if (a < 0 && b < 0)
-            {
-                ulong argumentA = (ulong)(-1L - a);
-                ulong argumentB = (ulong)(-1L - b);
-                return CompareArgumentEncoding(argumentA, argumentB) is int c and not 0
-                    ? c
-                    : argumentA.CompareTo(argumentB);
-            }
-
-            return a >= 0 ? -1 : 1;
+            return CompareArgumentEncoding(argumentA, argumentB);
         }
 
         /// <summary>

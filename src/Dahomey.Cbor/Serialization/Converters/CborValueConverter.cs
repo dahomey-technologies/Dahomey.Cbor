@@ -296,21 +296,45 @@ namespace Dahomey.Cbor.Serialization.Converters
                     Encoding.UTF8.GetBytes(keyY.Value<string>()));
             }
 
-            if (IsIntegerKey(keyX.Type) && IsIntegerKey(keyY.Type))
+            if (TryGetIntegerKeyArgument(keyX, out bool negativeX, out ulong argumentX) &&
+                TryGetIntegerKeyArgument(keyY, out bool negativeY, out ulong argumentY))
             {
-                return CborKeyComparer.CompareIntKeys(keyX.Value<int>(), keyY.Value<int>());
+                return CborKeyComparer.CompareIntegerKeys(negativeX, argumentX, negativeY, argumentY);
             }
 
             throw new CborException(
                 $"Deterministic encoding supports only string and int CborObject keys; found {keyX.Type} key.");
         }
 
-        // CborPositive (major type 0) and CborNegative (major type 1) are both integer-keyed; CBOR
-        // itself does not distinguish "positive int" and "negative int" as separate key kinds the way
-        // CborValueType does.
-        private static bool IsIntegerKey(CborValueType type)
+        // Reads a CborPositive/CborNegative key at full width -- via Value<ulong>()/Value<long>(),
+        // never Value<int>() -- into the (major-type, argument) shape CborKeyComparer.CompareIntegerKeys
+        // takes. CborPositive stores a ulong directly (Value<ulong>() is an identity conversion, so
+        // "argument" is just the value). CborNegative stores a long (also an identity conversion via
+        // Value<long>()); its CBOR argument is -1-value, which needs the full ulong range because CBOR's
+        // negative major type reaches an argument of ulong.MaxValue (a logical value of -2^64) even
+        // though no CborNegative instance can actually hold anything below long.MinValue -- see
+        // CborNegative's constructor, which takes a `long`. Narrowing through Value<int>() would silently
+        // wrap any key outside int range instead of comparing it correctly; this is precisely the bug
+        // this method exists to avoid.
+        private static bool TryGetIntegerKeyArgument(CborValue key, out bool negative, out ulong argument)
         {
-            return type == CborValueType.Positive || type == CborValueType.Negative;
+            switch (key.Type)
+            {
+                case CborValueType.Positive:
+                    negative = false;
+                    argument = key.Value<ulong>();
+                    return true;
+
+                case CborValueType.Negative:
+                    negative = true;
+                    argument = (ulong)(-1L - key.Value<long>());
+                    return true;
+
+                default:
+                    negative = false;
+                    argument = 0;
+                    return false;
+            }
         }
 
         CborArray? ICborConverter<CborArray?>.Read(ref CborReader reader)
