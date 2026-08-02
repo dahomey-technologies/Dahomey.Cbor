@@ -989,5 +989,51 @@ namespace Dahomey.Cbor.Tests
 
             Assert.Equal("A3655A6562726101654170706C6502654D616E676F03", Helper.Write(value, options));
         }
+
+        [Fact]
+        public void DeterministicForcesTypedArrays()
+        {
+            CborOptions options = new CborOptions { Deterministic = true };
+            Assert.Equal(TypedArrayMode.LittleEndian, options.TypedArrayMode);
+        }
+
+        [Fact]
+        public void DeterministicRejectsDisablingTypedArrays()
+        {
+            CborOptions options = new CborOptions { Deterministic = true };
+            Assert.Throws<CborException>(() => options.TypedArrayMode = TypedArrayMode.Never);
+        }
+
+        [Fact]
+        public void DeterministicAcceptsLittleEndianTypedArrays()
+        {
+            CborOptions options = new CborOptions { Deterministic = true };
+            options.TypedArrayMode = TypedArrayMode.LittleEndian;
+            Assert.Equal(TypedArrayMode.LittleEndian, options.TypedArrayMode);
+        }
+
+        [Fact]
+        public void ClearingDeterministicLeavesTypedArrayModeInPlace()
+        {
+            CborOptions options = new CborOptions { Deterministic = true };
+            Assert.Equal(TypedArrayMode.LittleEndian, options.TypedArrayMode);
+
+            options.Deterministic = false;
+
+            // Deterministic is a one-way pin only on the way in: turning it back off must not reset
+            // TypedArrayMode, the same way it does not reset ArrayLengthMode/MapLengthMode.
+            Assert.Equal(TypedArrayMode.LittleEndian, options.TypedArrayMode);
+        }
+
+        [Fact]
+        public void DeterministicFloatArrayIsAlwaysTheTypedForm()
+        {
+            CborOptions options = new CborOptions { Deterministic = true };
+
+            // D855 tag(85) 48 bytes(8) -> 1.5f, 2.5f little endian
+            // The plain form would be 82F93E00F94100, which is shorter -- and that is exactly why the
+            // profile has to pin one of them rather than picking the smaller.
+            Helper.TestWrite(new[] { 1.5f, 2.5f }, "D855480000C03F00002040", null, options);
+        }
     }
 }

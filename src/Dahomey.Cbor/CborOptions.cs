@@ -122,6 +122,11 @@ namespace Dahomey.Cbor
                 {
                     RejectIndefinite(_arrayLengthMode, nameof(ArrayLengthMode));
                     RejectIndefinite(_mapLengthMode, nameof(MapLengthMode));
+
+                    // Assign the backing field directly, not the TypedArrayMode property -- that
+                    // property's own guard reads _deterministic, which is still stale (false) here,
+                    // so going through it would silently skip the forced switch to LittleEndian.
+                    _typedArrayMode = TypedArrayMode.LittleEndian;
                 }
 
                 _deterministic = value;
@@ -143,7 +148,31 @@ namespace Dahomey.Cbor
             }
         }
 
-        public TypedArrayMode TypedArrayMode { get; set; } = TypedArrayMode.Never;
+        private TypedArrayMode _typedArrayMode = TypedArrayMode.Never;
+
+        /// <summary>
+        /// Controls whether numeric arrays are written as RFC 8746 typed arrays. While
+        /// <see cref="Deterministic"/> is enabled this can only be <see cref="TypedArrayMode.LittleEndian"/>:
+        /// a numeric array is otherwise representable both as a plain array of individually encoded
+        /// items and as a typed array, and the two disagree, leaving the bytes undetermined.
+        /// </summary>
+        public TypedArrayMode TypedArrayMode
+        {
+            get => _typedArrayMode;
+            set
+            {
+                if (_deterministic && value != TypedArrayMode.LittleEndian)
+                {
+                    throw new CborException(
+                        $"{nameof(TypedArrayMode)} must be {nameof(TypedArrayMode.LittleEndian)} when "
+                        + $"{nameof(Deterministic)} is enabled: a numeric array would otherwise have two "
+                        + "valid encodings, leaving the bytes undetermined.");
+                }
+
+                _typedArrayMode = value;
+            }
+        }
+
         /// <summary>
         /// Semantic Tag to check if the discriminator is present when ObjectFormat is Array
         /// </summary>
