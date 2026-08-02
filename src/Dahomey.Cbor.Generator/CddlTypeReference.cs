@@ -4,8 +4,9 @@ using System.Collections.Generic;
 namespace Dahomey.Cbor.Generator
 {
     /// <summary>
-    /// Renders the CDDL for a type as it appears at a use site. Objects and enums resolve to a rule
-    /// name; everything else is inlined, which keeps schemas readable.
+    /// Renders the CDDL for a type as it appears at a use site. Objects resolve to a rule name;
+    /// primitives are inlined. Every other kind -- enums included -- has no representation yet and
+    /// returns null, so the caller can report CBOR1007.
     /// </summary>
     internal static class CddlTypeReference
     {
@@ -45,6 +46,13 @@ namespace Dahomey.Cbor.Generator
             if (rendered is null)
             {
                 return null;
+            }
+
+            // `any` already admits nil (it is the universal type), so appending "/ nil" would only
+            // be redundant, not wrong -- skip it rather than emit `any / nil`.
+            if (rendered == "any")
+            {
+                return rendered;
             }
 
             // A reference-type use site accepts nil, because Dahomey writes F6 for a null reference
@@ -110,9 +118,12 @@ namespace Dahomey.Cbor.Generator
 
             // System.Decimal is deliberately absent: it is written as 0xFC plus 16 bytes, and
             // additional information 28 is reserved and ill-formed under RFC 8949 section 3, so no
-            // conforming decoder can read it and no CDDL can describe it. Guid and char have no
-            // converter at all.
-            return type.ToDisplayString() == "System.Half" ? "float16" : null;
+            // conforming decoder can read it and no CDDL can describe it. Guid, DateTimeOffset and
+            // char have no scalar converter either. Nor does System.Half: the only place the library
+            // references it is the RFC 8746 typed-array element path, which writes `#6.84(bstr)` --
+            // a different representation entirely, not this method's concern. Each falls through to
+            // CBOR1007 rather than asserting a row no converter backs.
+            return null;
         }
     }
 }

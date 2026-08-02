@@ -277,7 +277,7 @@ namespace Dahomey.Cbor.Generator
             StringBuilder builder, string indent, TypeModel model, MemberModel member)
         {
             string ownerName = FullName(model.Symbol);
-            string memberTypeName = FullName(member.Type);
+            string memberTypeName = MemberTypeName(member.Type);
 
             bool isStruct = model.Symbol.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct;
             string mappingType = isStruct
@@ -308,6 +308,27 @@ namespace Dahomey.Cbor.Generator
         private static string FullName(ITypeSymbol type)
         {
             return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        }
+
+        /// <summary>
+        /// Like <see cref="FullName"/>, but keeps a <c>string?</c> member's own `?` in the generated
+        /// <c>DelegateMemberMapping&lt;TOwner, TMember&gt;</c>. <c>FullyQualifiedFormat</c> omits the
+        /// nullable-*reference* modifier by default; without it, a member the source annotates
+        /// <c>Annotated</c> gets a bare (non-nullable) TMember, and the generated file -- which is
+        /// unconditionally under `#nullable enable`, regardless of the declaring file's own nullable
+        /// context -- warns CS8603 on the getter lambda returning that member. `None` needs no such
+        /// handling: an unannotated member is exempt from nullable warnings by construction, in both
+        /// the declaring file and the generated one. Reference types only: for a value type,
+        /// <c>NullableAnnotation.Annotated</c> means <c>Nullable&lt;T&gt;</c> (<c>int?</c>), whose "?"
+        /// <see cref="FullName"/> already renders as part of the type's own display string -- adding a
+        /// second one here would emit the syntax error <c>int??</c>.
+        /// </summary>
+        private static string MemberTypeName(ITypeSymbol type)
+        {
+            string name = FullName(type);
+            return type.IsReferenceType && type.NullableAnnotation == NullableAnnotation.Annotated
+                ? name + "?"
+                : name;
         }
 
         private static string XmlName(string fullName)

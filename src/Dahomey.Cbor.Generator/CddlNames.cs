@@ -30,9 +30,13 @@ namespace Dahomey.Cbor.Generator
         }
 
         /// <summary>
-        /// Maps each type to its CDDL rule name. Two distinct types sharing a simple name are both
-        /// qualified with their flattened namespace, so the result never depends on which was seen
-        /// first.
+        /// Maps each type to its CDDL rule name. A short name (<see cref="AccessorName"/>) that no
+        /// other type in <paramref name="ordered"/> shares is kept exactly as produced. A short name
+        /// shared by two or more types -- two different closed generics whose type arguments only
+        /// differ by namespace (<c>Envelope&lt;Left.Item&gt;</c> vs. <c>Envelope&lt;Right.Item&gt;</c>),
+        /// or two same-named nested types in different namespaces -- is re-derived for every member of
+        /// that collision from the full type key via <see cref="QualifiedAccessorName"/>, so the result
+        /// never depends on which was seen first and never collides again.
         /// </summary>
         public static IReadOnlyDictionary<string, string> BuildRuleNames(IReadOnlyList<TypeModel> ordered)
         {
@@ -58,7 +62,7 @@ namespace Dahomey.Cbor.Generator
                 foreach (TypeModel model in entry.Value)
                 {
                     string key = model.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    names[key] = entry.Value.Count == 1 ? entry.Key : Qualify(model.Symbol, entry.Key);
+                    names[key] = entry.Value.Count == 1 ? entry.Key : QualifiedAccessorName(model.Symbol);
                 }
             }
 
@@ -66,18 +70,61 @@ namespace Dahomey.Cbor.Generator
         }
 
         /// <summary>
-        /// <c>My-Models-Person</c>. RFC 8610 ids accept '-' between alphanumerics, so a flattened
-        /// namespace is a legal rule name.
+        /// Same shape as <see cref="AccessorName"/>, but every named type in the tree -- the type
+        /// itself and, recursively, each generic type argument -- is rendered by
+        /// <see cref="QualifiedSimpleName"/> instead of a bare <c>type.Name</c>. Only called once a
+        /// short name is known to collide, so <c>Envelope&lt;Left.Item&gt;</c> and
+        /// <c>Envelope&lt;Right.Item&gt;</c> (both <c>EnvelopeOfItem</c> under
+        /// <see cref="AccessorName"/>, because that method drops namespaces entirely) resolve to
+        /// <c>Envelope-Of-Left-Item</c> and <c>Envelope-Of-Right-Item</c>.
         /// </summary>
-        private static string Qualify(ITypeSymbol type, string shortName)
+        private static string QualifiedAccessorName(ITypeSymbol type)
         {
-            if (type.ContainingNamespace is null || type.ContainingNamespace.IsGlobalNamespace)
+            if (type is IArrayTypeSymbol array)
             {
-                return shortName;
+                return "ArrayOf-" + QualifiedAccessorName(array.ElementType);
             }
 
-            string prefix = type.ContainingNamespace.ToDisplayString().Replace(".", "-");
-            return prefix + "-" + shortName;
+            if (type is INamedTypeSymbol { IsGenericType: true } named)
+            {
+                string baseName = QualifiedSimpleName(named);
+                string arguments = string.Join("-", named.TypeArguments.Select(QualifiedAccessorName));
+                return $"{baseName}-Of-{arguments}";
+            }
+
+            return QualifiedSimpleName(type);
+        }
+
+        /// <summary>
+        /// <c>N-Outer-Inner</c>: the type's namespace (dots flattened to '-', omitted when global),
+        /// then its containing types outermost-first, then its own name. RFC 8610 ids accept '-'
+        /// between alphanumerics, so the flattened chain is a legal rule name fragment. Unlike
+        /// <see cref="AccessorName"/>, this reaches the containing-type chain too, so nested
+        /// <c>N.Outer.Inner</c> and <c>N.Other.Inner</c> -- indistinguishable by <c>type.Name</c> alone
+        /// -- come out as <c>N-Outer-Inner</c> and <c>N-Other-Inner</c>.
+        /// </summary>
+        private static string QualifiedSimpleName(ITypeSymbol type)
+        {
+            List<string> segments = new List<string>();
+
+            if (type.ContainingNamespace is not null && !type.ContainingNamespace.IsGlobalNamespace)
+            {
+                segments.Add(type.ContainingNamespace.ToDisplayString().Replace(".", "-"));
+            }
+
+            List<string> containingTypes = new List<string>();
+
+            for (INamedTypeSymbol? outer = (type as INamedTypeSymbol)?.ContainingType;
+                outer is not null;
+                outer = outer.ContainingType)
+            {
+                containingTypes.Insert(0, outer.Name);
+            }
+
+            segments.AddRange(containingTypes);
+            segments.Add(type.Name);
+
+            return string.Join("-", segments);
         }
     }
 }
