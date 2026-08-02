@@ -75,11 +75,23 @@ namespace Dahomey.Cbor.Tests
         // len 255 'z' encodes as header 78 FF + 255 content bytes = 257 bytes: [78 FF 7A*255].
         // len 256 'a' encodes as header 79 01 00 + 256 content bytes = 259 bytes: [79 01 00 61*256].
         // First byte 0x78 < 0x79, so the 255-char key sorts first even though 'z' > 'a' by content.
+        //
+        // len 65535 'z' encodes as header 79 FF FF (additional-info 25: a 2-byte length field, and
+        // 65535 == 0xFFFF fits exactly) + 65535 content bytes = 65538 bytes: [79 FF FF 7A*65535].
+        // len 65536 'a' exceeds the 2-byte length field's range, so it needs additional-info 26 (a
+        // 4-byte length field): header 7A 00 01 00 00 (65536 == 0x00010000) + 65536 content bytes =
+        // 65541 bytes: [7A 00 01 00 00 61*65536].
+        // First byte 0x79 < 0x7A, so the 65535-char key sorts first even though 'z' > 'a' by content.
+        // This is CompareTextKeys's only 2-byte-length-field <-> 4-byte-length-field crossing; unlike
+        // the int side, CompareTextKeys has no non-negative shortcut, so this tier boundary is always
+        // on the comparison path and was previously unexercised.
         [Theory]
         [InlineData(23, 'z', 24, 'a', -1)]
         [InlineData(24, 'a', 23, 'z', 1)]
         [InlineData(255, 'z', 256, 'a', -1)]
         [InlineData(256, 'a', 255, 'z', 1)]
+        [InlineData(65535, 'z', 65536, 'a', -1)]
+        [InlineData(65536, 'a', 65535, 'z', 1)]
         public void TextKeysCrossHeaderSizeTiersEvenWhenContentDisagrees(int lengthA, char charA, int lengthB, char charB, int expected)
         {
             string a = new string(charA, lengthA);
