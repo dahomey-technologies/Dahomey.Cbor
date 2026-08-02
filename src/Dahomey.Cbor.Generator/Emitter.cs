@@ -216,8 +216,14 @@ namespace Dahomey.Cbor.Generator
                         break;
 
                     case TypeKind.Array:
+                        // TypedArrayConverter<T> derives from ArrayConverter<T> and falls back to the
+                        // ordinary per-element encoding whenever no typed array tag is present or
+                        // TypedArrayMode is Never, so registering it unconditionally for eligible
+                        // element types reproduces the reflection provider chain in every mode.
                         EmitSimpleRegistration(builder, indent, model.Symbol,
-                            $"new ArrayConverter<{FullName(model.ElementType!)}>(options)");
+                            model.IsTypedArray
+                                ? $"new TypedArrayConverter<{FullName(model.ElementType!)}>(options)"
+                                : $"new ArrayConverter<{FullName(model.ElementType!)}>(options)");
                         break;
 
                     case TypeKind.Collection:
