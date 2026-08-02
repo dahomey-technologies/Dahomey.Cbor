@@ -102,11 +102,12 @@ namespace Dahomey.Cbor.Generator
             SourceProductionContext spc)
         {
             string key = model.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            bool isArray = model.ObjectFormat == "Array";
 
             builder.Append(ruleNames[key]);
-            builder.Append(" = {\n");
+            builder.Append(isArray ? " = [\n" : " = {\n");
 
-            foreach (MemberModel member in model.Members)
+            foreach (MemberModel member in InWireOrder(model))
             {
                 string? reference = CddlTypeReference.Render(member.Type, byKey, ruleNames, options);
 
@@ -121,21 +122,61 @@ namespace Dahomey.Cbor.Generator
                     continue;
                 }
 
-                // Always quoted: a bareword member key is only legal CDDL when it matches RFC 8610's
-                // `id` production, and this library's naming conventions and [CborProperty("...")]
-                // both admit arbitrary strings (a leading digit, a space, ...) that `id` rejects. A
-                // quoted `tstr` key is unconditionally valid, so quoting removes the failure mode
-                // rather than trading it for a rarer one. This only covers text keys -- CborName is
-                // always a string; an eventual IntKeyMap/Array emit path would key by CborIndex
-                // instead, and integer keys are never quoted.
-                builder.Append("  \"");
-                builder.Append(member.CborName);
-                builder.Append("\": ");
+                builder.Append("  ");
+
+                switch (model.ObjectFormat)
+                {
+                    case "Array":
+                        // Positional: no key at all, just the value in wire order.
+                        break;
+
+                    case "IntKeyMap":
+                        // Integer keys are never quoted -- unlike the text keys below, a decimal
+                        // integer is unconditionally a legal bareword in CDDL's map-key position.
+                        // Formatted via FormatConstant rather than StringBuilder's own Append(object)
+                        // overload: CborIndex can be negative, and Append(object) would go through
+                        // the current-culture ToString(), the same locale-dependent-negative-sign
+                        // hazard EmitEnumRule's FormatConstant exists to avoid.
+                        builder.Append(FormatConstant(member.CborIndex!.Value));
+                        builder.Append(": ");
+                        break;
+
+                    default:
+                        // Always quoted: a bareword member key is only legal CDDL when it matches
+                        // RFC 8610's `id` production, and this library's naming conventions and
+                        // [CborProperty("...")] both admit arbitrary strings (a leading digit, a
+                        // space, ...) that `id` rejects. A quoted `tstr` key is unconditionally
+                        // valid, so quoting removes the failure mode rather than trading it for a
+                        // rarer one.
+                        builder.Append("\"");
+                        builder.Append(member.CborName);
+                        builder.Append("\": ");
+                        break;
+                }
+
                 builder.Append(reference);
                 builder.Append(",\n");
             }
 
-            builder.Append("}\n\n");
+            builder.Append(isArray ? "]\n\n" : "}\n\n");
+        }
+
+        /// <summary>
+        /// ObjectMapping.ValidateMemberNamesAndindexes re-sorts IntKeyMap and Array members by
+        /// ascending index at registration, so declared order is not wire order. For Array the schema
+        /// is positional, which makes reproducing that sort a correctness requirement rather than a
+        /// tidiness one. OrderBy is a stable sort, so members sharing an index (unreachable in
+        /// practice -- ObjectMapping itself rejects duplicate indexes at registration) keep their
+        /// declared order rather than depending on sort implementation, preserving byte-stability.
+        /// </summary>
+        private static IEnumerable<MemberModel> InWireOrder(TypeModel model)
+        {
+            if (model.ObjectFormat == "StringKeyMap")
+            {
+                return model.Members;
+            }
+
+            return model.Members.OrderBy(m => m.CborIndex ?? 0);
         }
 
         /// <summary>
