@@ -140,12 +140,25 @@ deduplication meaningful. This is the §4.2.1 ordering rule, not the deprecated 
 from §4.2.3, which is not implemented.
 
 Key ordering applies to ``StringKeyMap`` and ``IntKeyMap`` objects, ``Dictionary<K,V>``, and
-``CborObject``/``CborValue`` maps; ``CborObjectFormat.Array`` has no map keys and is therefore
-already deterministic. Because ordering is on the *encoded* key, a shorter key always sorts before a
-longer one, so ``"z"`` sorts before ``"aa"``, and negative integer keys sort after all non-negative
-ones, because a negative integer is a different CBOR major type. Supported dictionary key types are
-``string``, ``int``, ``long`` and ``ulong``; any other key type throws a ``CborException`` rather
-than silently emitting unsorted output.
+``CborObject``/``CborValue`` maps. ``CborObjectFormat.Array`` writes its members positionally and has
+no map keys at all, so its bytes are identical with and without ``Deterministic``.
+
+Because ordering is on the *encoded* key, a shorter key always sorts before a longer one, so ``"z"``
+sorts before ``"aa"``. Keys of different CBOR major types order by major type first — unsigned
+integer, then negative integer, then byte string, then text string — which is why negative integer
+keys sort after all non-negative ones.
+
+Supported dictionary key types are ``string``, ``char``, ``byte[]``/``ReadOnlyMemory<byte>``, every
+integral type (``byte``, ``sbyte``, ``short``, ``ushort``, ``int``, ``uint``, ``long``, ``ulong``)
+and enums — each ordered as its own converter writes it, so an enum is ordered as text when
+``EnumFormat`` is ``WriteToString``. ``CborObject`` keys may be text strings, byte strings and
+integers, mixed freely within one map, which is what lets a document read off the wire be re-encoded
+deterministically. Any other key type throws a ``CborException`` rather than silently emitting
+unsorted output.
+
+``Deterministic`` may be set at any point in an options object's life, including on the long-lived
+``CborOptions.Default``: it is read when a value is written, not when converters are built, so it
+takes effect on the very next write.
 
 Deterministic mode also rejects any setting that would admit more than one encoding of the same
 value: setting ``ArrayLengthMode`` or ``MapLengthMode`` to ``LengthMode.IndefiniteLength`` while
