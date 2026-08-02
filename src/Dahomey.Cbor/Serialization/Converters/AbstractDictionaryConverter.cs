@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -57,12 +59,57 @@ namespace Dahomey.Cbor.Serialization.Converters
             WriterContext context = new WriterContext
             {
                 count = value.Count,
-                enumerator = value.GetEnumerator(),
+                enumerator = _options.Deterministic
+                    ? SortedEntries(value).GetEnumerator()
+                    : value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : _options.MapLengthMode
             };
 
             writer.WriteMap(this, ref context);
+        }
+
+        // The key set is only known at write time (unlike fixed object members, which are sorted once
+        // at mapping build time in ObjectConverter), so this materialises and sorts on every write.
+        // GetMapSize/WriteMapItem are untouched: they only ever pump context.enumerator, so handing
+        // them a sorted list's enumerator instead of the dictionary's is enough.
+        private static List<KeyValuePair<TK, TV>> SortedEntries(IDictionary<TK, TV> dictionary)
+        {
+            List<KeyValuePair<TK, TV>> entries = new List<KeyValuePair<TK, TV>>(dictionary);
+
+            try
+            {
+                entries.Sort(CompareEntriesForDeterministicOrder);
+            }
+            catch (InvalidOperationException ex) when (ex.InnerException is CborException cborException)
+            {
+                // List<T>.Sort wraps any exception thrown by the comparison delegate in an
+                // InvalidOperationException (mirrors Activator.CreateInstance wrapping construction
+                // failures in TargetInvocationException). Unwrap so callers see the CborException
+                // thrown by CompareEntriesForDeterministicOrder for unsupported key types, not an
+                // opaque "failed to compare two elements" message.
+                throw cborException;
+            }
+
+            return entries;
+        }
+
+        private static int CompareEntriesForDeterministicOrder(KeyValuePair<TK, TV> x, KeyValuePair<TK, TV> y)
+        {
+            if (x.Key is string stringX && y.Key is string stringY)
+            {
+                return CborKeyComparer.CompareTextKeys(
+                    Encoding.UTF8.GetBytes(stringX),
+                    Encoding.UTF8.GetBytes(stringY));
+            }
+
+            if (x.Key is int intX && y.Key is int intY)
+            {
+                return CborKeyComparer.CompareIntKeys(intX, intY);
+            }
+
+            throw new CborException(
+                $"Deterministic encoding supports only string and int dictionary keys; found {typeof(TK)}.");
         }
 
         public void ReadBeginMap(int size, ref ReaderContext context)

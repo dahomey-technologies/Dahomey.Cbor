@@ -280,5 +280,71 @@ namespace Dahomey.Cbor.Tests
                 null,
                 options);
         }
+
+        [Fact]
+        public void DictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<string, int> value = new Dictionary<string, int>
+            {
+                ["b"] = 1,
+                ["a"] = 2,
+            };
+
+            // A2 map(2) 6161 "a" 02 6162 "b" 01
+            Helper.TestWrite(value, "A2616102616201", null, new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void DictionaryOrderIsIndependentOfInsertionOrderWhenDeterministic()
+        {
+            CborOptions options = new CborOptions { Deterministic = true };
+
+            Dictionary<string, int> forwards = new Dictionary<string, int> { ["a"] = 1, ["b"] = 2, ["c"] = 3 };
+            Dictionary<string, int> backwards = new Dictionary<string, int> { ["c"] = 3, ["b"] = 2, ["a"] = 1 };
+
+            Assert.Equal(Helper.Write(forwards, options), Helper.Write(backwards, options));
+        }
+
+        [Fact]
+        public void SerializingTwiceProducesIdenticalBytes()
+        {
+            CborOptions options = new CborOptions { Deterministic = true };
+            OutOfOrderObject value = new OutOfOrderObject { Zebra = 1, Apple = 2, Mango = 3 };
+
+            Assert.Equal(Helper.Write(value, options), Helper.Write(value, options));
+        }
+
+        [Fact]
+        public void IntKeyedDictionaryKeysAreSortedWhenDeterministic()
+        {
+            Dictionary<int, string> value = new Dictionary<int, string>
+            {
+                [1] = "one",
+                [-1] = "minus one",
+                [0] = "zero",
+            };
+
+            // A3 map(3)
+            //   00  0   64 7A65726F           "zero"
+            //   01  1   63 6F6E65              "one"
+            //   20 -1   69 6D696E7573206F6E65  "minus one"
+            Helper.TestWrite(value,
+                "A300647A65726F01636F6E6520696D696E7573206F6E65",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        [Fact]
+        public void NonStringNonIntDictionaryKeysThrowWhenDeterministic()
+        {
+            Dictionary<double, int> value = new Dictionary<double, int>
+            {
+                [1.5] = 1,
+                [2.5] = 2,
+            };
+
+            CborOptions options = new CborOptions { Deterministic = true };
+            Assert.Throws<CborException>(() => Helper.Write(value, options));
+        }
     }
 }
