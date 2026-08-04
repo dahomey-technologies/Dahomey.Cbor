@@ -1,4 +1,4 @@
-using Dahomey.Cbor.Attributes;
+﻿using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Util;
 using System;
 using System.Reflection;
@@ -119,7 +119,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return new StructMemberConverter<T, TM>(
                 MemberName ?? string.Empty,
                 MemberIndex,
-                ResolveConverter(),
+                ResolveConverter,
                 _memberGetter,
                 _memberSetter,
                 (TM)DefaultValue!,

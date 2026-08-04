@@ -1,4 +1,4 @@
-using Dahomey.Cbor.Attributes;
+﻿using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Util;
 using System;
 using System.Reflection;
@@ -130,7 +130,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return new MemberConverter<T, TM>(
                 MemberName != null ? MemberName.AsBinaryMemory() : ReadOnlyMemory<byte>.Empty,
                 MemberIndex,
-                ResolveConverter(),
+                ResolveConverter,
                 _memberGetter,
                 _memberSetter,
                 (TM)DefaultValue!,

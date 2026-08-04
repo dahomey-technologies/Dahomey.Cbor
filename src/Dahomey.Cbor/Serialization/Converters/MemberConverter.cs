@@ -34,7 +34,8 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly Func<T, TM>? _memberGetter;
         private readonly Action<T, TM>? _memberSetter;
-        private readonly IMemberMapping _memberMapping;
+        private readonly IMemberMapping? _memberMapping;
+        private readonly Func<ICborConverter<TM>>? _converterFactory;
         private ICborConverter<TM>? _converter;
 
         /// <summary>
@@ -43,10 +44,14 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// <remarks>
         /// Two types that reference each other cannot both have a converter at the moment either one
         /// is being constructed. Resolving here instead means the member converter exists before the
-        /// converter it points at, which is what lets a cycle finish building at all.
+        /// converter it points at, which is what lets a cycle finish building at all -- and, on the
+        /// source-generated path, what keeps a cycle from reaching the reflection providers before
+        /// the generated registrations have run.
         /// </remarks>
         private ICborConverter<TM> Converter
-            => _converter ??= (ICborConverter<TM>)_memberMapping.Converter!;
+            => _converter ??= _converterFactory is not null
+                ? _converterFactory()
+                : (ICborConverter<TM>)_memberMapping!.Converter!;
         private ReadOnlyMemory<byte> _memberName;
         private int? _memberIndex;
         private readonly TM _defaultValue;
@@ -94,7 +99,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         internal MemberConverter(
             ReadOnlyMemory<byte> memberName,
             int? memberIndex,
-            ICborConverter<TM> converter,
+            Func<ICborConverter<TM>> converterFactory,
             Func<T, TM>? memberGetter,
             Action<T, TM>? memberSetter,
             TM defaultValue,
@@ -105,7 +110,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             _memberName = memberName;
             _memberIndex = memberIndex;
-            _converter = converter;
+            _converterFactory = converterFactory;
             _memberGetter = memberGetter;
             _memberSetter = memberSetter;
             _defaultValue = defaultValue;
@@ -247,7 +252,8 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly StructMemberGetterDelegate<T, TM>? _memberGetter;
         private readonly StructMemberSetterDelegate<T, TM>? _memberSetter;
-        private readonly IMemberMapping _memberMapping;
+        private readonly IMemberMapping? _memberMapping;
+        private readonly Func<ICborConverter<TM>>? _converterFactory;
         private ICborConverter<TM>? _converter;
 
         /// <summary>
@@ -256,10 +262,14 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// <remarks>
         /// Two types that reference each other cannot both have a converter at the moment either one
         /// is being constructed. Resolving here instead means the member converter exists before the
-        /// converter it points at, which is what lets a cycle finish building at all.
+        /// converter it points at, which is what lets a cycle finish building at all -- and, on the
+        /// source-generated path, what keeps a cycle from reaching the reflection providers before
+        /// the generated registrations have run.
         /// </remarks>
         private ICborConverter<TM> Converter
-            => _converter ??= (ICborConverter<TM>)_memberMapping.Converter!;
+            => _converter ??= _converterFactory is not null
+                ? _converterFactory()
+                : (ICborConverter<TM>)_memberMapping!.Converter!;
         private readonly ReadOnlyMemory<byte> _memberName;
         private readonly TM _defaultValue;
         private readonly bool _ignoreIfDefault;
@@ -299,7 +309,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         internal StructMemberConverter(
             string memberName,
             int? memberIndex,
-            ICborConverter<TM> converter,
+            Func<ICborConverter<TM>> converterFactory,
             StructMemberGetterDelegate<T, TM>? memberGetter,
             StructMemberSetterDelegate<T, TM>? memberSetter,
             TM defaultValue,
@@ -309,7 +319,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             MemberNameAsString = memberName;
             _memberName = Encoding.UTF8.GetBytes(memberName);
             MemberIndex = memberIndex;
-            _converter = converter;
+            _converterFactory = converterFactory;
             _memberGetter = memberGetter;
             _memberSetter = memberSetter;
             _defaultValue = defaultValue;
