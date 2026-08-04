@@ -20,15 +20,15 @@ namespace Dahomey.Cbor.Tests
         {
             options = options ?? CborOptions.Default;
             byte[] buffer = hexBuffer.HexToBytes();
-            CborReader spanReader = new CborReader(buffer.AsSpan());
+            CborReader spanReader = new CborReader(buffer.AsSpan(), options.MaxDepth);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             
             T value = converter.Read(ref spanReader);
 
-            CborReader sequenceReader = new CborReader(new ReadOnlySequence<byte>(buffer));
+            CborReader sequenceReader = new CborReader(new ReadOnlySequence<byte>(buffer), options.MaxDepth);
             T sequenceValue = converter.Read(ref sequenceReader);
 
-            CborReader fragmentizedSequenceReader = new CborReader(Fragmentize(buffer));
+            CborReader fragmentizedSequenceReader = new CborReader(Fragmentize(buffer), options.MaxDepth);
             T fragmentizedSequenceValue = converter.Read(ref fragmentizedSequenceReader);
 
             if (typeof(T) == typeof(ReadOnlySequence<byte>))
@@ -113,7 +113,7 @@ namespace Dahomey.Cbor.Tests
 
             using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
             {
-                CborWriter writer = new CborWriter(bufferWriter);
+                CborWriter writer = new CborWriter(bufferWriter, options.MaxDepth);
                 ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
                 converter.Write(ref writer, value);
                 return BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", "");

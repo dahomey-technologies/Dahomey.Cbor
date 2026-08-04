@@ -60,6 +60,17 @@ namespace Dahomey.Cbor
         public ulong DiscriminatorSemanticTag { get; set; } = 39;
 
         /// <summary>
+        /// Maximum nesting depth of maps and arrays, for both reading and writing. Default 64.
+        /// </summary>
+        /// <remarks>
+        /// On write this converts a reference cycle - which CBOR cannot represent, and which would
+        /// otherwise recurse until the stack is exhausted - into a <see cref="CborException"/>. On read
+        /// it bounds stack use on untrusted input, where a handful of bytes can describe arbitrarily
+        /// deep nesting. Raise it if the data is genuinely deeper than 64 levels.
+        /// </remarks>
+        public int MaxDepth { get; set; } = Serialization.CborWriter.DefaultMaxDepth;
+
+        /// <summary>
         /// The default naming convention to use when no naming convention is specified.
         /// </summary>
         public INamingConvention? DefaultNamingConvention { get; set; }

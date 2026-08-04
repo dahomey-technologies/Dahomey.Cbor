@@ -25,13 +25,41 @@ namespace Dahomey.Cbor.Serialization
     {
         private const byte INDEFINITE_LENGTH = 31;
 
+        /// <summary>
+        /// Default nesting limit, matching <see cref="CborOptions.MaxDepth"/> and
+        /// <c>System.Text.Json</c>.
+        /// </summary>
+        public const int DefaultMaxDepth = 64;
+
         private IBufferWriter<byte> _bufferWriter;
+        private readonly int _maxDepth;
+        private int _depth;
 
         public IBufferWriter<byte> BufferWriter => _bufferWriter;
 
+        /// <summary>Maximum permitted nesting depth of maps and arrays.</summary>
+        public int MaxDepth => _maxDepth;
+
         public CborWriter(IBufferWriter<byte> bufferWriter)
+            : this(bufferWriter, DefaultMaxDepth)
         {
+        }
+
+        /// <param name="maxDepth">
+        /// Maximum nesting depth of maps and arrays. Exceeding it throws a <see cref="CborException"/>
+        /// rather than recursing until the stack is exhausted, which is what an object graph
+        /// containing a reference cycle would otherwise do. Must be positive.
+        /// </param>
+        public CborWriter(IBufferWriter<byte> bufferWriter, int maxDepth)
+        {
+            if (maxDepth <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxDepth), maxDepth, "maxDepth must be positive.");
+            }
+
             _bufferWriter = bufferWriter;
+            _maxDepth = maxDepth;
+            _depth = 0;
         }
 
         public void WriteSemanticTag(ulong semanticTag)
@@ -283,10 +311,12 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteMap<TC>(ICborMapWriter<TC> mapWriter, ref TC context)
         {
+            EnterNestedItem();
             int size = mapWriter.GetMapSize(ref context);
             WriteBeginMap(size);
             while (mapWriter.WriteMapItem(ref this, ref context));
             WriteEndMap(size);
+            _depth--;
         }
 
         public void WriteBeginArray(int size)
@@ -305,10 +335,40 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteArray<TC>(ICborArrayWriter<TC> arrayWriter, ref TC context)
         {
+            EnterNestedItem();
             int size = arrayWriter.GetArraySize(ref context);
             WriteBeginArray(size);
             while(arrayWriter.WriteArrayItem(ref this, ref context));
             WriteEndArray(size);
+            _depth--;
+        }
+
+        /// <summary>
+        /// Accounts for entering a nested map or array, and refuses to go deeper than
+        /// <see cref="MaxDepth"/>.
+        /// </summary>
+        /// <remarks>
+        /// CBOR has no back-references, so a reference cycle in the object graph is not representable
+        /// and manifests as unbounded recursion. Without this check that is a
+        /// <c>StackOverflowException</c>, which cannot be caught and takes the process down; with it,
+        /// the caller gets a <see cref="CborException"/> naming the likely cause.
+        /// <para>
+        /// The matching decrement in <c>WriteMap</c>/<c>WriteArray</c> is deliberately not wrapped in a
+        /// <c>finally</c>: a writer that has thrown is never written to again — it is a single-use
+        /// <c>ref struct</c> the caller discards — so the depth left behind is unobservable, while an
+        /// exception handler would make these methods ineligible for JIT inlining on the hot path.
+        /// </para>
+        /// </remarks>
+        private void EnterNestedItem()
+        {
+            if (++_depth > _maxDepth)
+            {
+                throw new CborException(
+                    $"CBOR nesting depth exceeded the configured maximum of {_maxDepth}. " +
+                    "This usually means the object graph contains a reference cycle, which CBOR cannot " +
+                    $"represent. Raise {nameof(CborOptions)}.{nameof(CborOptions.MaxDepth)} if the data is " +
+                    "genuinely this deeply nested.");
+            }
         }
 
         private void WriteSize(CborMajorType majorType, int size)
