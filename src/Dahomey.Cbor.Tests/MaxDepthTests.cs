@@ -197,6 +197,64 @@ namespace Dahomey.Cbor.Tests
             Assert.Throws<CborException>(() => Cbor.Deserialize<CborValue>(hostile));
         }
 
+        // ---- the non-generic overloads, whose options argument is optional ----
+
+        /// <summary>
+        /// <see cref="Cbor.Serialize(object, Type, in IBufferWriter{byte}, CborOptions)"/> and
+        /// <see cref="Cbor.SerializeMultiple(object[], Type, in IBufferWriter{byte}, CborOptions)"/>
+        /// take <c>options</c> as an optional argument, so the depth limit must be read only after
+        /// <c>CborOptions.Default</c> has been substituted for a null one. Every other test reaches
+        /// the writer through the generic overloads, which is why these two carry their own cases.
+        /// </summary>
+        [Fact]
+        public void NonGenericSerializeWithoutOptionsUsesTheDefaultDepth()
+        {
+            using ByteBufferWriter bufferWriter = new ByteBufferWriter();
+
+            Cbor.Serialize(new Node(), typeof(Node), bufferWriter);
+
+            // {"Next": null}
+            Assert.Equal("A1644E657874F6", ToHex(bufferWriter));
+        }
+
+        [Fact]
+        public void NonGenericSerializeOfNullWithoutOptionsWritesNull()
+        {
+            using ByteBufferWriter bufferWriter = new ByteBufferWriter();
+
+            Cbor.Serialize(null, typeof(Node), bufferWriter);
+
+            // null
+            Assert.Equal("F6", ToHex(bufferWriter));
+        }
+
+        [Fact]
+        public void NonGenericSerializeMultipleWithoutOptionsUsesTheDefaultDepth()
+        {
+            using ByteBufferWriter bufferWriter = new ByteBufferWriter();
+
+            Cbor.SerializeMultiple(new object[] { new Node(), new Node() }, typeof(Node), bufferWriter);
+
+            // {"Next": null} {"Next": null}
+            Assert.Equal("A1644E657874F6A1644E657874F6", ToHex(bufferWriter));
+        }
+
+        [Fact]
+        public void NonGenericSerializeWithoutOptionsStillBoundsDepth()
+        {
+            Node node = new Node();
+            node.Next = node;
+
+            using ByteBufferWriter bufferWriter = new ByteBufferWriter();
+
+            Assert.Throws<CborException>(() => Cbor.Serialize(node, typeof(Node), bufferWriter));
+        }
+
+        private static string ToHex(ByteBufferWriter bufferWriter)
+        {
+            return BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", "");
+        }
+
         // ---- argument validation ----
 
         [Fact]

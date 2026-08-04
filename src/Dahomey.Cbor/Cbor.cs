@@ -503,6 +503,7 @@ namespace Dahomey.Cbor
             in IBufferWriter<byte> buffer,
             CborOptions? options = null)
         {
+            options ??= CborOptions.Default;
             CborWriter writer = new CborWriter(buffer, options.MaxDepth);
             if (input is null)
             {
@@ -510,7 +511,6 @@ namespace Dahomey.Cbor
             }
             else
             {
-                options ??= CborOptions.Default;
                 ICborConverter converter = options.Registry.ConverterRegistry.Lookup(inputType);
                 converter.Write(ref writer, input);
             }
@@ -539,6 +539,7 @@ namespace Dahomey.Cbor
             in IBufferWriter<byte> buffer,
             CborOptions? options = null)
         {
+            options ??= CborOptions.Default;
             CborWriter writer = new CborWriter(buffer, options.MaxDepth);
             if (input is null)
             {
@@ -546,7 +547,6 @@ namespace Dahomey.Cbor
             }
             else
             {
-                options ??= CborOptions.Default;
                 ICborConverter converter = options.Registry.ConverterRegistry.Lookup(inputType);
                 for (int i = 0; i < input.Length; i++)
                 {

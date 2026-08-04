@@ -677,6 +677,12 @@ namespace Dahomey.Cbor.Serialization
         /// <see cref="MaxDepth"/>. Bounds stack use on untrusted input, where a few bytes can
         /// describe arbitrarily deep nesting.
         /// </summary>
+        /// <remarks>
+        /// The matching decrement in <c>ReadMap</c>/<c>ReadArray</c> is deliberately not wrapped in a
+        /// <c>finally</c>: a reader that has thrown is never read from again — it is a single-use
+        /// <c>ref struct</c> the caller discards — so the depth left behind is unobservable, while an
+        /// exception handler would make these methods ineligible for JIT inlining on the hot path.
+        /// </remarks>
         private void EnterNestedItem()
         {
             if (++_depth > _maxDepth)

@@ -352,6 +352,12 @@ namespace Dahomey.Cbor.Serialization
         /// and manifests as unbounded recursion. Without this check that is a
         /// <c>StackOverflowException</c>, which cannot be caught and takes the process down; with it,
         /// the caller gets a <see cref="CborException"/> naming the likely cause.
+        /// <para>
+        /// The matching decrement in <c>WriteMap</c>/<c>WriteArray</c> is deliberately not wrapped in a
+        /// <c>finally</c>: a writer that has thrown is never written to again — it is a single-use
+        /// <c>ref struct</c> the caller discards — so the depth left behind is unobservable, while an
+        /// exception handler would make these methods ineligible for JIT inlining on the hot path.
+        /// </para>
         /// </remarks>
         private void EnterNestedItem()
         {
