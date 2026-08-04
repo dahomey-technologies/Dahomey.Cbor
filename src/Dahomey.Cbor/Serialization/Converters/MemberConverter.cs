@@ -34,7 +34,19 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly Func<T, TM>? _memberGetter;
         private readonly Action<T, TM>? _memberSetter;
-        private readonly ICborConverter<TM> _converter;
+        private readonly IMemberMapping _memberMapping;
+        private ICborConverter<TM>? _converter;
+
+        /// <summary>
+        /// Resolved on first use, not in the constructor.
+        /// </summary>
+        /// <remarks>
+        /// Two types that reference each other cannot both have a converter at the moment either one
+        /// is being constructed. Resolving here instead means the member converter exists before the
+        /// converter it points at, which is what lets a cycle finish building at all.
+        /// </remarks>
+        private ICborConverter<TM> Converter
+            => _converter ??= (ICborConverter<TM>)_memberMapping.Converter!;
         private ReadOnlyMemory<byte> _memberName;
         private int? _memberIndex;
         private readonly TM _defaultValue;
@@ -66,7 +78,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             _memberGetter = GenerateGetter(memberInfo);
             _memberSetter = GenerateSetter(memberInfo);
-            _converter = (ICborConverter<TM>)memberMapping.Converter!;
+            _memberMapping = memberMapping;
             _defaultValue = (TM)memberMapping.DefaultValue!;
             _ignoreIfDefault = memberMapping.IgnoreIfDefault;
             _shouldSerializeMethod = memberMapping.ShouldSerializeMethod;
@@ -89,7 +101,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException($"No member setter for '{Encoding.UTF8.GetString(_memberName.Span)}'");
             }
 
-            _memberSetter((T)obj, _converter.Read(ref reader));
+            _memberSetter((T)obj, Converter.Read(ref reader));
         }
 
         public void Write(ref CborWriter writer, object obj)
@@ -107,12 +119,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException($"Property '{Encoding.UTF8.GetString(_memberName.Span)}' cannot be null.");
             }
 
-            _converter.Write(ref writer, value, _lengthMode);
+            Converter.Write(ref writer, value, _lengthMode);
         }
 
         public object Read(ref CborReader reader)
         {
-            return _converter.Read(ref reader)!;
+            return Converter.Read(ref reader)!;
         }
 
         public void Set(object obj, object value)
@@ -206,7 +218,19 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly StructMemberGetterDelegate<T, TM>? _memberGetter;
         private readonly StructMemberSetterDelegate<T, TM>? _memberSetter;
-        private readonly ICborConverter<TM> _converter;
+        private readonly IMemberMapping _memberMapping;
+        private ICborConverter<TM>? _converter;
+
+        /// <summary>
+        /// Resolved on first use, not in the constructor.
+        /// </summary>
+        /// <remarks>
+        /// Two types that reference each other cannot both have a converter at the moment either one
+        /// is being constructed. Resolving here instead means the member converter exists before the
+        /// converter it points at, which is what lets a cycle finish building at all.
+        /// </remarks>
+        private ICborConverter<TM> Converter
+            => _converter ??= (ICborConverter<TM>)_memberMapping.Converter!;
         private readonly ReadOnlyMemory<byte> _memberName;
         private readonly TM _defaultValue;
         private readonly bool _ignoreIfDefault;
@@ -233,7 +257,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             MemberIndex = memberMapping.MemberIndex;
             _memberGetter = GenerateGetter(memberInfo);
             _memberSetter = GenerateSetter(memberInfo);
-            _converter = (ICborConverter<TM>)memberMapping.Converter!;
+            _memberMapping = memberMapping;
             _defaultValue = (TM)memberMapping.DefaultValue!;
             _ignoreIfDefault = memberMapping.IgnoreIfDefault;
             _requirementPolicy = memberMapping.RequirementPolicy;
@@ -251,7 +275,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public object Read(ref CborReader reader)
         {
-            return _converter.Read(ref reader)!;
+            return Converter.Read(ref reader)!;
         }
 
         public void Set(object obj, object value)
@@ -279,7 +303,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException($"No member setter for '{MemberNameAsString}'");
             }
 
-            _memberSetter(ref instance, _converter.Read(ref reader));
+            _memberSetter(ref instance, Converter.Read(ref reader));
         }
 
         public void Write(ref CborWriter writer, ref T instance)
@@ -297,7 +321,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException($"Property '{MemberNameAsString}' cannot be null.");
             }
 
-            _converter.Write(ref writer, value);
+            Converter.Write(ref writer, value);
         }
 
         public bool ShouldSerialize(ref T instance, Type declaredType)
