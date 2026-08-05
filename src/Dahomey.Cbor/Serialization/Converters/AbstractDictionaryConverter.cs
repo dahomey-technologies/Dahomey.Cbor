@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -57,12 +58,29 @@ namespace Dahomey.Cbor.Serialization.Converters
             WriterContext context = new WriterContext
             {
                 count = value.Count,
-                enumerator = value.GetEnumerator(),
+                enumerator = _options.Deterministic
+                    ? SortedEntries(value)
+                    : value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : _options.MapLengthMode
             };
 
             writer.WriteMap(this, ref context);
+        }
+
+        // The key set is only known at write time (unlike fixed object members, which ObjectConverter
+        // sorts once per type), so this materialises and sorts on every write. GetMapSize/WriteMapItem
+        // are untouched: they only ever pump context.enumerator, so handing them the sorted sequence's
+        // enumerator instead of the dictionary's is enough.
+        private IEnumerator<KeyValuePair<TK, TV>> SortedEntries(IDictionary<TK, TV> dictionary)
+        {
+            // KeyConverter is the same converter WriteMapItem uses, so the order is the order of the
+            // bytes that actually get written -- including any converter the caller registered for the
+            // key type themselves.
+            KeyValuePair<TK, TV>[] sorted =
+                DeterministicKeyOrder.Sort(dictionary, KeyConverter, _options.MaxDepth);
+
+            return ((IEnumerable<KeyValuePair<TK, TV>>)sorted).GetEnumerator();
         }
 
         public void ReadBeginMap(int size, ref ReaderContext context)

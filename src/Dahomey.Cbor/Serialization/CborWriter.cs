@@ -40,6 +40,8 @@ namespace Dahomey.Cbor.Serialization
         /// <summary>Maximum permitted nesting depth of maps and arrays.</summary>
         public int MaxDepth => _maxDepth;
 
+        private readonly bool _deterministic;
+
         public CborWriter(IBufferWriter<byte> bufferWriter)
             : this(bufferWriter, DefaultMaxDepth)
         {
@@ -51,6 +53,18 @@ namespace Dahomey.Cbor.Serialization
         /// containing a reference cycle would otherwise do. Must be positive.
         /// </param>
         public CborWriter(IBufferWriter<byte> bufferWriter, int maxDepth)
+            : this(bufferWriter, maxDepth, deterministic: false)
+        {
+        }
+
+        /// <param name="deterministic">
+        /// Refuse indefinite lengths, which admit more than one encoding of the same value. Checked
+        /// here rather than only on <see cref="CborOptions"/> because the options are the
+        /// lowest-priority source of the length mode: <see cref="Attributes.CborLengthModeAttribute"/>
+        /// on a type or member outranks them, and a converter may pass a mode explicitly. This is the
+        /// one point every definite or indefinite header passes through.
+        /// </param>
+        public CborWriter(IBufferWriter<byte> bufferWriter, int maxDepth, bool deterministic)
         {
             if (maxDepth <= 0)
             {
@@ -60,6 +74,7 @@ namespace Dahomey.Cbor.Serialization
             _bufferWriter = bufferWriter;
             _maxDepth = maxDepth;
             _depth = 0;
+            _deterministic = deterministic;
         }
 
         public void WriteSemanticTag(ulong semanticTag)
@@ -297,6 +312,7 @@ namespace Dahomey.Cbor.Serialization
 
         public void WriteBeginMap(int size)
         {
+            RejectIndefiniteWhenDeterministic(size, "map");
             WriteSize(CborMajorType.Map, size);
         }
 
@@ -321,7 +337,20 @@ namespace Dahomey.Cbor.Serialization
 
         public void WriteBeginArray(int size)
         {
+            RejectIndefiniteWhenDeterministic(size, "array");
             WriteSize(CborMajorType.Array, size);
+        }
+
+        private readonly void RejectIndefiniteWhenDeterministic(int size, string kind)
+        {
+            if (_deterministic && size < 0)
+            {
+                throw new CborException(
+                    $"An indefinite-length {kind} cannot be written while Deterministic is enabled: "
+                    + "indefinite lengths admit more than one encoding of the same value. This can come "
+                    + "from CborOptions.ArrayLengthMode or MapLengthMode, or from a CborLengthMode "
+                    + "attribute on a type or member, which takes priority over both.");
+            }
         }
 
         public void WriteEndArray(int size)

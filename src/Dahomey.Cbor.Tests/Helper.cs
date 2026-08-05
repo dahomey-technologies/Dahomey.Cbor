@@ -113,7 +113,7 @@ namespace Dahomey.Cbor.Tests
 
             using (ByteBufferWriter bufferWriter = new ByteBufferWriter())
             {
-                CborWriter writer = new CborWriter(bufferWriter, options.MaxDepth);
+                CborWriter writer = new CborWriter(bufferWriter, options.MaxDepth, options.Deterministic);
                 ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
                 converter.Write(ref writer, value);
                 return BitConverter.ToString(bufferWriter.WrittenSpan.ToArray()).Replace("-", "");

@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Util;
@@ -55,6 +56,35 @@ namespace Dahomey.Cbor.Serialization.Converters
             public T obj;
             public int memberIndex;
             public IObjectConverter objectConverter;
+            /// <summary>
+            /// The member list this write runs on, read from
+            /// <see cref="IObjectConverter.MemberConvertersForWrite"/> once, when the write starts.
+            /// </summary>
+            /// <remarks>
+            /// That property answers from <see cref="CborOptions.Deterministic"/>, which any code
+            /// running during the write -- a property getter, a custom converter, another thread
+            /// sharing <see cref="CborOptions.Default"/> -- is free to change. Consulting it per item
+            /// would let one write start on one ordering and finish on the other, writing some members
+            /// twice and dropping others while the map header still claims the original count: a
+            /// structurally corrupt document that nothing downstream can detect. Snapshotting also
+            /// keeps the property off the per-member path, where it costs a non-inlineable call on
+            /// every object write, deterministic or not.
+            /// </remarks>
+            public IReadOnlyList<IMemberConverter> memberConvertersForWrite;
+
+            /// <summary>
+            /// The object format this write runs on, taken from the same converter as
+            /// <see cref="memberConvertersForWrite"/>.
+            /// </summary>
+            /// <remarks>
+            /// In the polymorphic case that converter is the derived type's, so reading the format
+            /// from the declared type's mapping instead would let a base and a derived type that
+            /// disagree on it decide the exclusion of
+            /// <see cref="CborObjectFormat.Array"/> from one mapping and the write from the other:
+            /// members would be written positionally in sorted order, moving values between array
+            /// slots. Both come from one converter, read once.
+            /// </remarks>
+            public CborObjectFormat objectFormat;
             public LengthMode lengthMode;
         }
 
@@ -62,6 +92,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly Dictionary<int, IMemberConverter> _memberConvertersForReadByIndex = new();
         public List<IMemberConverter> _requiredMemberConvertersForRead = new List<IMemberConverter>();
         private readonly List<IMemberConverter> _memberConvertersForWrite;
+        private List<IMemberConverter>? _deterministicMemberConvertersForWrite;
         private readonly CborOptions _options;
         private readonly SerializationRegistry _registry;
         private readonly IObjectMapping _objectMapping;
@@ -70,7 +101,50 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly bool _isStruct;
         private readonly IDiscriminatorConvention? _discriminatorConvention = null;
 
-        public IReadOnlyList<IMemberConverter> MemberConvertersForWrite => _memberConvertersForWrite;
+        /// <summary>
+        /// The members to write, in the order to write them: declaration order normally, deterministic
+        /// key order when <see cref="CborOptions.Deterministic"/> is set.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The flag is read here, where the list is consumed, rather than in the constructor where it is
+        /// built. A converter is built once per type and then cached in
+        /// <see cref="CborConverterRegistry"/> for the lifetime of the options, so an order chosen at
+        /// construction would be frozen at whatever the flag happened to be the first time that type was
+        /// serialized -- and silently wrong, not loudly wrong, for every write after the flag changed.
+        /// <see cref="CborOptions.Default"/> being a process-wide singleton makes that ordinary rather
+        /// than exotic. Reading the flag per write costs a branch and keeps the guarantee honest.
+        /// </para>
+        /// <para>
+        /// <see cref="CborObjectFormat.Array"/> is excluded because it writes members positionally and
+        /// emits no keys at all. There is nothing to order, and reordering would move values between
+        /// array positions -- changing what the document means rather than only how it is spelled.
+        /// </para>
+        /// </remarks>
+        public IReadOnlyList<IMemberConverter> MemberConvertersForWrite
+        {
+            get
+            {
+                if (!_options.Deterministic || _objectMapping.ObjectFormat == CborObjectFormat.Array)
+                {
+                    return _memberConvertersForWrite;
+                }
+
+                // The member set itself is fixed at construction, so its sorted permutation is too, and
+                // is computed once. Two threads racing here build identical lists; the reference
+                // assignment is atomic, so the loser's copy is simply dropped.
+                List<IMemberConverter>? sorted = _deterministicMemberConvertersForWrite;
+
+                if (sorted == null)
+                {
+                    sorted = new List<IMemberConverter>(_memberConvertersForWrite);
+                    sorted.Sort(CompareMembersForDeterministicOrder);
+                    _deterministicMemberConvertersForWrite = sorted;
+                }
+
+                return sorted;
+            }
+        }
         public ByteBufferDictionary<IMemberConverter> MemberConvertersForRead => _memberConvertersForRead;
         public Dictionary<int, IMemberConverter> MemberConvertersForReadByIndex => _memberConvertersForReadByIndex;
         public IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead => _requiredMemberConvertersForRead;
@@ -398,7 +472,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                 context.objectConverter = this;
             }
 
-            switch (_objectMapping.ObjectFormat)
+            // One read of each, here, now that the converter this write runs on is settled -- see
+            // WriterContext.memberConvertersForWrite and WriterContext.objectFormat.
+            context.memberConvertersForWrite = context.objectConverter.MemberConvertersForWrite;
+            context.objectFormat = context.objectConverter.ObjectMapping.ObjectFormat;
+
+            switch (context.objectFormat)
             {
                 case CborObjectFormat.StringKeyMap:
                 case CborObjectFormat.IntKeyMap:
@@ -696,6 +775,24 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
+        private static int CompareMembersForDeterministicOrder(IMemberConverter x, IMemberConverter y)
+        {
+            // IntKeyMap/Array members carry an index and no name. Ordinary StringKeyMap members carry
+            // a name and no index. But DiscriminatorMemberConverter.MemberIndex is hardcoded to 0 in
+            // every format, so a StringKeyMap type with a discriminator has one entry with BOTH a
+            // MemberIndex and a MemberName. That still routes correctly, because the two-sided
+            // HasValue test below only takes the int branch when *both* sides carry an index -- an
+            // ordinary StringKeyMap member's MemberIndex is null, so comparing it against the
+            // discriminator entry always falls through to CompareTextKeys, which is the comparison
+            // that matches how the whole map is actually keyed.
+            if (x.MemberIndex.HasValue && y.MemberIndex.HasValue)
+            {
+                return CborKeyComparer.CompareIntKeys(x.MemberIndex.Value, y.MemberIndex.Value);
+            }
+
+            return CborKeyComparer.CompareTextKeys(x.MemberName, y.MemberName);
+        }
+
         private static bool FindItem(ref CborReader reader, ReadOnlySpan<byte> name)
         {
             do
@@ -739,7 +836,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             int writableMembersCount = 0;
 
-            foreach (IMemberConverter memberConverter in context.objectConverter.MemberConvertersForWrite)
+            foreach (IMemberConverter memberConverter in context.memberConvertersForWrite)
             {
                 if (_isStruct)
                 {
@@ -761,16 +858,16 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private bool WriteItem(ref CborWriter writer, ref WriterContext context)
         {
-            while (context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count)
+            while (context.memberIndex < context.memberConvertersForWrite.Count)
             {
-                IMemberConverter memberConverter = context.objectConverter.MemberConvertersForWrite[context.memberIndex++];
+                IMemberConverter memberConverter = context.memberConvertersForWrite[context.memberIndex++];
                 if (_isStruct)
                 {
                     IMemberConverter<T> typedMemberConverter = (IMemberConverter<T>)memberConverter;
 
                     if (typedMemberConverter.ShouldSerialize(ref context.obj, typeof(T)))
                     {
-                        switch (_objectMapping.ObjectFormat)
+                        switch (context.objectFormat)
                         {
                             case CborObjectFormat.StringKeyMap:
                                 writer.WriteString(memberConverter.MemberName);
@@ -792,7 +889,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
                 else if (memberConverter.ShouldSerialize(context.obj!, typeof(T), context.options))
                 {
-                    switch (_objectMapping.ObjectFormat)
+                    switch (context.objectFormat)
                     {
                         case CborObjectFormat.StringKeyMap:
                             writer.WriteString(memberConverter.MemberName);
@@ -813,7 +910,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
             }
 
-            return context.memberIndex < context.objectConverter.MemberConvertersForWrite.Count;
+            return context.memberIndex < context.memberConvertersForWrite.Count;
         }
 
         private void HandleUnknownName(ref CborReader reader, Type type, ReadOnlySpan<byte> rawName)

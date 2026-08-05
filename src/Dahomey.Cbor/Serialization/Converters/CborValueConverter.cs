@@ -247,11 +247,26 @@ namespace Dahomey.Cbor.Serialization.Converters
             MapWriterContext mapWriterContext = new MapWriterContext
             {
                 obj = value,
-                enumerator = value.GetEnumerator(),
+                enumerator = _options.Deterministic
+                    ? SortedEntries(value)
+                    : value.GetEnumerator(),
                 lengthMode = lengthMode != LengthMode.Default
                     ? lengthMode : _options.MapLengthMode
             };
             writer.WriteMap(this, ref mapWriterContext);
+        }
+
+        // Same shape as AbstractDictionaryConverter.SortedEntries: the key set is only known at write
+        // time, so this materialises and sorts on every write. GetMapSize only reads context.obj.Count,
+        // which sorting cannot change, so it needs no edit -- only which sequence the enumerator walks
+        // differs. A CborObject may mix key kinds, which is why the order comes from
+        // DeterministicKeyOrder (major type first) rather than from a same-kind-only comparison.
+        private IEnumerator<KeyValuePair<CborValue, CborValue>> SortedEntries(CborObject obj)
+        {
+            KeyValuePair<CborValue, CborValue>[] sorted =
+                DeterministicKeyOrder.Sort(obj, this, _options.MaxDepth);
+
+            return ((IEnumerable<KeyValuePair<CborValue, CborValue>>)sorted).GetEnumerator();
         }
 
         CborArray? ICborConverter<CborArray?>.Read(ref CborReader reader)

@@ -4,6 +4,10 @@
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <LangVersion>latest</LangVersion>
+    <!-- Signed with the library's own key so it can be an InternalsVisibleTo friend of it; a
+         strong-named assembly cannot grant friend access to an unsigned one. -->
+    <SignAssembly>True</SignAssembly>
+    <AssemblyOriginatorKeyFile>../Dahomey.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <ItemGroup>
