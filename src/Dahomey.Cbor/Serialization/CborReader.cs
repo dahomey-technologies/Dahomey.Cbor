@@ -903,7 +903,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (size == -1)
             {
-                ThrowNotSupported();
+                ThrowIndefiniteLengthString();
             }
 
             return ReadBytes(size, allowScratchBuffer);
@@ -938,7 +938,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (size == -1)
             {
-                ThrowNotSupported();
+                ThrowIndefiniteLengthString();
             }
 
             ExpectLength(size);
@@ -1088,7 +1088,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (size == -1)
             {
-                ThrowNotSupported();
+                ThrowIndefiniteLengthString();
             }
 
             ExpectLength(size);
@@ -1223,9 +1223,21 @@ namespace Dahomey.Cbor.Serialization
             throw BuildException(message);
         }
 
-        private void ThrowNotSupported()
+        /// <summary>
+        /// Indefinite-length byte and text strings - RFC 8949 §3.2.3, a chunked string terminated by a
+        /// break marker - are not supported by this reader.
+        /// </summary>
+        /// <remarks>
+        /// This is a <see cref="CborException"/> rather than a <see cref="NotSupportedException"/> so
+        /// that it is caught by the same handler as every other malformed- or unreadable-input error.
+        /// A caller has no way to tell the two apart at the point of the read, and a chunked string is
+        /// a property of the document, not of the API being misused.
+        /// </remarks>
+        private void ThrowIndefiniteLengthString()
         {
-            throw new NotSupportedException();
+            throw BuildException(
+                "Indefinite-length byte and text strings are not supported. "
+                + "Re-encode the value as a single definite-length string.");
         }
     }
 }
