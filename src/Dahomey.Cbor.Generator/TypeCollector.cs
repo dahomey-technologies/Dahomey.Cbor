@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -59,6 +59,11 @@ namespace Dahomey.Cbor.Generator
                     break;
 
                 case TypeKind.Enum:
+                    break;
+
+                case TypeKind.ByteArray:
+                    // ByteArrayConverter is concrete and takes no element converter, so there is
+                    // nothing to collect and nothing to order.
                     break;
 
                 case TypeKind.Nullable:
@@ -318,6 +323,15 @@ namespace Dahomey.Cbor.Generator
                 }
 
                 element = array.ElementType;
+
+                // byte[] is a CBOR byte string, not an array of small integers -- the reflection
+                // path resolves it to ByteArrayConverter, and a generated ArrayConverter<byte>
+                // would write 83 01 02 03 where the reflection path writes 43 01 02 03.
+                if (element.SpecialType == SpecialType.System_Byte)
+                {
+                    return TypeKind.ByteArray;
+                }
+
                 return TypeKind.Array;
             }
 

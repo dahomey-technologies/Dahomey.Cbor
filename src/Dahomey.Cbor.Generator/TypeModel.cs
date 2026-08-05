@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
 
 namespace Dahomey.Cbor.Generator
@@ -12,6 +12,12 @@ namespace Dahomey.Cbor.Generator
         Enum,
         Nullable,
         Array,
+
+        /// <summary>
+        /// <c>byte[]</c>, which is a plain CBOR byte string rather than an array of small integers.
+        /// </summary>
+        ByteArray,
+
         Collection,
         Dictionary,
         Object,

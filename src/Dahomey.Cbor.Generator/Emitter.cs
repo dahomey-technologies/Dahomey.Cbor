@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -125,6 +125,10 @@ namespace Dahomey.Cbor.Generator
                     case TypeKind.Nullable:
                         EmitSimpleRegistration(builder, indent, model.Symbol,
                             $"new NullableConverter<{FullName(model.UnderlyingType!)}>(options)");
+                        break;
+
+                    case TypeKind.ByteArray:
+                        EmitSimpleRegistration(builder, indent, model.Symbol, "new ByteArrayConverter()");
                         break;
 
                     case TypeKind.Array:
