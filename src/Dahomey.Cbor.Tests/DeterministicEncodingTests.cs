@@ -184,6 +184,67 @@ namespace Dahomey.Cbor.Tests
                 new CborOptions { Deterministic = true });
         }
 
+        private class NestingObject
+        {
+            public int Yak { get; set; }
+            public OutOfOrderObject Inner { get; set; }
+            public int Ant { get; set; }
+        }
+
+        // Every other ordering test in this file works on a top-level map. Ordering is applied per map,
+        // by the converter that writes it, so a nested value has to be sorted by its own converter on
+        // its own members -- not inherited from, or skipped because of, the map that contains it.
+        [Fact]
+        public void NestedMapsAreSortedIndependentlyWhenDeterministic()
+        {
+            NestingObject value = new NestingObject
+            {
+                Yak = 1,
+                Inner = new OutOfOrderObject { Zebra = 4, Apple = 5, Mango = 6 },
+                Ant = 2,
+            };
+
+            // "Inner" is five characters, so its header byte is 0x65 against 0x63 for the two
+            // three-character names: it sorts last on header length before any name content is looked
+            // at, which is also why this test would not catch a converter that sorted alphabetically.
+            //
+            // A3 map(3)
+            //   63416E74       "Ant"    02
+            //   6359616B       "Yak"    01
+            //   65496E6E6572   "Inner"  A3 map(3)
+            //                              654170706C65 "Apple"  05
+            //                              654D616E676F "Mango"  06
+            //                              655A65627261 "Zebra"  04
+            Helper.TestWrite(value,
+                "A363416E74026359616B0165496E6E6572A3654170706C6505654D616E676F06655A6562726104",
+                null,
+                new CborOptions { Deterministic = true });
+        }
+
+        // Ordering is over the bytes a key's converter writes, so there is no kind of key the rule
+        // itself excludes: a null, an array and a map are all encodable, so all three are orderable.
+        // Each sorts after the text key here because major type decides first -- text is 3 (0x61),
+        // array 4 (0x82), map 5 (0xA1), and null is major type 7 (0xF6).
+        [Theory]
+        [InlineData("null", "A2617A02F601")]
+        [InlineData("array", "A2617A0282010201")]
+        [InlineData("map", "A2617A02A1616B0101")]
+        public void NonScalarCborObjectKeysAreOrderedRatherThanRejected(string kind, string expectedHex)
+        {
+            CborValue key = kind switch
+            {
+                "null" => CborValue.Null,
+                "array" => new CborArray(1, 2),
+                _ => new CborObject { ["k"] = 1 },
+            };
+
+            CborObject value = new CborObject();
+            value[key] = 1;
+            value["z"] = 2;
+
+            Helper.TestWrite(value, expectedHex, null, new CborOptions { Deterministic = true });
+        }
+
         [Fact]
         public void DeclarationOrderIsPreservedWhenNotDeterministic()
         {
@@ -644,14 +705,12 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(value, "A2626F6B02F501", null, new CborOptions { Deterministic = true });
         }
 
-        // Reviewer's exact reproduction of the int-narrowing bug: a key that needs the 9-byte
-        // (major-type + 8-byte-argument) form must still sort AFTER a key that fits in 1 byte, per RFC
-        // 8949 4.2.1's "shorter encoding always sorts first" rule -- regardless of numeric magnitude.
-        // Before CborKeyComparer.CompareIntegerKeys, CborValueConverter read both keys through
-        // Value<int>(), which silently wrapped 4294967301 (2^32 + 5) down to 5, comparing it as if it
-        // were smaller than 10 and emitting the 9-byte key first: wrong order, wrong bytes, no
-        // exception. TryGetIntegerKeyArgument now reads the full ulong via Value<ulong>(), so the
-        // 9-byte form correctly sorts last.
+        // A key that needs the 9-byte (major type + 8-byte argument) form must sort AFTER a key that
+        // fits in 1 byte, per RFC 8949 4.2.1's "shorter encoding always sorts first" rule, regardless
+        // of numeric magnitude. Both keys are encoded through their own converter and compared as
+        // bytes, so no CLR integer width sits between the value and the ordering to narrow it: this
+        // pair is 2^32 + 5 against 10, which any comparison going through a 32-bit value would order
+        // the wrong way round and emit without an exception.
         [Fact]
         public void CborObjectLargeIntegerKeysSortByEncodedLengthNotNumericValueWhenDeterministic()
         {
@@ -692,71 +751,11 @@ namespace Dahomey.Cbor.Tests
         // here: CborNegative's constructor takes a `long` and rejects anything a `long` cannot hold,
         // and the reader path (CborReader.ReadInt64 -> ReadSigned(long.MaxValue)) is bounded the same
         // way, so no CborValue in this object model can ever hold a value below long.MinValue. There is
-        // no case to construct. CborKeyComparer.CompareIntegerKeys still accepts the full ulong argument
-        // range on its own terms -- verified directly by the CborKeyComparer.CompareIntegerKeys unit
-        // tests below -- it is only CborValue's own representation that stops at long.MinValue.
+        // no case to construct; it is CborValue's own representation that stops there, not the ordering
+        // rule, which is over encoded bytes and has no numeric range of its own.
 
-        [Theory]
-        [InlineData(false, 10ul, false, 4294967301ul, -1)]     // both major type 0: shorter-encoded argument (10, 1 byte) sorts first
-        [InlineData(false, 4294967301ul, false, 10ul, 1)]
-        [InlineData(false, 0ul, true, 0ul, -1)]                // major type 0 (any argument) sorts before major type 1 (any argument)
-        [InlineData(true, 0ul, false, 0ul, 1)]
-        [InlineData(true, 0ul, true, ulong.MaxValue, -1)]      // within major type 1, ascending argument is ascending encoded order
-        [InlineData(true, ulong.MaxValue, true, 0ul, 1)]
-        [InlineData(false, ulong.MaxValue, false, ulong.MaxValue, 0)]
-        public void CompareIntegerKeysOrdersByMajorTypeThenEncodedArgument(
-            bool negativeA, ulong argumentA, bool negativeB, ulong argumentB, int expected)
-        {
-            Assert.Equal(expected, Math.Sign(
-                Dahomey.Cbor.Serialization.CborKeyComparer.CompareIntegerKeys(negativeA, argumentA, negativeB, argumentB)));
-        }
-
-        // CompareKeys is the one comparison that spans kinds: it takes a major type plus whatever varies
-        // within that type (the argument for integers, the payload for strings). Major types are ordered
-        // by their own numeric order, which is the order of the encoded leading byte -- 0 unsigned, 1
-        // negative, 2 byte string, 3 text string -- so the comparison never has to look at the payload of
-        // two keys of different kinds, however those payloads would compare.
-        [Fact]
-        public void CompareKeysOrdersByMajorTypeBeforeAnythingElse()
-        {
-            ReadOnlySpan<byte> noContent = default;
-            ReadOnlySpan<byte> content = new byte[] { 0x41 };
-
-            // Largest possible unsigned key still sorts before the smallest possible negative key.
-            Assert.True(Serialization.CborKeyComparer.CompareKeys(
-                Serialization.CborMajorType.PositiveInteger, ulong.MaxValue, noContent,
-                Serialization.CborMajorType.NegativeInteger, 0, noContent) < 0);
-
-            // Negative before byte string.
-            Assert.True(Serialization.CborKeyComparer.CompareKeys(
-                Serialization.CborMajorType.NegativeInteger, ulong.MaxValue, noContent,
-                Serialization.CborMajorType.ByteString, 0, content) < 0);
-
-            // Byte string before text string, with identical payloads on both sides -- only the major
-            // type can be deciding this.
-            Assert.True(Serialization.CborKeyComparer.CompareKeys(
-                Serialization.CborMajorType.ByteString, 0, content,
-                Serialization.CborMajorType.TextString, 0, content) < 0);
-
-            // Within one major type the existing rules apply unchanged.
-            Assert.Equal(0, Serialization.CborKeyComparer.CompareKeys(
-                Serialization.CborMajorType.TextString, 0, content,
-                Serialization.CborMajorType.TextString, 0, content));
-        }
-
-        [Fact]
-        public void CompareKeysRejectsMajorTypesThatAreNotKeys()
-        {
-            // Nothing decorates a key as an array, so this is unreachable from the converters; it is
-            // pinned here so the rejection stays a CborException rather than, say, a silent 0 that would
-            // make the sort claim two different keys are equal.
-            Assert.Throws<CborException>(() => Serialization.CborKeyComparer.CompareKeys(
-                Serialization.CborMajorType.Array, 0, default,
-                Serialization.CborMajorType.Array, 0, default));
-        }
-
-        // OPTIONAL widening that fell out of CompareIntegerKeys existing: long/ulong dictionary keys no
-        // longer have to throw, since the comparer they need already exists for CborObject keys.
+        // long/ulong dictionary keys are sorted rather than rejected, on the same encoded-bytes rule as
+        // every other key type.
         [Fact]
         public void LongKeyedDictionaryKeysAreSortedWhenDeterministic()
         {

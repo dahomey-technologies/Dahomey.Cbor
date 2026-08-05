@@ -227,22 +227,45 @@ sorts before ``"aa"``. Keys of different CBOR major types order by major type fi
 integer, then negative integer, then byte string, then text string — which is why negative integer
 keys sort after all non-negative ones.
 
-Supported dictionary key types are ``string``, ``char``, ``byte[]``/``ReadOnlyMemory<byte>``, every
-integral type (``byte``, ``sbyte``, ``short``, ``ushort``, ``int``, ``uint``, ``long``, ``ulong``)
-and enums — each ordered as its own converter writes it. For an enum that means: with
-``EnumFormat.WriteToString`` a value that *has* a name is written and ordered as that name, and a
-value that has none (a combination of flags, or a cast from an unlisted number) falls back to the
-integer form in both. ``CborObject`` keys may be text strings, byte strings and integers, mixed
-freely within one map, which is what lets a document read off the wire be re-encoded
-deterministically. Any other key type throws a ``CborException`` rather than silently emitting
-unsorted output.
+Any key type whose converter can write it can be ordered, because each key is ordered on the bytes
+that converter produces — strings, chars, byte strings, every integral type, enums, floating point,
+booleans and ``DateTime`` alike. A custom key converter needs nothing added here to participate. The
+same holds for ``CborObject``, whose keys may be of any kind and may mix kinds freely within one map,
+including nulls, arrays and nested maps; that is what lets a document read off the wire be re-encoded
+deterministically whatever it contains.
 
 **An enum key whose underlying type is wider than 32 bits is written truncated to 32 bits**, and is
-therefore ordered that way too — the ordering follows the bytes actually emitted. Two enum values
-that differ only above bit 31 collide into the same map key, producing a map with duplicate keys that
-is neither deterministic nor valid to hash. This is how enums are written with or without
-``Deterministic``; if your enum is backed by ``long``/``ulong`` and its values exceed 32 bits, key
-the map by the underlying integer instead.
+therefore ordered that way too. Two enum values that differ only above bit 31 collide into the same
+map key, producing a map with duplicate keys that is neither deterministic nor valid to hash. This is
+how ``EnumConverter`` writes enums with or without ``Deterministic``; if your enum is backed by
+``long``/``ulong`` and its values exceed 32 bits, key the map by the underlying integer instead.
+
+#### The discriminator is no longer the first key
+
+Without ``Deterministic`` the discriminator is written first, at index 0. Sorted bytewise it takes
+whatever position its encoded key earns like any other: ``"_t"`` encodes to ``0x62 0x5F 0x74``, which
+places it after every one-character member name and after every two-character name starting below
+``0x5F`` — on a PascalCase model, somewhere in the middle of the map.
+
+This is what §4.2.1 requires; it grants a discriminator no exemption. Two consequences are worth
+knowing:
+
+* **Reads of polymorphic types get slower.** Deserialization bookmarks the reader, scans the map for
+  the discriminator, then rewinds and re-reads. Previously it hit on the first item; now it may scan
+  the whole map first. Correctness is unaffected — Dahomey.Cbor does not care where the discriminator
+  sits — but the cost is real.
+* **Strict readers elsewhere may reject the document.** Several polymorphic deserializers in other
+  ecosystems require the type tag in first position. A document this library round-trips happily may
+  not be readable by one of those once sorted.
+
+Both are avoidable without giving up compliance, and both are free:
+
+* ``CborObjectFormat.IntKeyMap`` — the discriminator's index is 0, encoding to the single byte
+  ``0x00``. That is the smallest encoding in the lowest major type, so nothing can sort before it.
+  This is the recommendation.
+* ``StringKeyMap`` with a one-character discriminator name, which
+  ``DefaultDiscriminatorConvention`` takes as a constructor argument. A one-character name encodes in
+  two bytes and so beats every name of two characters or more.
 
 ``Deterministic`` may be set at any point in an options object's life, including on the long-lived
 ``CborOptions.Default`` — but not while a write using those options is in flight. It is read when a
@@ -250,9 +273,13 @@ write starts, not when converters are built, so it takes effect on the very next
 *during* a write (from a property getter, a custom converter, or another thread) is picked up by the
 write after it, and the write in progress finishes on the ordering it started with.
 
-Deterministic mode also rejects any setting that would admit more than one encoding of the same
-value: setting ``ArrayLengthMode`` or ``MapLengthMode`` to ``LengthMode.IndefiniteLength`` while
-``Deterministic`` is enabled throws a ``CborException``.
+Deterministic mode also refuses any setting that would admit more than one encoding of the same
+value. An indefinite-length map or array throws a ``CborException`` at the point the header would be
+written, whichever of the three sources asked for it: ``CborOptions.ArrayLengthMode``,
+``CborOptions.MapLengthMode``, or a ``CborLengthMode`` attribute on a type or member — the last of
+which takes priority over both options, and is therefore the case most likely to surprise. The
+refusal is at the writer rather than at the property setters so that no combination can slip past by
+being configured in the wrong order.
 
 **When verifying an integrity hash, hash the bytes you received, never a re-serialization.** If
 ``UnhandledNameMode.Silent`` is in effect, decoding a document written by a newer version silently

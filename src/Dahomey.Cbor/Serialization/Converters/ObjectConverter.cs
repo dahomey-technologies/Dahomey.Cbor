@@ -71,6 +71,20 @@ namespace Dahomey.Cbor.Serialization.Converters
             /// every object write, deterministic or not.
             /// </remarks>
             public IReadOnlyList<IMemberConverter> memberConvertersForWrite;
+
+            /// <summary>
+            /// The object format this write runs on, taken from the same converter as
+            /// <see cref="memberConvertersForWrite"/>.
+            /// </summary>
+            /// <remarks>
+            /// In the polymorphic case that converter is the derived type's, so reading the format
+            /// from the declared type's mapping instead would let a base and a derived type that
+            /// disagree on it decide the exclusion of
+            /// <see cref="CborObjectFormat.Array"/> from one mapping and the write from the other:
+            /// members would be written positionally in sorted order, moving values between array
+            /// slots. Both come from one converter, read once.
+            /// </remarks>
+            public CborObjectFormat objectFormat;
             public LengthMode lengthMode;
         }
 
@@ -458,11 +472,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                 context.objectConverter = this;
             }
 
-            // One read, here, now that the converter this write runs on is settled -- see
-            // WriterContext.memberConvertersForWrite.
+            // One read of each, here, now that the converter this write runs on is settled -- see
+            // WriterContext.memberConvertersForWrite and WriterContext.objectFormat.
             context.memberConvertersForWrite = context.objectConverter.MemberConvertersForWrite;
+            context.objectFormat = context.objectConverter.ObjectMapping.ObjectFormat;
 
-            switch (_objectMapping.ObjectFormat)
+            switch (context.objectFormat)
             {
                 case CborObjectFormat.StringKeyMap:
                 case CborObjectFormat.IntKeyMap:
@@ -852,7 +867,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                     if (typedMemberConverter.ShouldSerialize(ref context.obj, typeof(T)))
                     {
-                        switch (_objectMapping.ObjectFormat)
+                        switch (context.objectFormat)
                         {
                             case CborObjectFormat.StringKeyMap:
                                 writer.WriteString(memberConverter.MemberName);
@@ -874,7 +889,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
                 else if (memberConverter.ShouldSerialize(context.obj!, typeof(T), context.options))
                 {
-                    switch (_objectMapping.ObjectFormat)
+                    switch (context.objectFormat)
                     {
                         case CborObjectFormat.StringKeyMap:
                             writer.WriteString(memberConverter.MemberName);
