@@ -42,6 +42,28 @@ namespace Dahomey.Cbor.Tests
     {
     }
 
+    public class ReusedOptionsProbe
+    {
+        public int Id { get; set; }
+    }
+
+    /// <summary>
+    /// A context that takes caller-supplied options, which is the shape that can be handed options
+    /// already carrying converters.
+    /// </summary>
+    [CborSerializable(typeof(ReusedOptionsProbe))]
+    public partial class ReusedOptionsContext : CborSerializerContext
+    {
+        public ReusedOptionsContext()
+        {
+        }
+
+        public ReusedOptionsContext(CborOptions options)
+            : base(options)
+        {
+        }
+    }
+
     /// <summary>
     /// End-to-end check on the source generator: a generated context must produce byte-identical
     /// output to the reflection path, and round-trip. Byte-identity is the contract that makes the
@@ -140,6 +162,47 @@ namespace Dahomey.Cbor.Tests
         public void DefaultContextIsShared()
         {
             Assert.Same(Context, CborSerializerContext.Default<TestCborContext>());
+        }
+
+        /// <summary>
+        /// Options that have already read or written carry a converter for every type they touched,
+        /// and <c>RegisterConverter</c> is <c>TryAdd</c> — so a context constructed over them
+        /// registers nothing at all.
+        /// </summary>
+        /// <remarks>
+        /// Refusing is the only outcome that is visible. Silently registering nothing leaves a context
+        /// that looks configured and serves every type it declares from the reflection path it exists
+        /// to replace, which works on CoreCLR and is exactly what fails under Native AOT — so the
+        /// failure would surface only in a published binary.
+        /// </remarks>
+        [Fact]
+        public void AContextOverAlreadyUsedOptionsIsRefused()
+        {
+            CborOptions options = new CborOptions();
+
+            // Writing through these options caches a converter for the type the context declares.
+            Helper.Write(new ReusedOptionsProbe { Id = 1 }, options);
+
+            CborException exception = Assert.Throws<CborException>(
+                () => new ReusedOptionsContext(options));
+
+            Assert.Contains(nameof(ReusedOptionsProbe), exception.Message);
+        }
+
+        /// <summary>
+        /// The same constructor over unused options is the supported case — combining generated
+        /// registrations with settings of the caller's own — and must still work.
+        /// </summary>
+        [Fact]
+        public void AContextOverUnusedOptionsRegistersOntoThem()
+        {
+            CborOptions options = new CborOptions { EnumFormat = ValueFormat.WriteToString };
+
+            ReusedOptionsContext context = new ReusedOptionsContext(options);
+
+            Assert.Same(options, context.Options);
+            Assert.Equal(ValueFormat.WriteToString, context.Options.EnumFormat);
+            Assert.Equal("A16249640C", Helper.Write(new ReusedOptionsProbe { Id = 12 }, context.Options));
         }
     }
 }

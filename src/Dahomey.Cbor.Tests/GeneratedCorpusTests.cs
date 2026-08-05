@@ -92,6 +92,11 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            if (type == typeof(ReusedOptionsProbe))
+            {
+                return new ReusedOptionsProbe { Id = 12 };
+            }
+
             if (type == typeof(MutualA))
             {
                 return new MutualA { Id = 1, Peer = new MutualB { Id = 2 } };

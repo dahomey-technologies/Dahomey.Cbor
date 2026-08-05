@@ -65,6 +65,7 @@ namespace Dahomey.Cbor.Generator
 
             EmitTypedAccessors(builder, indent, ordered, roots);
             EmitConfigure(builder, indent, options, ordered);
+            EmitRegisterHelper(builder, indent);
 
             builder.AppendLine($"{indent}}}");
 
@@ -284,10 +285,41 @@ namespace Dahomey.Cbor.Generator
             }
         }
 
+        /// <summary>
+        /// The registration helper every emitted registration goes through, so that a refused
+        /// registration is an exception rather than nothing at all.
+        /// </summary>
+        private static void EmitRegisterHelper(StringBuilder builder, string indent)
+        {
+            builder.AppendLine();
+            builder.AppendLine($"{indent}    /// <summary>");
+            builder.AppendLine($"{indent}    /// Registers one generated converter, refusing to continue if the registry already had a");
+            builder.AppendLine($"{indent}    /// converter for that type.");
+            builder.AppendLine($"{indent}    /// </summary>");
+            builder.AppendLine($"{indent}    /// <remarks>");
+            builder.AppendLine($"{indent}    /// RegisterConverter is TryAdd: an existing entry wins and the argument is dropped. Options");
+            builder.AppendLine($"{indent}    /// that have already serialized something carry a converter for every type they touched, so a");
+            builder.AppendLine($"{indent}    /// context constructed over them would register nothing, report nothing, and still look");
+            builder.AppendLine($"{indent}    /// configured -- with every declared type served by the reflection path this context exists to");
+            builder.AppendLine($"{indent}    /// replace, which is the path that fails under Native AOT.");
+            builder.AppendLine($"{indent}    /// </remarks>");
+            builder.AppendLine($"{indent}    private static void RegisterGeneratedConverter(");
+            builder.AppendLine($"{indent}        CborConverterRegistry converters, global::System.Type type, ICborConverter converter)");
+            builder.AppendLine($"{indent}    {{");
+            builder.AppendLine($"{indent}        if (!converters.RegisterConverter(type, converter))");
+            builder.AppendLine($"{indent}        {{");
+            builder.AppendLine($"{indent}            throw new CborException(");
+            builder.AppendLine($"{indent}                $\"These CborOptions already have a converter for {{type}}, so the generated one was \"");
+            builder.AppendLine($"{indent}                + \"refused and the reflection path would be used instead. Construct the context before \"");
+            builder.AppendLine($"{indent}                + \"the options are used to read or write, or give it its own CborOptions.\");");
+            builder.AppendLine($"{indent}        }}");
+            builder.AppendLine($"{indent}    }}");
+        }
+
         private static void EmitSimpleRegistration(
             StringBuilder builder, string indent, ITypeSymbol type, string converterExpression)
         {
-            builder.AppendLine($"{indent}        converters.RegisterConverter(typeof({FullName(type)}), {converterExpression});");
+            builder.AppendLine($"{indent}        RegisterGeneratedConverter(converters, typeof({FullName(type)}), {converterExpression});");
             builder.AppendLine();
         }
 
@@ -336,8 +368,8 @@ namespace Dahomey.Cbor.Generator
             builder.AppendLine();
 
             string factory = model.CanInstantiate ? $", () => new {fullName}()" : string.Empty;
-            builder.AppendLine($"{indent}        converters.RegisterConverter(");
-            builder.AppendLine($"{indent}            typeof({fullName}), new ObjectConverter<{fullName}>(options{factory}));");
+            builder.AppendLine($"{indent}        RegisterGeneratedConverter(");
+            builder.AppendLine($"{indent}            converters, typeof({fullName}), new ObjectConverter<{fullName}>(options{factory}));");
             builder.AppendLine();
         }
 
