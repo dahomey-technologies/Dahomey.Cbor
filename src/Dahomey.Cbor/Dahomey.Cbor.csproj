@@ -36,4 +36,25 @@
       <PackageReference Include="System.IO.Pipelines" Version="10.0.1" />
   </ItemGroup>
 
+  <!--
+    The source generator ships inside this package rather than as a package of its own, which is how a
+    consumer gets it by referencing Dahomey.Cbor alone. Two halves, and both are required:
+
+      * the ProjectReference builds the generator before this project and orders the pack, while
+        ReferenceOutputAssembly="false" keeps its assembly off this library's compile references - it is
+        a build-time Roslyn component, not something Dahomey.Cbor links against;
+      * the None item is what actually places the dll in the package. NuGet loads analyzers only from
+        analyzers/dotnet/cs, so a dll anywhere else in the package is inert.
+
+    A packaging mistake here is silent: the package still restores, the context still compiles against
+    CborSerializerContext, and the failure only appears as a missing Configure override in the
+    consumer's build. The pack assertion in .github/workflows/BuildAndTest.yml exists for that reason.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Dahomey.Cbor.Generator\Dahomey.Cbor.Generator.csproj"
+                      ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="..\Dahomey.Cbor.Generator\bin\$(Configuration)\netstandard2.0\Dahomey.Cbor.Generator.dll"
+          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
 </Project>
