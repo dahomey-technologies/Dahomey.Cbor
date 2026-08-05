@@ -491,7 +491,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborWriter writer = new CborWriter(buffer, options.MaxDepth);
+            CborWriter writer = new CborWriter(buffer, options.MaxDepth, options.Deterministic);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             converter.Write(ref writer, input);
         }
@@ -504,7 +504,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborWriter writer = new CborWriter(buffer, options.MaxDepth);
+            CborWriter writer = new CborWriter(buffer, options.MaxDepth, options.Deterministic);
             if (input is null)
             {
                 writer.WriteNull();
@@ -523,7 +523,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborWriter writer = new CborWriter(buffer, options.MaxDepth);
+            CborWriter writer = new CborWriter(buffer, options.MaxDepth, options.Deterministic);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
             for (int i = 0; i < input.Length; i++)
             {
@@ -540,7 +540,7 @@ namespace Dahomey.Cbor
             CborOptions? options = null)
         {
             options ??= CborOptions.Default;
-            CborWriter writer = new CborWriter(buffer, options.MaxDepth);
+            CborWriter writer = new CborWriter(buffer, options.MaxDepth, options.Deterministic);
             if (input is null)
             {
                 writer.WriteNull();
