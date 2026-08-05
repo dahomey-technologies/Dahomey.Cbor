@@ -39,3 +39,6 @@ jobs:
 
       - name: test
         run: dotnet test -c Release src/Dahomey.Cbor.Tests
+
+      - name: test generator
+        run: dotnet test -c Release src/Dahomey.Cbor.Generator.Tests
