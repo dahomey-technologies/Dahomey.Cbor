@@ -1,8 +1,11 @@
-﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text;
+using System.Threading;
 
 namespace Dahomey.Cbor.Generator
 {
@@ -15,74 +18,168 @@ namespace Dahomey.Cbor.Generator
     /// <c>Person</c> is enough to also cover its <c>Address</c> member and its <c>List&lt;string&gt;</c>
     /// member. Only genuinely unsupported shapes are reported, so users are not made to enumerate every
     /// closed generic by hand.
+    /// <para>
+    /// The pipeline is built so that an edit which changes nothing about a context costs nothing. Both
+    /// entry points are <see cref="SyntaxValueProvider.ForAttributeWithMetadataName"/>, answered from
+    /// Roslyn's attribute index rather than by visiting every class in the compilation, and only values
+    /// leave a step -- never an <see cref="ISymbol"/>, a <see cref="SyntaxNode"/> or a
+    /// <see cref="Location"/>, each of which roots the whole compilation for as long as it is cached
+    /// and compares by reference, so no later run could find its input unchanged.
+    /// </para>
     /// </remarks>
     [Generator(LanguageNames.CSharp)]
     public sealed class CborSourceGenerator : IIncrementalGenerator
     {
         private const string ContextBaseTypeName = "Dahomey.Cbor.Serialization.CborSerializerContext";
         private const string SerializableAttributeName = "Dahomey.Cbor.Attributes.CborSerializableAttribute";
-        private const string OptionsAttributeName = "Dahomey.Cbor.Attributes.CborSourceGenerationOptionsAttribute";
+        private const string DiscriminatorAttributeName = "Dahomey.Cbor.Attributes.CborDiscriminatorAttribute";
+        private const string IntDiscriminatorAttributeName = "Dahomey.Cbor.Attributes.CborIntDiscriminatorAttribute";
+
+        /// <summary>Step names, so a test can assert what the pipeline reused.</summary>
+        internal const string DiscriminatedTypesStep = "CborDiscriminatedTypes";
+        internal const string ContextTargetsStep = "CborContextTargets";
+        internal const string GeneratedContextsStep = "CborGeneratedContexts";
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            IncrementalValuesProvider<ClassDeclarationSyntax> candidates = context.SyntaxProvider
-                .CreateSyntaxProvider(
-                    predicate: static (node, _) => node is ClassDeclarationSyntax { BaseList: not null },
-                    transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node);
+            // Every type carrying a discriminator, taken from the attribute index. CBOR1009 needs to
+            // know which subtypes exist, and walking the assembly's type graph to find out costs the
+            // whole graph on every keystroke -- for an answer that changes only when one of these two
+            // attributes is added or removed.
+            IncrementalValueProvider<EquatableArray<string>> discriminatedTypes =
+                DiscriminatedTypeNames(context, DiscriminatorAttributeName)
+                    .Combine(DiscriminatedTypeNames(context, IntDiscriminatorAttributeName))
+                    .Select(static (pair, _) => new EquatableArray<string>(pair.Left.AddRange(pair.Right)))
+                    .WithTrackingName(DiscriminatedTypesStep);
 
-            IncrementalValueProvider<(Compilation, ImmutableArray<ClassDeclarationSyntax>)> input =
-                context.CompilationProvider.Combine(candidates.Collect());
+            IncrementalValuesProvider<ContextTarget> targets = context.SyntaxProvider
+                .ForAttributeWithMetadataName(
+                    SerializableAttributeName,
+                    predicate: static (node, _) => node is ClassDeclarationSyntax,
+                    transform: static (ctx, _) => ToContextTarget(ctx))
+                .WithTrackingName(ContextTargetsStep);
 
-            context.RegisterSourceOutput(input, static (spc, source) =>
+            // The compilation is combined in rather than the target's own semantic model being trusted
+            // for more than its own node: a context's output depends on the members of every type it
+            // declares, and those live in other files. A step keyed on this file's syntax alone would
+            // be reused unchanged after an edit to one of them, and emit stale registrations.
+            IncrementalValuesProvider<GeneratedContext?> generated = targets
+                .Combine(context.CompilationProvider)
+                .Combine(discriminatedTypes)
+                .Select(static (input, cancellationToken) => Generate(
+                    input.Left.Left, input.Left.Right, input.Right, cancellationToken))
+                .WithTrackingName(GeneratedContextsStep);
+
+            context.RegisterSourceOutput(generated, static (spc, result) =>
             {
-                (Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classes) = source;
-
-                INamedTypeSymbol? contextBase = compilation.GetTypeByMetadataName(ContextBaseTypeName);
-                INamedTypeSymbol? serializableAttribute = compilation.GetTypeByMetadataName(SerializableAttributeName);
-
-                if (contextBase is null || serializableAttribute is null)
+                if (result is null)
                 {
-                    // The Dahomey.Cbor reference is absent; nothing to do.
                     return;
                 }
 
-                foreach (ClassDeclarationSyntax declaration in classes.Distinct())
+                foreach (DiagnosticInfo diagnostic in result.Diagnostics)
                 {
-                    SemanticModel model = compilation.GetSemanticModel(declaration.SyntaxTree);
+                    spc.ReportDiagnostic(diagnostic.ToDiagnostic());
+                }
 
-                    if (model.GetDeclaredSymbol(declaration) is not INamedTypeSymbol contextSymbol)
-                    {
-                        continue;
-                    }
-
-                    if (!InheritsFrom(contextSymbol, contextBase))
-                    {
-                        continue;
-                    }
-
-                    if (!declaration.Modifiers.Any(m => m.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword)))
-                    {
-                        spc.ReportDiagnostic(Diagnostic.Create(
-                            Diagnostics.ContextMustBePartial,
-                            declaration.Identifier.GetLocation(),
-                            contextSymbol.Name));
-                        continue;
-                    }
-
-                    Emit(spc, compilation, contextSymbol, serializableAttribute);
+                if (result.HintName is not null && result.Source is not null)
+                {
+                    spc.AddSource(result.HintName, result.Source);
                 }
             });
         }
 
-        private static void Emit(
-            SourceProductionContext spc,
-            Compilation compilation,
-            INamedTypeSymbol contextSymbol,
-            INamedTypeSymbol serializableAttribute)
+        private static IncrementalValueProvider<ImmutableArray<string>> DiscriminatedTypeNames(
+            IncrementalGeneratorInitializationContext context, string attributeName)
         {
-            GenerationOptions options = GenerationOptions.Read(contextSymbol, spc);
+            return context.SyntaxProvider
+                .ForAttributeWithMetadataName(
+                    attributeName,
+                    predicate: static (node, _) => node is TypeDeclarationSyntax,
+                    transform: static (ctx, _) => ctx.TargetSymbol is INamedTypeSymbol type
+                        ? FullMetadataName(type)
+                        : null)
+                .Where(static name => name is not null)
+                .Select(static (name, _) => name!)
+                .Collect();
+        }
+
+        private static ContextTarget ToContextTarget(GeneratorAttributeSyntaxContext ctx)
+        {
+            INamedTypeSymbol symbol = (INamedTypeSymbol)ctx.TargetSymbol;
+            ClassDeclarationSyntax declaration = (ClassDeclarationSyntax)ctx.TargetNode;
+
+            return new ContextTarget(
+                FullMetadataName(symbol),
+                symbol.Name,
+                declaration.Modifiers.Any(modifier => modifier.IsKind(SyntaxKind.PartialKeyword)),
+                LocationInfo.From(declaration.Identifier.GetLocation()));
+        }
+
+        /// <summary>
+        /// The name <see cref="Compilation.GetTypeByMetadataName"/> takes: namespace-qualified, nested
+        /// types joined with <c>+</c>, and an arity suffix on a generic.
+        /// </summary>
+        private static string FullMetadataName(INamedTypeSymbol symbol)
+        {
+            StringBuilder builder = new StringBuilder(symbol.MetadataName);
+
+            for (INamedTypeSymbol? container = symbol.ContainingType;
+                 container is not null;
+                 container = container.ContainingType)
+            {
+                builder.Insert(0, '+').Insert(0, container.MetadataName);
+            }
+
+            if (!symbol.ContainingNamespace.IsGlobalNamespace)
+            {
+                builder.Insert(0, '.').Insert(0, symbol.ContainingNamespace.ToDisplayString());
+            }
+
+            return builder.ToString();
+        }
+
+        private static GeneratedContext? Generate(
+            ContextTarget target,
+            Compilation compilation,
+            EquatableArray<string> discriminatedTypeNames,
+            CancellationToken cancellationToken)
+        {
+            INamedTypeSymbol? contextBase = compilation.GetTypeByMetadataName(ContextBaseTypeName);
+            INamedTypeSymbol? serializableAttribute = compilation.GetTypeByMetadataName(SerializableAttributeName);
+            INamedTypeSymbol? contextSymbol = ResolveInCompilation(compilation, target.MetadataName);
+
+            if (contextBase is null || serializableAttribute is null || contextSymbol is null)
+            {
+                // The Dahomey.Cbor reference is absent, or the declaration no longer resolves.
+                return null;
+            }
+
+            if (!InheritsFrom(contextSymbol, contextBase))
+            {
+                // [CborSerializable] on something that is not a context. Not ours to report on.
+                return null;
+            }
+
+            if (!target.IsPartial)
+            {
+                return new GeneratedContext(
+                    null,
+                    null,
+                    new EquatableArray<DiagnosticInfo>(new[]
+                    {
+                        new DiagnosticInfo(
+                            Diagnostics.ContextMustBePartial,
+                            target.IdentifierLocation,
+                            new EquatableArray<string>(new[] { target.Name })),
+                    }));
+            }
+
+            List<DiagnosticInfo> diagnostics = new List<DiagnosticInfo>();
+            GenerationOptions options = GenerationOptions.Read(contextSymbol, diagnostics);
 
             List<ITypeSymbol> roots = new List<ITypeSymbol>();
+
             foreach (AttributeData attribute in contextSymbol.GetAttributes())
             {
                 if (!SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, serializableAttribute))
@@ -99,21 +196,62 @@ namespace Dahomey.Cbor.Generator
 
             if (roots.Count == 0)
             {
-                return;
+                return diagnostics.Count == 0
+                    ? null
+                    : new GeneratedContext(null, null, new EquatableArray<DiagnosticInfo>(diagnostics));
             }
 
-            TypeCollector collector = new TypeCollector(compilation, options, spc);
+            TypeCollector collector = new TypeCollector(options, diagnostics);
+
             foreach (ITypeSymbol root in roots)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 collector.Collect(root);
             }
 
-            collector.ReportUndeclaredSubtypes();
+            collector.ReportUndeclaredSubtypes(
+                DiscriminatedTypes(compilation, discriminatedTypeNames, cancellationToken));
 
             IReadOnlyList<TypeModel> ordered = collector.InDependencyOrder();
 
-            string source = Emitter.Emit(contextSymbol, options, ordered, roots);
-            spc.AddSource(Emitter.HintName(contextSymbol), source);
+            return new GeneratedContext(
+                Emitter.HintName(contextSymbol),
+                Emitter.Emit(contextSymbol, options, ordered, roots),
+                new EquatableArray<DiagnosticInfo>(diagnostics));
+        }
+
+        /// <summary>
+        /// Resolves the discriminated types found by the attribute index against the current
+        /// compilation, so their base chains are read fresh rather than as they were when the file
+        /// declaring them was last edited.
+        /// </summary>
+        private static IEnumerable<INamedTypeSymbol> DiscriminatedTypes(
+            Compilation compilation,
+            EquatableArray<string> metadataNames,
+            CancellationToken cancellationToken)
+        {
+            foreach (string metadataName in metadataNames)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                INamedTypeSymbol? symbol = ResolveInCompilation(compilation, metadataName);
+
+                if (symbol is not null)
+                {
+                    yield return symbol;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The compilation's own assembly first: <see cref="Compilation.GetTypeByMetadataName"/>
+        /// returns null when a name is declared in more than one assembly, which a source type sharing
+        /// its name with one in a reference would hit.
+        /// </summary>
+        private static INamedTypeSymbol? ResolveInCompilation(Compilation compilation, string metadataName)
+        {
+            return compilation.Assembly.GetTypeByMetadataName(metadataName)
+                ?? compilation.GetTypeByMetadataName(metadataName);
         }
 
         private static bool InheritsFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)
@@ -130,6 +268,23 @@ namespace Dahomey.Cbor.Generator
         }
     }
 
+    /// <summary>A candidate context, carrying only what survives being cached.</summary>
+    internal sealed record ContextTarget(
+        string MetadataName,
+        string Name,
+        bool IsPartial,
+        LocationInfo? IdentifierLocation);
+
+    /// <summary>
+    /// What a context produced: the source to add, and what to report. Both are values, so an edit
+    /// that leaves them unchanged stops here instead of adding a syntax tree and re-triggering
+    /// everything that depends on one.
+    /// </summary>
+    internal sealed record GeneratedContext(
+        string? HintName,
+        string? Source,
+        EquatableArray<DiagnosticInfo> Diagnostics);
+
     /// <summary>Context-wide settings read from <c>[CborSourceGenerationOptions]</c>.</summary>
     internal sealed class GenerationOptions
     {
@@ -139,7 +294,7 @@ namespace Dahomey.Cbor.Generator
         public ulong? DiscriminatorSemanticTag { get; private set; }
         public int? MaxDepth { get; private set; }
 
-        public static GenerationOptions Read(INamedTypeSymbol contextSymbol, SourceProductionContext spc)
+        public static GenerationOptions Read(INamedTypeSymbol contextSymbol, List<DiagnosticInfo> diagnostics)
         {
             GenerationOptions options = new GenerationOptions();
 
@@ -162,7 +317,7 @@ namespace Dahomey.Cbor.Generator
 
                             if (!NamingConventions.IsSupported(name))
                             {
-                                spc.ReportDiagnostic(Diagnostic.Create(
+                                diagnostics.Add(DiagnosticInfo.Create(
                                     Diagnostics.UnsupportedNamingConvention,
                                     contextSymbol.Locations.FirstOrDefault(),
                                     convention.ToDisplayString()));

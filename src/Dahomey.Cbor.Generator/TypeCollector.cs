@@ -10,18 +10,16 @@ namespace Dahomey.Cbor.Generator
     /// </summary>
     internal sealed class TypeCollector
     {
-        private readonly Compilation _compilation;
         private readonly GenerationOptions _options;
-        private readonly SourceProductionContext _spc;
+        private readonly List<DiagnosticInfo> _diagnostics;
 
         private readonly Dictionary<string, TypeModel> _models =
             new Dictionary<string, TypeModel>();
 
-        public TypeCollector(Compilation compilation, GenerationOptions options, SourceProductionContext spc)
+        public TypeCollector(GenerationOptions options, List<DiagnosticInfo> diagnostics)
         {
-            _compilation = compilation;
             _options = options;
-            _spc = spc;
+            _diagnostics = diagnostics;
         }
 
         public void Collect(ITypeSymbol type)
@@ -51,7 +49,7 @@ namespace Dahomey.Cbor.Generator
                     break;
 
                 case TypeKind.Unsupported:
-                    _spc.ReportDiagnostic(Diagnostic.Create(
+                    _diagnostics.Add(DiagnosticInfo.Create(
                         Diagnostics.UnsupportedType,
                         type.Locations.FirstOrDefault(),
                         type.ToDisplayString(),
@@ -101,7 +99,7 @@ namespace Dahomey.Cbor.Generator
             if (!model.CanInstantiate
                 && type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class })
             {
-                _spc.ReportDiagnostic(Diagnostic.Create(
+                _diagnostics.Add(DiagnosticInfo.Create(
                     Diagnostics.NoParameterlessConstructor,
                     type.Locations.FirstOrDefault(),
                     type.ToDisplayString()));
@@ -156,7 +154,7 @@ namespace Dahomey.Cbor.Generator
 
                 if (model.ObjectFormat != "StringKeyMap" && cborIndex is null)
                 {
-                    _spc.ReportDiagnostic(Diagnostic.Create(
+                    _diagnostics.Add(DiagnosticInfo.Create(
                         Diagnostics.MissingMemberIndex,
                         member.Locations.FirstOrDefault(),
                         type.Name,
@@ -167,7 +165,7 @@ namespace Dahomey.Cbor.Generator
 
                 if (!canWrite)
                 {
-                    _spc.ReportDiagnostic(Diagnostic.Create(
+                    _diagnostics.Add(DiagnosticInfo.Create(
                         Diagnostics.MemberNotDeserializable,
                         member.Locations.FirstOrDefault(),
                         type.Name,
@@ -268,7 +266,7 @@ namespace Dahomey.Cbor.Generator
 
             void Report(Location? location, string owner, string feature)
             {
-                _spc.ReportDiagnostic(Diagnostic.Create(
+                _diagnostics.Add(DiagnosticInfo.Create(
                     Diagnostics.UnsupportedFeature, location, owner, feature));
             }
         }
@@ -312,7 +310,7 @@ namespace Dahomey.Cbor.Generator
 
                     if (IsSerializedByTheReflectionPath(member))
                     {
-                        _spc.ReportDiagnostic(Diagnostic.Create(
+                        _diagnostics.Add(DiagnosticInfo.Create(
                             Diagnostics.NonPublicMember,
                             member.Locations.FirstOrDefault(),
                             type.Name,
@@ -396,7 +394,7 @@ namespace Dahomey.Cbor.Generator
 
             if (stringDiscriminator is not null && intDiscriminator is not null)
             {
-                _spc.ReportDiagnostic(Diagnostic.Create(
+                _diagnostics.Add(DiagnosticInfo.Create(
                     Diagnostics.ConflictingDiscriminators,
                     type.Locations.FirstOrDefault(),
                     type.ToDisplayString()));
@@ -658,18 +656,18 @@ namespace Dahomey.Cbor.Generator
         /// it, and a polymorphic read either fails or resolves to the fallback type -- with nothing
         /// said at build time. "Only roots need declaring" holds for member graphs and not for
         /// hierarchies, which is the case where forgetting one is expensive.
+        /// <para>
+        /// The candidates come from Roslyn's attribute index rather than from a walk of the assembly's
+        /// type graph, so the cost is proportional to the number of discriminated types rather than to
+        /// the size of the compilation. Both see source only: a subtype in a referenced assembly
+        /// cannot be declared on a context in this one anyway.
+        /// </para>
         /// </remarks>
-        public void ReportUndeclaredSubtypes()
+        public void ReportUndeclaredSubtypes(IEnumerable<INamedTypeSymbol> discriminatedTypes)
         {
-            foreach (INamedTypeSymbol candidate in AllTypesInCompilation(_compilation.Assembly.GlobalNamespace))
+            foreach (INamedTypeSymbol candidate in discriminatedTypes)
             {
                 if (_models.ContainsKey(Key(candidate)))
-                {
-                    continue;
-                }
-
-                if (!HasAttribute(candidate, "CborDiscriminatorAttribute")
-                    && !HasAttribute(candidate, "CborIntDiscriminatorAttribute"))
                 {
                     continue;
                 }
@@ -680,47 +678,13 @@ namespace Dahomey.Cbor.Generator
                 {
                     if (_models.ContainsKey(Key(baseType)))
                     {
-                        _spc.ReportDiagnostic(Diagnostic.Create(
+                        _diagnostics.Add(DiagnosticInfo.Create(
                             Diagnostics.SubtypeNotDeclared,
                             candidate.Locations.FirstOrDefault(),
                             candidate.ToDisplayString(),
                             baseType.ToDisplayString()));
                         break;
                     }
-                }
-            }
-        }
-
-        private static IEnumerable<INamedTypeSymbol> AllTypesInCompilation(INamespaceSymbol namespaceSymbol)
-        {
-            foreach (INamedTypeSymbol type in namespaceSymbol.GetTypeMembers())
-            {
-                yield return type;
-
-                foreach (INamedTypeSymbol nested in AllNestedTypes(type))
-                {
-                    yield return nested;
-                }
-            }
-
-            foreach (INamespaceSymbol nested in namespaceSymbol.GetNamespaceMembers())
-            {
-                foreach (INamedTypeSymbol type in AllTypesInCompilation(nested))
-                {
-                    yield return type;
-                }
-            }
-        }
-
-        private static IEnumerable<INamedTypeSymbol> AllNestedTypes(INamedTypeSymbol type)
-        {
-            foreach (INamedTypeSymbol nested in type.GetTypeMembers())
-            {
-                yield return nested;
-
-                foreach (INamedTypeSymbol deeper in AllNestedTypes(nested))
-                {
-                    yield return deeper;
                 }
             }
         }

@@ -29,4 +29,10 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- The pipeline step names are internal, and asserting on which steps were reused is the only way
+       to check incrementality: it is invisible in the generated output, which is identical either way. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dahomey.Cbor.Generator.Tests" />
+  </ItemGroup>
+
 </Project>

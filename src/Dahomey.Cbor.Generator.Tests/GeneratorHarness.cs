@@ -49,6 +49,68 @@ namespace Dahomey.Cbor.GeneratorTests
                 output.SyntaxTrees.Skip(1).Select(tree => tree.ToString()));
         }
 
+        /// <summary>
+        /// Runs the generator over <paramref name="sources"/>, then again after replacing one of them,
+        /// on the same driver — which is what makes the second run incremental.
+        /// </summary>
+        /// <remarks>
+        /// The edit is modelled with <see cref="Compilation.ReplaceSyntaxTree"/> rather than by
+        /// building a second compilation from scratch. Roslyn reuses a step's result when its input is
+        /// the same object, so a rebuilt compilation has all-new trees and nothing is ever cached —
+        /// which would make any caching assertion here pass or fail for the wrong reason.
+        /// </remarks>
+        public static (GeneratorDriverRunResult First, GeneratorDriverRunResult Second) RunAfterEditing(
+            IReadOnlyList<string> sources, int indexToEdit, string replacement)
+        {
+            SyntaxTree[] trees = sources
+                .Select((source, index) => CSharpSyntaxTree.ParseText(source, path: $"File{index}.cs"))
+                .ToArray();
+
+            CSharpCompilation compilation = CSharpCompilation.Create(
+                "GeneratorTestAssembly",
+                trees,
+                ReferenceSet(),
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+
+            GeneratorDriver driver = CSharpGeneratorDriver.Create(
+                new[] { new CborSourceGenerator().AsSourceGenerator() },
+                driverOptions: new GeneratorDriverOptions(
+                    IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
+
+            driver = driver.RunGenerators(compilation);
+            GeneratorDriverRunResult first = driver.GetRunResult();
+
+            Compilation edited = compilation.ReplaceSyntaxTree(
+                trees[indexToEdit],
+                CSharpSyntaxTree.ParseText(replacement, path: trees[indexToEdit].FilePath));
+
+            driver = driver.RunGenerators(edited);
+
+            return (first, driver.GetRunResult());
+        }
+
+        /// <summary>Why each output of a tracked step came out the way it did, on one run.</summary>
+        public static IReadOnlyList<IncrementalStepRunReason> StepReasons(
+            GeneratorDriverRunResult result, string stepName)
+        {
+            if (!result.Results[0].TrackedSteps.TryGetValue(
+                    stepName, out ImmutableArray<IncrementalGeneratorRunStep> steps))
+            {
+                throw new InvalidOperationException(
+                    $"No step named '{stepName}' ran. Tracked: "
+                    + string.Join(", ", result.Results[0].TrackedSteps.Keys));
+            }
+
+            return steps.SelectMany(step => step.Outputs).Select(output => output.Reason).ToList();
+        }
+
+        public static string GeneratedSourceOf(GeneratorDriverRunResult result)
+        {
+            return string.Join(
+                Environment.NewLine,
+                result.Results[0].GeneratedSources.Select(source => source.SourceText.ToString()));
+        }
+
         private static void Run(
             string source,
             out ImmutableArray<Diagnostic> generatorDiagnostics,
