@@ -261,10 +261,10 @@ namespace Dahomey.Cbor.Serialization.Converters
         // which sorting cannot change, so it needs no edit -- only which sequence the enumerator walks
         // differs. A CborObject may mix key kinds, which is why the order comes from
         // DeterministicKeyOrder (major type first) rather than from a same-kind-only comparison.
-        private static IEnumerator<KeyValuePair<CborValue, CborValue>> SortedEntries(CborObject obj)
+        private IEnumerator<KeyValuePair<CborValue, CborValue>> SortedEntries(CborObject obj)
         {
             KeyValuePair<CborValue, CborValue>[] sorted =
-                DeterministicKeyOrder.Sort(obj, DeterministicKeyOrder.ForCborValueKey);
+                DeterministicKeyOrder.Sort(obj, this, _options.MaxDepth);
 
             return ((IEnumerable<KeyValuePair<CborValue, CborValue>>)sorted).GetEnumerator();
         }

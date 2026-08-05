@@ -23,7 +23,6 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         private readonly CborOptions _options;
-        private Func<TK, DeterministicKeyOrder.SortKey>? _decorateKey;
 
         protected abstract IDictionary<TK, TV> InstantiateTempCollection();
         protected abstract TC InstantiateCollection(IDictionary<TK, TV> tempCollection);
@@ -75,11 +74,11 @@ namespace Dahomey.Cbor.Serialization.Converters
         // enumerator instead of the dictionary's is enough.
         private IEnumerator<KeyValuePair<TK, TV>> SortedEntries(IDictionary<TK, TV> dictionary)
         {
-            // Held in a field rather than written inline: the lambda closes over _options, so writing it
-            // at the call site would allocate a closure on every write.
-            _decorateKey ??= key => DeterministicKeyOrder.ForDictionaryKey(key, _options);
-
-            KeyValuePair<TK, TV>[] sorted = DeterministicKeyOrder.Sort(dictionary, _decorateKey);
+            // KeyConverter is the same converter WriteMapItem uses, so the order is the order of the
+            // bytes that actually get written -- including any converter the caller registered for the
+            // key type themselves.
+            KeyValuePair<TK, TV>[] sorted =
+                DeterministicKeyOrder.Sort(dictionary, KeyConverter, _options.MaxDepth);
 
             return ((IEnumerable<KeyValuePair<TK, TV>>)sorted).GetEnumerator();
         }

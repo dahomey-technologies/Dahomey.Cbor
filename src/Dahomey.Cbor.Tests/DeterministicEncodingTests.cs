@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.ObjectModel;
@@ -491,17 +491,26 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(value, "A241020242010101", null, new CborOptions { Deterministic = true });
         }
 
+        /// <summary>
+        /// A key type with no special case anywhere in the ordering code still sorts correctly,
+        /// because the order comes from the bytes its own converter writes.
+        /// </summary>
         [Fact]
-        public void NonStringNonIntDictionaryKeysThrowWhenDeterministic()
+        public void FloatingPointDictionaryKeysAreSortedByTheirEncodedBytes()
         {
             Dictionary<double, int> value = new Dictionary<double, int>
             {
-                [1.5] = 1,
                 [2.5] = 2,
+                [1.5] = 1,
             };
 
-            CborOptions options = new CborOptions { Deterministic = true };
-            Assert.Throws<CborException>(() => Helper.Write(value, options));
+            // Both are exactly representable as half floats, so preferred float serialization writes
+            // each in three bytes and the comparison is on those.
+            //
+            // A2 map(2)
+            //   F93E00  1.5  01
+            //   F94100  2.5  02
+            Helper.TestWrite(value, "A2F93E0001F9410002", null, new CborOptions { Deterministic = true });
         }
 
         [Fact]
@@ -616,22 +625,23 @@ namespace Dahomey.Cbor.Tests
                 new CborOptions { Deterministic = true });
         }
 
+        /// <summary>
+        /// A CborObject may mix key kinds, and a boolean key is neither a string nor an integer.
+        /// Ordering by the encoded bytes covers it without needing to know what a boolean is.
+        /// </summary>
         [Fact]
-        public void CborObjectWithUnsupportedKeyTypeThrowsUnwrappedWhenDeterministic()
+        public void CborObjectMixedKeyKindsAreSortedByTheirEncodedBytes()
         {
-            // A boolean key is neither CborValueType.String nor CborValueType.Positive/Negative, so it
-            // must throw CborException -- and, per the List<T>.Sort wrapping bug fixed for
-            // NonStringNonIntDictionaryKeysThrowWhenDeterministic, it must arrive as a CborException,
-            // not wrapped in InvalidOperationException. Assert.Throws<CborException> already fails on a
-            // mismatched exception type, so this pins the unwrap without any extra assertion.
             CborObject value = new CborObject
             {
                 [true] = 1,
                 ["ok"] = 2,
             };
 
-            CborOptions options = new CborOptions { Deterministic = true };
-            Assert.Throws<CborException>(() => Helper.Write(value, options));
+            // A2 map(2)
+            //   626F6B  "ok"  02
+            //   F5      true  01
+            Helper.TestWrite(value, "A2626F6B02F501", null, new CborOptions { Deterministic = true });
         }
 
         // Reviewer's exact reproduction of the int-narrowing bug: a key that needs the 9-byte
