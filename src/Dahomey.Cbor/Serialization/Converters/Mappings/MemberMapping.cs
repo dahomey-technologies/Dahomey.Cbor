@@ -42,6 +42,20 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             get
             {
                 EnsureInitialize();
+
+                // Initialization deliberately leaves the registry lookup undone: a converter resolves
+                // its members while its own constructor is still running, so asking the registry for a
+                // member whose type is part of a cycle would re-enter that construction and recurse
+                // until the stack is gone. By the time anyone reads this the graph is built, so the
+                // lookup now completes.
+                if (_converter == null)
+                {
+                    lock (this)
+                    {
+                        _converter ??= _converterRegistry.Lookup(MemberType);
+                    }
+                }
+
                 return _converter;
             }
         }
@@ -242,7 +256,8 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     }
                 }
                 
-                _converter = _converterRegistry.Lookup(MemberType);
+                // Nothing else to do here. The registry lookup belongs in the `Converter` getter, not
+                // in construction — see the comment there.
                 return;
             }
             
