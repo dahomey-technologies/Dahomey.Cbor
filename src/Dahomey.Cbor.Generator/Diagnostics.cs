@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 
 namespace Dahomey.Cbor.Generator
 {
@@ -66,6 +66,57 @@ namespace Dahomey.Cbor.Generator
         /// Not an error: the type still serializes, it just cannot be populated on read. Worth a
         /// warning because it is usually an oversight (a get-only or <c>init</c>-only property).
         /// </summary>
+        /// <summary>
+        /// A type carrying a feature the generator does not reproduce. Reporting is the whole
+        /// contract: the reflection path honours these attributes, so generating without them would
+        /// change the bytes silently rather than fail.
+        /// </summary>
+        public static readonly DiagnosticDescriptor UnsupportedFeature = new(
+            id: "CBOR1007",
+            title: "CBOR feature is not supported by source generation",
+            messageFormat: "'{0}' uses {1}, which CBOR source generation does not reproduce. The reflection path honours it, so a generated context would silently produce different bytes",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// The reflection path serializes some non-public members; the generated path cannot reach
+        /// them from outside the declaring type. Dropping one is a wire-format change.
+        /// </summary>
+        public static readonly DiagnosticDescriptor NonPublicMember = new(
+            id: "CBOR1008",
+            title: "Non-public member cannot be source-generated",
+            messageFormat: "'{0}.{1}' is {2} and is serialized by the reflection path, but source generation cannot access it. Make it public, or exclude it with [CborIgnore]",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// Base to derived is not a member edge, so a subtype is never reached by walking outwards
+        /// from a root. Without its own declaration it is not registered, and a polymorphic read of it
+        /// fails or silently resolves to the fallback type.
+        /// </summary>
+        public static readonly DiagnosticDescriptor SubtypeNotDeclared = new(
+            id: "CBOR1009",
+            title: "Discriminated subtype is not declared on any context",
+            messageFormat: "'{0}' carries a discriminator and derives from '{1}', which is declared, but is not itself declared with [CborSerializable]. Polymorphic reads will not resolve it",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// Registered fine and fails at run time otherwise: the reflection path can reach a
+        /// non-public constructor or a creator mapping, and the generated factory is a plain
+        /// <c>new T()</c>.
+        /// </summary>
+        public static readonly DiagnosticDescriptor NoParameterlessConstructor = new(
+            id: "CBOR1010",
+            title: "Type has no accessible parameterless constructor",
+            messageFormat: "'{0}' has no accessible parameterless constructor, so a generated context cannot create one when reading. Add one, or exclude the type",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         public static readonly DiagnosticDescriptor MemberNotDeserializable = new(
             id: "CBOR1006",
             title: "Member cannot be deserialized",

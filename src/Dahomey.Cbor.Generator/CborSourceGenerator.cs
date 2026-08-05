@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -108,10 +108,12 @@ namespace Dahomey.Cbor.Generator
                 collector.Collect(root);
             }
 
+            collector.ReportUndeclaredSubtypes();
+
             IReadOnlyList<TypeModel> ordered = collector.InDependencyOrder();
 
             string source = Emitter.Emit(contextSymbol, options, ordered, roots);
-            spc.AddSource($"{contextSymbol.Name}.CborContext.g.cs", source);
+            spc.AddSource(Emitter.HintName(contextSymbol), source);
         }
 
         private static bool InheritsFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)

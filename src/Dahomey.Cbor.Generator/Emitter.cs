@@ -1,4 +1,5 @@
 ﻿using Microsoft.CodeAnalysis;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -38,7 +39,28 @@ namespace Dahomey.Cbor.Generator
                 builder.AppendLine("{");
             }
 
-            builder.AppendLine($"{indent}public partial class {contextSymbol.Name}");
+            // A nested context needs every containing type reopened as a partial, or the generated
+            // half lands as a top-level type and Configure is never implemented -- which surfaces as
+            // CS0534 on the user's own class, naming nothing to do with generators.
+            List<INamedTypeSymbol> containers = new List<INamedTypeSymbol>();
+
+            for (INamedTypeSymbol? container = contextSymbol.ContainingType;
+                 container is not null;
+                 container = container.ContainingType)
+            {
+                containers.Insert(0, container);
+            }
+
+            foreach (INamedTypeSymbol container in containers)
+            {
+                builder.AppendLine($"{indent}{Accessibility(container)} partial {Keyword(container)} {NameWithTypeParameters(container)}");
+                builder.AppendLine($"{indent}{{");
+                indent += "    ";
+            }
+
+            // The declared accessibility, not a hardcoded `public`: a partial declaration whose parts
+            // disagree is CS0262.
+            builder.AppendLine($"{indent}{Accessibility(contextSymbol)} partial class {NameWithTypeParameters(contextSymbol)}");
             builder.AppendLine($"{indent}{{");
 
             EmitTypedAccessors(builder, indent, ordered, roots);
@@ -46,12 +68,69 @@ namespace Dahomey.Cbor.Generator
 
             builder.AppendLine($"{indent}}}");
 
+            for (int i = containers.Count - 1; i >= 0; i--)
+            {
+                indent = indent.Substring(4);
+                builder.AppendLine($"{indent}}}");
+            }
+
             if (hasNamespace)
             {
                 builder.AppendLine("}");
             }
 
             return builder.ToString();
+        }
+
+        /// <summary>
+        /// Hint name unique across the compilation. Keying on the simple name alone makes two
+        /// same-named contexts in different namespaces collide, and the generator throws.
+        /// </summary>
+        public static string HintName(INamedTypeSymbol contextSymbol)
+        {
+            StringBuilder builder = new StringBuilder();
+
+            foreach (char character in contextSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+            {
+                builder.Append(char.IsLetterOrDigit(character) || character == '_' ? character : '.');
+            }
+
+            return builder.ToString().Trim('.') + ".CborContext.g.cs";
+        }
+
+        private static string Accessibility(INamedTypeSymbol symbol)
+        {
+            return symbol.DeclaredAccessibility switch
+            {
+                Microsoft.CodeAnalysis.Accessibility.Public => "public",
+                Microsoft.CodeAnalysis.Accessibility.Internal => "internal",
+                Microsoft.CodeAnalysis.Accessibility.Protected => "protected",
+                Microsoft.CodeAnalysis.Accessibility.ProtectedOrInternal => "protected internal",
+                Microsoft.CodeAnalysis.Accessibility.ProtectedAndInternal => "private protected",
+                Microsoft.CodeAnalysis.Accessibility.Private => "private",
+                _ => "internal",
+            };
+        }
+
+        private static string Keyword(INamedTypeSymbol symbol)
+        {
+            return symbol.TypeKind switch
+            {
+                Microsoft.CodeAnalysis.TypeKind.Struct => symbol.IsRecord ? "record struct" : "struct",
+                Microsoft.CodeAnalysis.TypeKind.Interface => "interface",
+                _ => symbol.IsRecord ? "record" : "class",
+            };
+        }
+
+        /// <summary>
+        /// A generic container has to be reopened with its type parameters, or the partial does not
+        /// match the user's declaration.
+        /// </summary>
+        private static string NameWithTypeParameters(INamedTypeSymbol symbol)
+        {
+            return symbol.TypeParameters.Length == 0
+                ? symbol.Name
+                : $"{symbol.Name}<{string.Join(", ", symbol.TypeParameters.Select(parameter => parameter.Name))}>";
         }
 
         /// <summary>
@@ -67,6 +146,10 @@ namespace Dahomey.Cbor.Generator
             HashSet<string> rootKeys = new HashSet<string>(
                 roots.Select(r => r.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
 
+            // Two roots with the same simple name in different namespaces would otherwise emit two
+            // members with the same identifier, which is CS0102 on the user's own context.
+            HashSet<string> usedAccessorNames = new HashSet<string>(StringComparer.Ordinal);
+
             foreach (TypeModel model in ordered)
             {
                 string key = model.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -77,7 +160,7 @@ namespace Dahomey.Cbor.Generator
                 }
 
                 string fullName = FullName(model.Symbol);
-                string accessorName = AccessorName(model.Symbol);
+                string accessorName = UniqueAccessorName(model.Symbol, usedAccessorNames);
                 string fieldName = "_" + char.ToLowerInvariant(accessorName[0]) + accessorName.Substring(1);
 
                 builder.AppendLine($"{indent}    private ICborConverter<{fullName}>? {fieldName};");
@@ -304,6 +387,38 @@ namespace Dahomey.Cbor.Generator
         /// Property name for a type's accessor: <c>Person</c>, and <c>ListOfPerson</c> for
         /// <c>List&lt;Person&gt;</c>, so closed generics get a legal, predictable identifier.
         /// </summary>
+        /// <summary>
+        /// Qualifies with the containing namespace only when the simple name is already taken, so the
+        /// common case keeps the short, predictable identifier.
+        /// </summary>
+        private static string UniqueAccessorName(ITypeSymbol type, HashSet<string> used)
+        {
+            string name = AccessorName(type);
+
+            if (used.Add(name))
+            {
+                return name;
+            }
+
+            string qualified = string.Concat(
+                type.ContainingNamespace.ToDisplayString().Split('.').Where(part => part.Length > 0)) + name;
+
+            if (used.Add(qualified))
+            {
+                return qualified;
+            }
+
+            for (int suffix = 2; ; suffix++)
+            {
+                string candidate = qualified + suffix;
+
+                if (used.Add(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
         private static string AccessorName(ITypeSymbol type)
         {
             if (type is IArrayTypeSymbol array)

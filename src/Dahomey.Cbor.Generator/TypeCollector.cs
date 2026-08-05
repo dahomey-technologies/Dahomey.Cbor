@@ -95,7 +95,20 @@ namespace Dahomey.Cbor.Generator
             model.CanInstantiate = type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class or Microsoft.CodeAnalysis.TypeKind.Struct }
                 && HasAccessibleParameterlessConstructor(type);
 
+            // An abstract base is never instantiated -- its subtypes are -- so only a concrete type
+            // without a constructor is a problem. The reflection path can reach a non-public
+            // constructor or a [CborConstructor] creator mapping; a generated factory is `new T()`.
+            if (!model.CanInstantiate
+                && type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class })
+            {
+                _spc.ReportDiagnostic(Diagnostic.Create(
+                    Diagnostics.NoParameterlessConstructor,
+                    type.Locations.FirstOrDefault(),
+                    type.ToDisplayString()));
+            }
+
             ReadTypeLevelAttributes(type, model);
+            ReportUnsupportedFeatures(type);
 
             foreach (ISymbol member in EnumerateMembers(type))
             {
@@ -175,11 +188,92 @@ namespace Dahomey.Cbor.Generator
         }
 
         /// <summary>
-        /// Members in the order the reflection path sees them: most-derived type first, then each base.
-        /// Matching that order matters because it determines the order members appear on the wire, and
-        /// the generated output is required to be byte-identical.
+        /// Features the reflection path honours and the generator does not reproduce. Each is
+        /// reported rather than silently dropped, because dropping one changes the bytes or the
+        /// behaviour without any signal at all -- and <c>[CborConverter]</c> in particular means
+        /// discarding a converter the user wrote themselves.
         /// </summary>
-        private static IEnumerable<ISymbol> EnumerateMembers(ITypeSymbol type)
+        private static readonly (string Attribute, string Description)[] UnsupportedTypeFeatures =
+        {
+            ("CborConverterAttribute", "[CborConverter]"),
+            ("CborConstructorAttribute", "[CborConstructor]"),
+            ("CborNamingConventionAttribute", "[CborNamingConvention]"),
+            ("CborLengthModeAttribute", "[CborLengthMode]"),
+        };
+
+        private static readonly (string Attribute, string Description)[] UnsupportedMemberFeatures =
+        {
+            ("CborConverterAttribute", "[CborConverter]"),
+            ("CborRequiredAttribute", "[CborRequired]"),
+            ("CborIgnoreIfDefaultAttribute", "[CborIgnoreIfDefault]"),
+            ("CborLengthModeAttribute", "[CborLengthMode]"),
+            ("DefaultValueAttribute", "[DefaultValue]"),
+        };
+
+        private void ReportUnsupportedFeatures(ITypeSymbol type)
+        {
+            foreach ((string attribute, string description) in UnsupportedTypeFeatures)
+            {
+                if (HasAttribute(type, attribute))
+                {
+                    Report(type.Locations.FirstOrDefault(), type.ToDisplayString(), description);
+                }
+            }
+
+            // Callbacks and ShouldSerialize are conventions rather than attributes on the type, so
+            // they are detected the same way DefaultObjectMappingConvention detects them.
+            foreach (ISymbol member in AllMembers(type))
+            {
+                if (member is IMethodSymbol method)
+                {
+                    if (HasAttribute(method, "OnDeserializingAttribute"))
+                    {
+                        Report(method.Locations.FirstOrDefault(), type.ToDisplayString(), "[OnDeserializing]");
+                    }
+
+                    if (HasAttribute(method, "OnDeserializedAttribute"))
+                    {
+                        Report(method.Locations.FirstOrDefault(), type.ToDisplayString(), "[OnDeserialized]");
+                    }
+
+                    if (method.Name.StartsWith("ShouldSerialize", System.StringComparison.Ordinal)
+                        && method.Name.Length > "ShouldSerialize".Length
+                        && method.Parameters.Length == 0
+                        && method.ReturnType.SpecialType == SpecialType.System_Boolean)
+                    {
+                        Report(method.Locations.FirstOrDefault(), type.ToDisplayString(), $"a {method.Name}() method");
+                    }
+
+                    continue;
+                }
+
+                if (member is not (IPropertySymbol or IFieldSymbol))
+                {
+                    continue;
+                }
+
+                foreach ((string attribute, string description) in UnsupportedMemberFeatures)
+                {
+                    if (HasAttribute(member, attribute))
+                    {
+                        Report(member.Locations.FirstOrDefault(), $"{type.Name}.{member.Name}", description);
+                    }
+                }
+            }
+
+            if (type.AllInterfaces.Any(i => i.ToDisplayString() == "System.ComponentModel.ISupportInitialize"))
+            {
+                Report(type.Locations.FirstOrDefault(), type.ToDisplayString(), "ISupportInitialize");
+            }
+
+            void Report(Location? location, string owner, string feature)
+            {
+                _spc.ReportDiagnostic(Diagnostic.Create(
+                    Diagnostics.UnsupportedFeature, location, owner, feature));
+            }
+        }
+
+        private static IEnumerable<ISymbol> AllMembers(ITypeSymbol type)
         {
             for (ITypeSymbol? current = type;
                  current is not null && current.SpecialType != SpecialType.System_Object;
@@ -187,13 +281,83 @@ namespace Dahomey.Cbor.Generator
             {
                 foreach (ISymbol member in current.GetMembers())
                 {
-                    if (member is IPropertySymbol or IFieldSymbol
-                        && member.DeclaredAccessibility == Accessibility.Public)
+                    yield return member;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Members in the order the reflection path sees them: most-derived type first, then each base.
+        /// Matching that order matters because it determines the order members appear on the wire, and
+        /// the generated output is required to be byte-identical.
+        /// </summary>
+        private IEnumerable<ISymbol> EnumerateMembers(ITypeSymbol type)
+        {
+            for (ITypeSymbol? current = type;
+                 current is not null && current.SpecialType != SpecialType.System_Object;
+                 current = current.BaseType)
+            {
+                foreach (ISymbol member in current.GetMembers())
+                {
+                    if (member is not (IPropertySymbol or IFieldSymbol))
+                    {
+                        continue;
+                    }
+
+                    if (member.DeclaredAccessibility == Accessibility.Public)
                     {
                         yield return member;
+                        continue;
+                    }
+
+                    if (IsSerializedByTheReflectionPath(member))
+                    {
+                        _spc.ReportDiagnostic(Diagnostic.Create(
+                            Diagnostics.NonPublicMember,
+                            member.Locations.FirstOrDefault(),
+                            type.Name,
+                            member.Name,
+                            member.DeclaredAccessibility.ToString().ToLowerInvariant()));
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Whether <c>DefaultObjectMappingConvention</c> would serialize this non-public member, and
+        /// therefore whether dropping it changes the bytes.
+        /// </summary>
+        /// <remarks>
+        /// That convention excludes a property whose getter is protected, private or static, and a
+        /// field that is private or static — unless the member carries <c>[CborProperty]</c>, which
+        /// overrides the filter entirely. So an internal property, an internal or protected field, and
+        /// anything at all with the attribute, are all serialized today.
+        /// </remarks>
+        private static bool IsSerializedByTheReflectionPath(ISymbol member)
+        {
+            if (member.IsStatic)
+            {
+                return false;
+            }
+
+            if (HasAttribute(member, "CborIgnoreAttribute"))
+            {
+                return false;
+            }
+
+            if (HasAttribute(member, "CborPropertyAttribute"))
+            {
+                return true;
+            }
+
+            return member switch
+            {
+                IPropertySymbol property => property.GetMethod is
+                    { DeclaredAccessibility: Accessibility.Internal or Accessibility.ProtectedOrInternal },
+                IFieldSymbol field => field.DeclaredAccessibility
+                    is Accessibility.Internal or Accessibility.Protected or Accessibility.ProtectedOrInternal,
+                _ => false,
+            };
         }
 
         private void ReadTypeLevelAttributes(ITypeSymbol type, TypeModel model)
@@ -335,6 +499,11 @@ namespace Dahomey.Cbor.Generator
                 return TypeKind.Array;
             }
 
+            if (HasNoConcreteConverter(type))
+            {
+                return TypeKind.Unsupported;
+            }
+
             if (type is INamedTypeSymbol named && named.IsGenericType)
             {
                 string constructed = named.ConstructedFrom.ToDisplayString();
@@ -390,6 +559,16 @@ namespace Dahomey.Cbor.Generator
             return TypeKind.Unsupported;
         }
 
+        /// <summary>
+        /// Types the reflection path resolves through <c>ObjectConverterProvider</c> rather than a
+        /// concrete converter, so a generated context has nothing to register for them.
+        /// </summary>
+        private static bool HasNoConcreteConverter(ITypeSymbol type)
+        {
+            return type.SpecialType == SpecialType.System_Object
+                || type.ToDisplayString() is "System.Half" or "System.Guid" or "System.DateTimeOffset";
+        }
+
         private static bool IsPrimitive(ITypeSymbol type)
         {
             switch (type.SpecialType)
@@ -409,11 +588,16 @@ namespace Dahomey.Cbor.Generator
                 case SpecialType.System_Decimal:
                 case SpecialType.System_String:
                 case SpecialType.System_DateTime:
-                case SpecialType.System_Object:
+                    // System_Object is deliberately absent -- see HasNoConcreteConverter.
                     return true;
             }
 
-            return type.ToDisplayString() is "System.Half" or "System.Guid" or "System.DateTimeOffset";
+            // System.Half, System.Guid, System.DateTimeOffset and System.Object are deliberately absent.
+            // PrimitiveConverterProvider has no case for any of them, so at run time they fall through
+            // to ObjectConverterProvider and reach MakeGenericType -- the exact failure a generated
+            // context exists to prevent, and one the AOT analyzer cannot see either. Classifying them
+            // as unsupported turns that into a build error. See UnsupportedReason.
+            return false;
         }
 
         private static bool HasAccessibleParameterlessConstructor(ITypeSymbol type)
@@ -430,6 +614,13 @@ namespace Dahomey.Cbor.Generator
 
         private static string DescribeWhyUnsupported(ITypeSymbol type)
         {
+            if (HasNoConcreteConverter(type))
+            {
+                return type.SpecialType == SpecialType.System_Object
+                    ? "object has no concrete converter, so its value would be resolved by reflection at run time; declare the actual type instead"
+                    : $"{type.ToDisplayString()} has no concrete converter in PrimitiveConverterProvider, so the reflection path builds one through MakeGenericType; register a custom converter for it with [CborConverter]";
+            }
+
             if (type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Interface)
             {
                 return "collection interfaces and abstract collection types are not generated yet; use a concrete type such as List<T>";
@@ -456,6 +647,82 @@ namespace Dahomey.Cbor.Generator
         private static string Key(ITypeSymbol type)
         {
             return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        }
+
+        /// <summary>
+        /// Reports discriminated subtypes of a collected type that no context declares.
+        /// </summary>
+        /// <remarks>
+        /// Base to derived is not a member edge, so walking outwards from the roots never reaches a
+        /// subtype. An undeclared one is never registered, <c>TryRegisterType</c> is never called for
+        /// it, and a polymorphic read either fails or resolves to the fallback type -- with nothing
+        /// said at build time. "Only roots need declaring" holds for member graphs and not for
+        /// hierarchies, which is the case where forgetting one is expensive.
+        /// </remarks>
+        public void ReportUndeclaredSubtypes()
+        {
+            foreach (INamedTypeSymbol candidate in AllTypesInCompilation(_compilation.Assembly.GlobalNamespace))
+            {
+                if (_models.ContainsKey(Key(candidate)))
+                {
+                    continue;
+                }
+
+                if (!HasAttribute(candidate, "CborDiscriminatorAttribute")
+                    && !HasAttribute(candidate, "CborIntDiscriminatorAttribute"))
+                {
+                    continue;
+                }
+
+                for (INamedTypeSymbol? baseType = candidate.BaseType;
+                     baseType is not null && baseType.SpecialType != SpecialType.System_Object;
+                     baseType = baseType.BaseType)
+                {
+                    if (_models.ContainsKey(Key(baseType)))
+                    {
+                        _spc.ReportDiagnostic(Diagnostic.Create(
+                            Diagnostics.SubtypeNotDeclared,
+                            candidate.Locations.FirstOrDefault(),
+                            candidate.ToDisplayString(),
+                            baseType.ToDisplayString()));
+                        break;
+                    }
+                }
+            }
+        }
+
+        private static IEnumerable<INamedTypeSymbol> AllTypesInCompilation(INamespaceSymbol namespaceSymbol)
+        {
+            foreach (INamedTypeSymbol type in namespaceSymbol.GetTypeMembers())
+            {
+                yield return type;
+
+                foreach (INamedTypeSymbol nested in AllNestedTypes(type))
+                {
+                    yield return nested;
+                }
+            }
+
+            foreach (INamespaceSymbol nested in namespaceSymbol.GetNamespaceMembers())
+            {
+                foreach (INamedTypeSymbol type in AllTypesInCompilation(nested))
+                {
+                    yield return type;
+                }
+            }
+        }
+
+        private static IEnumerable<INamedTypeSymbol> AllNestedTypes(INamedTypeSymbol type)
+        {
+            foreach (INamedTypeSymbol nested in type.GetTypeMembers())
+            {
+                yield return nested;
+
+                foreach (INamedTypeSymbol deeper in AllNestedTypes(nested))
+                {
+                    yield return deeper;
+                }
+            }
         }
 
         /// <summary>
