@@ -159,6 +159,18 @@ namespace Dahomey.Cbor.Generator
         {
             bool wrote = false;
 
+            // A context does not disable the reflection fallback, so a type it does not declare is
+            // still mapped by DefaultObjectMappingConvention -- which reads this. Leaving it unset
+            // gave one document two naming conventions: declared types converted, fallback types
+            // under their declared member names.
+            if (options.NamingConvention is not null)
+            {
+                builder.AppendLine(
+                    $"{indent}        options.DefaultNamingConvention = "
+                    + $"new global::Dahomey.Cbor.Serialization.Conventions.{options.NamingConvention}();");
+                wrote = true;
+            }
+
             if (options.ObjectFormat != "StringKeyMap")
             {
                 builder.AppendLine($"{indent}        options.ObjectFormat = CborObjectFormat.{options.ObjectFormat};");
