@@ -1,7 +1,6 @@
 ﻿using Dahomey.Cbor.Serialization.Converters.Providers;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Linq;
 
 namespace Dahomey.Cbor.Serialization.Converters
@@ -10,27 +9,7 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly CborOptions _options;
         private readonly ConcurrentDictionary<Type, ICborConverter> _converters = new ConcurrentDictionary<Type, ICborConverter>();
-        private readonly ConcurrentStack<ICborConverterProvider> _providers = new ConcurrentStack<ICborConverterProvider>();
-
-        /// <summary>
-        /// Types whose converter is being constructed on this thread, right now.
-        /// </summary>
-        /// <remarks>
-        /// A converter resolves its members' converters while it is being constructed, and it is not
-        /// in <c>_converters</c> until that constructor returns. Two types that reference each other
-        /// therefore ask for each other indefinitely: A's construction looks up B, B's construction
-        /// looks up A, and neither is registered yet. The result is an uncatchable
-        /// <see cref="StackOverflowException"/>, not an exception a caller can handle.
-        /// <para>
-        /// Recording what is in flight lets a member mapping recognise the cycle and defer instead —
-        /// see <c>MemberMapping{T}.InitializeConverter</c>. Thread-static because construction is
-        /// re-entrant per thread; two threads building the same graph independently each complete on
-        /// their own, and <see cref="ConcurrentDictionary{TKey, TValue}.GetOrAdd"/> settles which
-        /// instance wins.
-        /// </para>
-        /// </remarks>
-        [ThreadStatic]
-        private static HashSet<(CborConverterRegistry, Type)>? _underConstruction;
+        private readonly ConcurrentStack<ICborConverterProvider> _providers = new ConcurrentStack<ICborConverterProvider>();        
 
         public CborConverterRegistry(CborOptions options)
         {
@@ -110,39 +89,18 @@ namespace Dahomey.Cbor.Serialization.Converters
             _converters.Clear();
         }
 
-        /// <summary>
-        /// Whether a converter for <paramref name="type" /> is already being constructed further up
-        /// this thread's call stack, so asking for it again would recurse rather than return.
-        /// </summary>
-        internal bool IsUnderConstruction(Type type)
-        {
-            return _underConstruction != null && _underConstruction.Contains((this, type));
-        }
-
         private ICborConverter CreateConverter(Type type)
         {
-            HashSet<(CborConverterRegistry, Type)> underConstruction =
-                _underConstruction ??= new HashSet<(CborConverterRegistry, Type)>();
+            ICborConverter? converter = _providers
+                .Select(provider => provider.GetConverter(type, _options))
+                .FirstOrDefault(provider => provider != null);
 
-            underConstruction.Add((this, type));
-
-            try
+            if (converter == null)
             {
-                ICborConverter? converter = _providers
-                    .Select(provider => provider.GetConverter(type, _options))
-                    .FirstOrDefault(provider => provider != null);
-
-                if (converter == null)
-                {
-                    throw new CborException($"No converter found for type {type.FullName}.");
-                }
-
-                return converter;
+                throw new CborException($"No converter found for type {type.FullName}.");
             }
-            finally
-            {
-                underConstruction.Remove((this, type));
-            }
+
+            return converter;
         }
     }
 }

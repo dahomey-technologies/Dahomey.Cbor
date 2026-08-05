@@ -9,7 +9,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     public class MemberMapping<T> : IMemberMapping
     {
         private bool _isInitialized = false;
-        private bool _converterDeferred = false;
         private readonly IObjectMapping _objectMapping;
         private readonly CborConverterRegistry _converterRegistry;
         private string? _memberName = null;
@@ -44,13 +43,17 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             {
                 EnsureInitialize();
 
-                // A cycle deferred this resolution during initialization. By the time anyone asks for
-                // the converter the graph is fully built, so the lookup now completes.
-                if (_converter == null && _converterDeferred)
+                // Initialization deliberately leaves the registry lookup undone: a converter resolves
+                // its members while its own constructor is still running, so asking the registry for a
+                // member whose type is part of a cycle would re-enter that construction and recurse
+                // until the stack is gone. By the time anyone reads this the graph is built, so the
+                // lookup now completes.
+                if (_converter == null)
                 {
-                    _converter = _converterRegistry.Lookup(MemberType);
-                    VerifyMemberConverterType(_converter.GetType());
-                    _converterDeferred = false;
+                    lock (this)
+                    {
+                        _converter ??= _converterRegistry.Lookup(MemberType);
+                    }
                 }
 
                 return _converter;
@@ -253,18 +256,8 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     }
                 }
                 
-                // The member's own type is already being constructed further up the stack — this is a
-                // reference cycle between two or more types. Looking it up here would re-enter its
-                // construction and recurse until the stack is gone, so leave it unresolved; the
-                // `Converter` getter completes it once the graph is built. The direct A -> A case is
-                // handled above by reusing the parent converter, which is cheaper and needs no defer.
-                if (_converterRegistry.IsUnderConstruction(MemberType))
-                {
-                    _converterDeferred = true;
-                    return;
-                }
-
-                _converter = _converterRegistry.Lookup(MemberType);
+                // Nothing else to do here. The registry lookup belongs in the `Converter` getter, not
+                // in construction — see the comment there.
                 return;
             }
             

@@ -1,4 +1,6 @@
 using Dahomey.Cbor.Tests.Extensions;
+using System;
+using System.Collections.Generic;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
@@ -49,6 +51,35 @@ namespace Dahomey.Cbor.Tests.Issues
         {
             public int Id { get; set; }
             public RingA Next { get; set; }
+        }
+
+        public class Team
+        {
+            public string Name { get; set; }
+            public List<Member> Members { get; set; }
+        }
+
+        public class Member
+        {
+            public string Name { get; set; }
+            public Team Team { get; set; }
+        }
+
+        public struct Slot
+        {
+            public Node Node { get; set; }
+        }
+
+        public class Boxed
+        {
+            public int Id { get; set; }
+            public ValueTuple<Boxed, int> Pair { get; set; }
+        }
+
+        public class Node
+        {
+            public int Id { get; set; }
+            public Slot Slot { get; set; }
         }
 
         /// <summary>
@@ -114,6 +145,118 @@ namespace Dahomey.Cbor.Tests.Issues
             //          644e657874    "Next"
             //          f6            null
             Helper.TestWrite(a, "A262496401644E657874A262496402644E657874A262496403644E657874F6");
+        }
+
+        [Fact]
+        public void ThreeTypeCycleCanBeDeserialized()
+        {
+            const string hexBuffer = "A262496401644E657874A262496402644E657874A262496403644E657874F6";
+
+            RingA a = Cbor.Deserialize<RingA>(hexBuffer.HexToBytes());
+
+            Assert.Equal(1, a.Id);
+            Assert.Equal(2, a.Next.Id);
+            Assert.Equal(3, a.Next.Next.Id);
+            Assert.Null(a.Next.Next.Next);
+        }
+
+        /// <summary>
+        /// The cycle most real models actually have: the back-reference is reached through a
+        /// collection rather than directly.
+        /// </summary>
+        /// <remarks>
+        /// This shape survives on <c>master</c> already, because <c>AbstractCollectionConverter</c>
+        /// resolves its item converter lazily. Pinning it keeps a future change there from
+        /// reintroducing the overflow through a path nothing else covers.
+        /// </remarks>
+        [Fact]
+        public void CycleThroughACollectionCanBeRoundTripped()
+        {
+            Team team = new Team
+            {
+                Name = "a",
+                Members = new List<Member> { new Member { Name = "b" } },
+            };
+
+            // a2                           map(2)
+            //    644e616d65                "Name"
+            //    6161                      "a"
+            //    674d656d62657273          "Members"
+            //    81                        array(1)
+            //       a2                     map(2)
+            //          644e616d65          "Name"
+            //          6162                "b"
+            //          645465616d          "Team"
+            //          f6                  null
+            const string hexBuffer = "A2644E616D656161674D656D6265727381A2644E616D656162645465616DF6";
+
+            Helper.TestWrite(team, hexBuffer);
+
+            Team read = Cbor.Deserialize<Team>(hexBuffer.HexToBytes());
+
+            Assert.Equal("a", read.Name);
+            Assert.Single(read.Members);
+            Assert.Equal("b", read.Members[0].Name);
+            Assert.Null(read.Members[0].Team);
+        }
+
+        /// <summary>
+        /// A cycle whose second leg goes through <c>StructMemberConverter</c>. Struct-to-struct
+        /// cycles are impossible in C#, but a struct holding a class that holds the struct is a
+        /// genuine mutual reference and is the only shape that reaches that converter.
+        /// </summary>
+        [Fact]
+        public void CycleThroughAStructMemberCanBeRoundTripped()
+        {
+            Node node = new Node { Id = 7 };
+
+            // a2                     map(2)
+            //    624964              "Id"
+            //    07                  7
+            //    64536c6f74          "Slot"
+            //    a1                  map(1)
+            //       644e6f6465       "Node"
+            //       f6               null
+            const string hexBuffer = "A26249640764536C6F74A1644E6F6465F6";
+
+            Helper.TestWrite(node, hexBuffer);
+
+            Node read = Cbor.Deserialize<Node>(hexBuffer.HexToBytes());
+
+            Assert.Equal(7, read.Id);
+            Assert.Null(read.Slot.Node);
+        }
+
+        /// <summary>
+        /// A cycle whose second leg goes through a converter that resolves eagerly.
+        /// </summary>
+        /// <remarks>
+        /// The tuple and nullable converters look their item types up from their own constructors,
+        /// unlike the collection and dictionary converters. That stays safe only because the member
+        /// converter no longer resolves during construction: <c>Boxed</c> reaches the registry before
+        /// its <c>Pair</c> member is looked at, so <c>Tuple2Converter</c>'s eager <c>Lookup</c> finds
+        /// it rather than re-entering its construction. This is the one shape that covers those
+        /// eager lookups, and it overflows the stack without the change.
+        /// </remarks>
+        [Fact]
+        public void CycleThroughATupleCanBeSerialized()
+        {
+            Boxed boxed = new Boxed { Id = 1, Pair = new ValueTuple<Boxed, int>(new Boxed { Id = 2 }, 9) };
+
+            // a2                        map(2)
+            //    624964                 "Id"
+            //    01                     1
+            //    6450616972             "Pair"
+            //    82                     array(2)
+            //       a2                  map(2)
+            //          624964           "Id"
+            //          02               2
+            //          6450616972       "Pair"
+            //          82               array(2)
+            //             f6            null
+            //             00            0
+            //       09                  9
+            Helper.TestWrite(boxed, "A262496401645061697282A262496402645061697282F60009");
         }
 
         /// <summary>
