@@ -21,7 +21,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             public LengthMode lengthMode;
         }
 
-        private readonly CborOptions _options;
+        protected readonly CborOptions _options;
 
         public ArrayConverter(CborOptions options)
         {

@@ -283,6 +283,20 @@ namespace Dahomey.Cbor.Serialization
                 && (header.Primitive == CborPrimitive.Null || header.Primitive == CborPrimitive.Undefined);
         }
 
+        /// <summary>
+        /// Reports whether the next data item carries a semantic tag.
+        /// </summary>
+        /// <remarks>
+        /// Like <see cref="IsNull"/> and <see cref="IsBreak"/> this inspects the header and skips
+        /// nothing. It lets a converter that only sometimes wants the tag pay for a bookmark on the rare
+        /// tagged item rather than on every item.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool IsSemanticTag()
+        {
+            return GetHeader().MajorType == CborMajorType.SemanticTag;
+        }
+
         public CborReaderBookmark GetBookmark()
         {
             CborReaderBookmark bookmark;
@@ -903,7 +917,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (size == -1)
             {
-                ThrowNotSupported();
+                ThrowIndefiniteLengthString();
             }
 
             return ReadBytes(size, allowScratchBuffer);
@@ -938,7 +952,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (size == -1)
             {
-                ThrowNotSupported();
+                ThrowIndefiniteLengthString();
             }
 
             ExpectLength(size);
@@ -1088,7 +1102,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (size == -1)
             {
-                ThrowNotSupported();
+                ThrowIndefiniteLengthString();
             }
 
             ExpectLength(size);
@@ -1223,9 +1237,21 @@ namespace Dahomey.Cbor.Serialization
             throw BuildException(message);
         }
 
-        private void ThrowNotSupported()
+        /// <summary>
+        /// Indefinite-length byte and text strings - RFC 8949 §3.2.3, a chunked string terminated by a
+        /// break marker - are not supported by this reader.
+        /// </summary>
+        /// <remarks>
+        /// This is a <see cref="CborException"/> rather than a <see cref="NotSupportedException"/> so
+        /// that it is caught by the same handler as every other malformed- or unreadable-input error.
+        /// A caller has no way to tell the two apart at the point of the read, and a chunked string is
+        /// a property of the document, not of the API being misused.
+        /// </remarks>
+        private void ThrowIndefiniteLengthString()
         {
-            throw new NotSupportedException();
+            throw BuildException(
+                "Indefinite-length byte and text strings are not supported. "
+                + "Re-encode the value as a single definite-length string.");
         }
     }
 }
