@@ -147,7 +147,8 @@ The object model does not model typed arrays. A `CborValue` holding one is a `By
 `CborValue.SemanticTag`, so DOM code sees opaque bytes rather than numbers. Note that
 `CborValueConverter` does not write `SemanticTag` back — reading a document into a `CborValue` and
 serializing it again drops the tag, turning the typed array into a plain byte string. That is true of
-every semantic tag, not just these, but typed arrays are the easiest way to meet it.
+every semantic tag, not just these, but typed arrays are the easiest way to meet it. Tracked as
+https://github.com/dahomey-technologies/Dahomey.Cbor/issues/162.
 
 ### Custom converters
 
