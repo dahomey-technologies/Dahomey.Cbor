@@ -171,7 +171,10 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// document silently.
         /// </summary>
         /// <remarks>
-        /// Unconditional, which is what makes the round trip lossless. A caller that reads a tag-1 value
+        /// Unconditional, which is what makes the round trip carry the tag rather than lose it. One tag,
+        /// not a chain: <see cref="CborValue.SemanticTag"/> is a single <c>ulong?</c>, so a nested
+        /// <c>C1 C2 01</c> keeps the outer tag and drops the inner -- a limit of the model rather than
+        /// of this method. A caller that reads a tag-1 value
         /// and replaces it with a string does get a tag that no longer matches its content, but that is
         /// the caller describing their own value: there is no way to tell an edited value from an
         /// untouched one, so dropping the tag on suspicion would break the round trip this exists for.

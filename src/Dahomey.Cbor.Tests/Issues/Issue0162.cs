@@ -196,6 +196,25 @@ namespace Dahomey.Cbor.Tests.Issues
         }
 
         /// <summary>
+        /// The round trip carries one tag, not a chain: <see cref="CborValue.SemanticTag"/> is a single
+        /// <c>ulong?</c>, so the object model structurally cannot hold nested tags.
+        /// </summary>
+        /// <remarks>
+        /// The outer tag survives and the inner is dropped, which is an improvement on losing both but
+        /// is not lossless, and is a limit of the model rather than of this change. Pinned so the
+        /// distinction is stated rather than discovered.
+        /// </remarks>
+        [Fact]
+        public void ANestedTagKeepsOnlyTheOuterOne()
+        {
+            // c1 c2 01  -- tag(1) tag(2) 1
+            CborValue value = Cbor.Deserialize<CborValue>("C1C201".HexToBytes());
+
+            Assert.Equal(1UL, value.SemanticTag);
+            Helper.TestWrite(value, "C101");
+        }
+
+        /// <summary>
         /// An untagged document is byte-identical to what it was before, which is the guarantee that
         /// matters to every caller who never meets a tag.
         /// </summary>
