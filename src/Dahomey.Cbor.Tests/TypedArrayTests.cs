@@ -722,17 +722,17 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public void AChunkedTypedArrayPayloadIsACborException()
+        public void AChunkedTypedArrayPayloadIsRead()
         {
             // RFC 8746 does not forbid an indefinite-length byte string as the tag content, and a
-            // producer streaming a large array is exactly where one shows up. The reader does not
-            // support chunked strings, but it has to say so as a CborException like every other
-            // unreadable-input error, or it escapes the handler a caller has written.
+            // producer streaming a large array is exactly where one shows up. An indefinite-length
+            // string denotes the concatenation of its chunks, so the payload is the same eight bytes
+            // it would have been in one piece and the array decodes identically.
             // D855 tag(85) 5F bytes(*) 44 0000C03F 44 00002040 FF
-            CborException exception = AssertThrowsCborException(
-                () => Cbor.Deserialize<float[]>("D8555F440000C03F4400002040FF".HexToBytes(), TypedArrayOptions()));
+            float[] value = Cbor.Deserialize<float[]>(
+                "D8555F440000C03F4400002040FF".HexToBytes(), TypedArrayOptions());
 
-            Assert.Contains("Indefinite-length", exception.Message);
+            Assert.Equal(new[] { 1.5f, 2.5f }, value);
         }
 
         [Fact]
