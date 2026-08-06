@@ -93,7 +93,16 @@ namespace Dahomey.Cbor.Serialization.Converters
             TK key = KeyConverter.Read(ref reader);
             TV value = ValueConverter.Read(ref reader);
 
-            context.dict.Add(key, value);
+            // See CborValueConverter.ReadMapItem: a duplicate key is malformed input, and it was
+            // already refused -- as an ArgumentException that escapes the CborException contract.
+            try
+            {
+                context.dict.Add(key, value);
+            }
+            catch (ArgumentException)
+            {
+                throw reader.BuildException($"Duplicate map key: {key}");
+            }
         }
 
         public int GetMapSize(ref WriterContext context)
