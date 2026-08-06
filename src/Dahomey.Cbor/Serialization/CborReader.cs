@@ -232,6 +232,71 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        /// <summary>
+        /// Reports whether the next data item is the break marker that terminates an
+        /// indefinite-length array or map.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately does not skip a semantic tag: a break marker is never tagged, so a tag here
+        /// belongs to the next item and has to survive for that item's converter. A typed array is
+        /// decoded from its RFC 8746 tag, so consuming it would make an indefinite-length container
+        /// of typed arrays unreadable.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool IsBreak()
+        {
+            CborReaderHeader header = GetHeader();
+
+            return header.MajorType == CborMajorType.Primitive && header.Primitive == CborPrimitive.Break;
+        }
+
+        /// <summary>
+        /// Reports whether the next data item is the null primitive, or <c>undefined</c>, which
+        /// <see cref="GetCurrentDataItemType"/> also reports as <see cref="CborDataItemType.Null"/>.
+        /// </summary>
+        /// <remarks>
+        /// Like <see cref="IsBreak"/>, this inspects the header and skips nothing:
+        /// <see cref="GetCurrentDataItemType"/> begins with <c>SkipSemanticTag()</c>, so a caller that
+        /// only wants to look - a member probing for null - would consume a tag the value's own
+        /// converter still needs.
+        /// <para>
+        /// It is deliberately not a bookmark-and-rewind. This runs once per member of every object
+        /// read, and <see cref="CborReaderBookmark"/> carries a span, a sequence and a
+        /// <c>SequenceReader</c>: copying that twice per member is a cost paid by every caller,
+        /// including those who never encounter a semantic tag.
+        /// </para>
+        /// <para>
+        /// One consequence, which is the reason this is not simply equivalent: a null behind a
+        /// semantic tag reads as a tag rather than as null, so the probe does not see it. The value's
+        /// converter still calls <c>ReadNull()</c>, which skips the tag and yields null, so the value
+        /// is unaffected -- but <see cref="RequirementPolicy.DisallowNull"/> no longer rejects that
+        /// one exotic shape. Pinned by <c>ATaggedNullIsNotRejectedByDisallowNull</c> and
+        /// <c>ATaggedUndefinedIsNotRejectedByDisallowNull</c>.
+        /// </para>
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool IsNull()
+        {
+            CborReaderHeader header = GetHeader();
+
+            return header.MajorType == CborMajorType.Primitive
+                && (header.Primitive == CborPrimitive.Null || header.Primitive == CborPrimitive.Undefined);
+        }
+
+        /// <summary>
+        /// Reports whether the next data item carries a semantic tag.
+        /// </summary>
+        /// <remarks>
+        /// Like <see cref="IsNull"/> and <see cref="IsBreak"/> this inspects the header and skips
+        /// nothing. It lets a converter that only sometimes wants the tag pay for a bookmark on the rare
+        /// tagged item rather than on every item.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal bool IsSemanticTag()
+        {
+            return GetHeader().MajorType == CborMajorType.SemanticTag;
+        }
+
         public CborReaderBookmark GetBookmark()
         {
             CborReaderBookmark bookmark;
@@ -643,7 +708,7 @@ namespace Dahomey.Cbor.Serialization
 
         public bool MoveNextMapItem(ref int remainingItemCount)
         {
-            if (remainingItemCount == 0 || remainingItemCount < 0 && GetCurrentDataItemType() == CborDataItemType.Break)
+            if (remainingItemCount == 0 || remainingItemCount < 0 && IsBreak())
             {
                 return false;
             }
@@ -662,7 +727,7 @@ namespace Dahomey.Cbor.Serialization
 
             arrayReader.ReadBeginArray(size, ref context);
 
-            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
+            while (size > 0 || size < 0 && !IsBreak())
             {
                 arrayReader.ReadArrayItem(ref this, ref context);
                 size--;
@@ -852,7 +917,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (size == -1)
             {
-                ThrowNotSupported();
+                ThrowIndefiniteLengthString();
             }
 
             return ReadBytes(size, allowScratchBuffer);
@@ -887,7 +952,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (size == -1)
             {
-                ThrowNotSupported();
+                ThrowIndefiniteLengthString();
             }
 
             ExpectLength(size);
@@ -1037,7 +1102,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (size == -1)
             {
-                ThrowNotSupported();
+                ThrowIndefiniteLengthString();
             }
 
             ExpectLength(size);
@@ -1049,7 +1114,7 @@ namespace Dahomey.Cbor.Serialization
         {
             int size = ReadSize();
 
-            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
+            while (size > 0 || size < 0 && !IsBreak())
             {
                 SkipDataItem();
                 size--;
@@ -1063,7 +1128,7 @@ namespace Dahomey.Cbor.Serialization
         {
             int size = ReadSize();
 
-            while (size > 0 || size < 0 && GetCurrentDataItemType() != CborDataItemType.Break)
+            while (size > 0 || size < 0 && !IsBreak())
             {
                 SkipDataItem();
                 SkipDataItem();
@@ -1172,9 +1237,21 @@ namespace Dahomey.Cbor.Serialization
             throw BuildException(message);
         }
 
-        private void ThrowNotSupported()
+        /// <summary>
+        /// Indefinite-length byte and text strings - RFC 8949 §3.2.3, a chunked string terminated by a
+        /// break marker - are not supported by this reader.
+        /// </summary>
+        /// <remarks>
+        /// This is a <see cref="CborException"/> rather than a <see cref="NotSupportedException"/> so
+        /// that it is caught by the same handler as every other malformed- or unreadable-input error.
+        /// A caller has no way to tell the two apart at the point of the read, and a chunked string is
+        /// a property of the document, not of the API being misused.
+        /// </remarks>
+        private void ThrowIndefiniteLengthString()
         {
-            throw new NotSupportedException();
+            throw BuildException(
+                "Indefinite-length byte and text strings are not supported. "
+                + "Re-encode the value as a single definite-length string.");
         }
     }
 }

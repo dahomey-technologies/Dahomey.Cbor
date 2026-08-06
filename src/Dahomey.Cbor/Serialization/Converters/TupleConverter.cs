@@ -15,6 +15,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 2)
@@ -22,13 +27,13 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 2");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 2");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 2");
             }
@@ -66,6 +71,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2, T3) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 3)
@@ -73,19 +83,19 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 3");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 3");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 3");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 3");
             }
@@ -126,6 +136,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2, T3, T4) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 4)
@@ -133,25 +148,25 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 4");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
             T3 item3 = _item3Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
@@ -195,6 +210,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2, T3, T4, T5) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 5)
@@ -202,31 +222,31 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 5");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
             T3 item3 = _item3Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
             T4 item4 = _item4Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
@@ -273,6 +293,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2, T3, T4, T5, T6) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 6)
@@ -280,37 +305,37 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 6");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
             T3 item3 = _item3Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
             T4 item4 = _item4Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
-                throw new CborException("Expected CBOR Array of size 5");
+                throw new CborException("Expected CBOR Array of size 6");
             }
             T5 item5 = _item5Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
@@ -360,6 +385,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override (T1, T2, T3, T4, T5, T6, T7) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 7)
@@ -367,43 +397,43 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 7");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T3 item3 = _item3Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T4 item4 = _item4Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T5 item5 = _item5Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T6 item6 = _item6Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
@@ -455,6 +485,11 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
         public override (T1, T2, T3, T4, T5, T6, T7, T8) Read(ref CborReader reader)
         {
+            // ReadSize does not skip a semantic tag, and this is the only converter that reaches
+            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
+            // stays readable; the tag itself carries no information this converter needs.
+            reader.TryReadSemanticTag(out _);
+
             int size = reader.ReadSize();
 
             if (size != -1 && size != 8)
@@ -462,50 +497,50 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("Expected CBOR Array of size 8");
             }
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T1 item1 = _item1Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T2 item2 = _item2Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T3 item3 = _item3Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T4 item4 = _item4Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T5 item5 = _item5Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T6 item6 = _item6Converter.Read(ref reader);
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T7 item7 = _item7Converter.Read(ref reader);
 
 
-            if (size == -1 && reader.GetCurrentDataItemType() == CborDataItemType.Break)
+            if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }

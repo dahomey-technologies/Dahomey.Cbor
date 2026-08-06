@@ -57,10 +57,13 @@
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
-  <!-- CborKeyComparer is internal: its rules are exercised directly by unit tests that the encoded
-       bytes cannot reach, such as a 65536-character key or int.MinValue. A strong-named assembly may
-       only grant friend access to another strong-named assembly, which is why the test project is
+  <!-- Two internals are exercised directly by tests that the encoded bytes cannot reach:
+       CborKeyComparer, whose rules cover cases such as a 65536-character key or int.MinValue, and
+       TypedArrayConverter, whose byte-swapping paths take the host byte order as a constructor
+       argument so both orders can be exercised on little-endian CI hardware. A strong-named assembly
+       may only grant friend access to another strong-named assembly, which is why the test project is
        signed with the same key. -->
+
   <ItemGroup>
     <InternalsVisibleTo Include="Dahomey.Cbor.Tests" Key="0024000004800000940000000602000000240000525341310004000001000100a1d13d213c4ddbe57c8cfdd25d1775a32e40eeca99c937fb91e124f672b891dde0b874d5495efd49fd23fcaef1a66d82482a52b8ba3c000d299679b39d1655b54e3cdd7fb5b7e365ecbe58cea1b94ef9a60d01ae93a0ed2e932d23830f7816c321ff3e987c547ffa0994c5e169ddd8ba09440261746b708a80ba0859b5378ba9" />
   </ItemGroup>

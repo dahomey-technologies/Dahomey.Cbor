@@ -260,7 +260,7 @@ namespace Dahomey.Cbor.Tests
 
         [Theory]
         [InlineData("63666F6F", "foo", null)]
-        [InlineData("7F6166616F616FFF", "foo", typeof(NotSupportedException))]
+        [InlineData("7F6166616F616FFF", "foo", typeof(CborException))]
         [InlineData("F6", null, null)]
         [InlineData("C6F6", null, null)] // semantig tag 6 + null
         [InlineData("60", "", null)]

@@ -122,7 +122,9 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void Read(ref CborReader reader, object obj)
         {
-            if (reader.GetCurrentDataItemType() == CborDataItemType.Null)
+            // Inspect rather than read: this only asks whether the member is null, and the member's
+            // own converter may still need the semantic tag that sits in front of the value.
+            if (reader.IsNull())
             {
                 if (_requirementPolicy == RequirementPolicy.DisallowNull || _requirementPolicy == RequirementPolicy.Always)
                 {
@@ -354,7 +356,9 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void Read(ref CborReader reader, ref T instance)
         {
-            if (reader.GetCurrentDataItemType() == CborDataItemType.Null)
+            // Inspect rather than read: this only asks whether the member is null, and the member's
+            // own converter may still need the semantic tag that sits in front of the value.
+            if (reader.IsNull())
             {
                 if (_requirementPolicy == RequirementPolicy.DisallowNull || _requirementPolicy == RequirementPolicy.Always)
                 {

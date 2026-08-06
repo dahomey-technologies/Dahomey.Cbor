@@ -19,6 +19,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             RegisterConverterProvider(new ObjectConverterProvider());
             RegisterConverterProvider(new TupleConverterProvider());
             RegisterConverterProvider(new CollectionConverterProvider());
+            RegisterConverterProvider(new TypedArrayConverterProvider());
             RegisterConverterProvider(new PrimitiveConverterProvider());
             RegisterConverterProvider(new ByAttributeConverterProvider());
         }
