@@ -1,5 +1,8 @@
+using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.ObjectModel;
+using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Tests.Extensions;
+using Dahomey.Cbor.Util;
 using System.Collections.Generic;
 using Xunit;
 
@@ -109,6 +112,97 @@ namespace Dahomey.Cbor.Tests
         public class DuplicateHolder
         {
             public int A { get; set; }
+        }
+
+        /// <summary>
+        /// A type with a creator mapping takes a different branch of <c>ObjectConverter</c>: member
+        /// values are collected into dictionaries until the constructor can be called, rather than
+        /// being set on an instance. Those dictionaries reject a duplicate too, so the same contract
+        /// applies — a record or a <c>[CborConstructor]</c> type is an ordinary decode target.
+        /// </summary>
+        [Fact]
+        public void ADuplicateMemberOfAConstructedTypeThrowsCborException()
+        {
+            // a2 624964 0c 624964 0d  -- {"Id": 12, "Id": 13}
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<ConstructedHolder>("A26249640C6249640D".HexToBytes()));
+
+            Assert.Contains("Duplicate", exception.Message);
+        }
+
+        /// <summary>The same type in <c>IntKeyMap</c> format, which collects by index instead.</summary>
+        [Fact]
+        public void ADuplicateIndexedMemberOfAConstructedTypeThrowsCborException()
+        {
+            // a2 00 0c 00 0d  -- {0: 12, 0: 13}
+            CborOptions options = new CborOptions { ObjectFormat = CborObjectFormat.IntKeyMap };
+
+            Assert.Throws<CborException>(
+                () => Cbor.Deserialize<IndexedConstructedHolder>("A2000C000D".HexToBytes(), options));
+        }
+
+        public class ConstructedHolder
+        {
+            public int Id { get; set; }
+
+            [CborConstructor]
+            public ConstructedHolder(int id)
+            {
+                Id = id;
+            }
+        }
+
+        public class IndexedConstructedHolder
+        {
+            [CborProperty(0)]
+            public int Id { get; set; }
+
+            [CborConstructor]
+            public IndexedConstructedHolder(int id)
+            {
+                Id = id;
+            }
+        }
+
+        /// <summary>
+        /// A null key is not a duplicate, and must not be reported as one. <c>ArgumentNullException</c>
+        /// derives from <see cref="System.ArgumentException"/>, so a catch that does not distinguish
+        /// them turns "the key was null" into "duplicate map key: " with nothing after the colon.
+        /// </summary>
+        [Fact]
+        public void ANullKeyIsReportedAsANullKeyRatherThanADuplicate()
+        {
+            // a1 f6 01  -- {null: 1}
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Dictionary<string, int>>("A1F601".HexToBytes()));
+
+            Assert.Contains("null", exception.Message);
+            Assert.DoesNotContain("Duplicate", exception.Message);
+        }
+
+        /// <summary>
+        /// A key from an untrusted document is not repeated at length into the exception message, which
+        /// typically reaches a log. The message says what was wrong without carrying a megabyte of
+        /// attacker-chosen text with it.
+        /// </summary>
+        [Fact]
+        public void ALongDuplicateKeyIsTruncatedInTheMessage()
+        {
+            string key = new string('k', 500);
+            byte[] keyBytes = System.Text.Encoding.UTF8.GetBytes(key);
+            ByteBufferWriter writer = new ByteBufferWriter();
+            CborWriter cborWriter = new CborWriter(writer);
+            cborWriter.WriteBeginMap(2);
+            cborWriter.WriteString(key);
+            cborWriter.WriteInt32(1);
+            cborWriter.WriteString(key);
+            cborWriter.WriteInt32(2);
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Dictionary<string, int>>(writer.WrittenSpan.ToArray()));
+
+            Assert.True(exception.Message.Length < 200, $"message was {exception.Message.Length} chars");
+            Assert.Contains("Duplicate map key", exception.Message);
         }
     }
 }

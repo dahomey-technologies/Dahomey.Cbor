@@ -175,9 +175,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 context.obj.Add(key, value);
             }
-            catch (ArgumentException)
+            catch (ArgumentException exception)
             {
-                throw reader.BuildException($"Duplicate map key: {key}");
+                // A CborValue key is never null -- a CBOR null decodes to CborValue.Null, an instance --
+                // so the remaining cases are a duplicate or the dictionary refusing for another reason.
+                throw reader.BuildException(context.obj.ContainsKey(key)
+                    ? MapKeyErrors.Duplicate(key)
+                    : MapKeyErrors.Rejected(key, exception.Message));
             }
         }
 
