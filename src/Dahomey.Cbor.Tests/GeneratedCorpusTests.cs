@@ -50,6 +50,26 @@ namespace Dahomey.Cbor.Tests
     /// that happen to be declared is not a substitute for them.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// A context asking for RFC 8949 section 4.2.1 deterministic output, enrolled in the corpus so the
+    /// generated path is pinned to agree with the reflection path under it.
+    /// </summary>
+    /// <remarks>
+    /// Nothing in the generator knows about determinism: member order is settled by
+    /// <c>ObjectConverter</c> and key order by <c>AbstractDictionaryConverter</c> and
+    /// <c>CborValueConverter</c>, all of which the generated path shares. This exists to keep that
+    /// true rather than to make it true -- a generated context that started emitting its own ordering
+    /// would diverge from the reflection path here.
+    /// </remarks>
+    [CborSerializable(typeof(GeneratedShapes))]
+    public partial class DeterministicCborContext : CborSerializerContext
+    {
+        public DeterministicCborContext()
+            : base(new CborOptions { Deterministic = true })
+        {
+        }
+    }
+
     public class GeneratedCorpusTests
     {
         private static object Sample(Type type)
@@ -92,6 +112,27 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // The typed-array corpus entries. These are what make the corpus bind for RFC 8746: with
+            // TypedArrayMode carried onto the reflection side, a generated context that registered an
+            // ArrayConverter where a TypedArrayConverter belongs writes a plain array against the
+            // reflection path's tag 85, and both tests below fail.
+            if (type == typeof(GeneratedTypedArrays))
+            {
+                return new GeneratedTypedArrays
+                {
+                    Samples = new[] { 1.5f, 2.5f, float.MaxValue },
+                    Precise = new[] { 1.25, -3.5 },
+                    Counts = new short[] { 1, -2, 300 },
+                    Ticks = new ulong[] { 0, ulong.MaxValue },
+                    Payload = new byte[] { 1, 2, 3 },
+                };
+            }
+
+            if (type == typeof(float[]))
+            {
+                return new[] { 1.5f, -2.25f };
+            }
+
             if (type == typeof(ReusedOptionsProbe))
             {
                 return new ReusedOptionsProbe { Id = 12 };
@@ -115,6 +156,12 @@ namespace Dahomey.Cbor.Tests
         /// Every <c>[CborSerializable]</c> on every <see cref="CborSerializerContext"/> in the
         /// assembly, so adding a context enrols its types without touching this test.
         /// </summary>
+        /// <remarks>
+        /// One case per (type, context) pair rather than per type. A type declared on two contexts is
+        /// two different configurations of the same converters -- <c>GeneratedShapes</c> is written
+        /// both plainly and deterministically -- and collapsing them would test whichever context
+        /// <c>Assembly.GetTypes()</c> happened to return first and silently skip the other.
+        /// </remarks>
         public static IEnumerable<object[]> DeclaredTypes()
         {
             return typeof(GeneratedCorpusTests).Assembly
@@ -122,9 +169,7 @@ namespace Dahomey.Cbor.Tests
                 .Where(candidate => typeof(CborSerializerContext).IsAssignableFrom(candidate)
                     && !candidate.IsAbstract)
                 .SelectMany(context => context.GetCustomAttributes<CborSerializableAttribute>()
-                    .Select(attribute => new { Context = context, attribute.Type }))
-                .GroupBy(declaration => declaration.Type)
-                .Select(group => new object[] { group.Key, group.First().Context });
+                    .Select(attribute => new object[] { attribute.Type, context }));
         }
 
         [Theory]
@@ -138,10 +183,17 @@ namespace Dahomey.Cbor.Tests
             // The context's own settings are copied onto it rather than restated, so the comparison
             // is generated-versus-reflection under equivalent options and not a second guess at what
             // the context configured.
+            // TypedArrayMode and Deterministic are copied for the same reason as the other two, and
+            // they are what make this test bind at all: under the default Never a TypedArrayConverter
+            // is byte-identical to an ArrayConverter, so a context that forgot to register one would
+            // compare equal and pass. With the mode on, the reflection side writes tag 85 and a
+            // generated side that fell back to ArrayConverter writes a plain array.
             CborOptions reflection = new CborOptions
             {
                 DefaultNamingConvention = generated.DefaultNamingConvention,
                 ObjectFormat = generated.ObjectFormat,
+                TypedArrayMode = generated.TypedArrayMode,
+                Deterministic = generated.Deterministic,
             };
 
             string reflectionBytes = WriteAs(type, Sample(type), reflection);
