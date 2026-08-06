@@ -15,6 +15,26 @@ namespace Dahomey.Cbor.ObjectModel
         private static readonly CborNull s_Null = new CborNull();
         public static CborNull Null { get; } = s_Null;
 
+        /// <summary>
+        /// Returns this value carrying <paramref name="semanticTag"/>, without ever writing the tag to
+        /// an instance somebody else holds.
+        /// </summary>
+        /// <remarks>
+        /// Several value types hand out shared instances — <see cref="CborPositive"/> and
+        /// <see cref="CborNegative"/> for small integers, <see cref="CborSingle"/>,
+        /// <see cref="CborDouble"/> and <see cref="CborDecimal"/> for small whole numbers,
+        /// <see cref="CborBoolean"/> for both values, and <see cref="Null"/>. Assigning
+        /// <see cref="SemanticTag"/> to one of those would attach the tag to every occurrence of that
+        /// value in the process, in documents that never carried it and in values built in code. Those
+        /// types override this to copy first; the rest, which are constructed fresh per value, tag in
+        /// place.
+        /// </remarks>
+        internal virtual CborValue WithSemanticTag(ulong semanticTag)
+        {
+            SemanticTag = semanticTag;
+            return this;
+        }
+
         public virtual T Value<T>()
         {
             throw new NotSupportedException(

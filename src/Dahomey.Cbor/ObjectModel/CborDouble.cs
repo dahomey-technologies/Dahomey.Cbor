@@ -25,6 +25,16 @@ namespace Dahomey.Cbor.ObjectModel
             _value = value;
         }
 
+        /// <summary>
+        /// Copies before tagging: CborDouble hands out shared instances for common values, so
+        /// tagging in place would attach the tag to every occurrence of that value in the
+        /// process. See <see cref="CborValue.WithSemanticTag"/>.
+        /// </summary>
+        internal override CborValue WithSemanticTag(ulong semanticTag)
+        {
+            return new CborDouble(_value) { SemanticTag = semanticTag };
+        }
+
         public override T Value<T>()
         {
             return Primitive<double, T>.Converter(_value);

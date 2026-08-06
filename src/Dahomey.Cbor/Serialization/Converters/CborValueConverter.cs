@@ -48,13 +48,12 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             bool hasSemanticTag = reader.TryReadSemanticTag(out ulong semanticTag);
 
-            var cborValue = ReadCborValue(ref reader);
-            if (hasSemanticTag)
-            {
-                cborValue.SemanticTag = semanticTag;
-            }
+            CborValue cborValue = ReadCborValue(ref reader);
 
-            return cborValue;
+            // WithSemanticTag rather than assigning SemanticTag: small integers, common floats, both
+            // booleans and null are shared instances, and stamping a tag on one of those would tag
+            // every occurrence of that value in the process.
+            return hasSemanticTag ? cborValue.WithSemanticTag(semanticTag) : cborValue;
         }
 
         private CborValue ReadCborValue(ref CborReader reader)
