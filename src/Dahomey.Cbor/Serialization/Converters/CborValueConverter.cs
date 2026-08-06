@@ -108,6 +108,14 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override void Write(ref CborWriter writer, CborValue value, LengthMode lengthMode)
         {
+            // Containers emit their own tag: the map and array writers are reachable without passing
+            // through here at all - a member declared CborObject resolves straight to them - so
+            // emitting it for them here as well would double the tag on that route.
+            if (value.Type != CborValueType.Object && value.Type != CborValueType.Array)
+            {
+                WriteSemanticTag(ref writer, value);
+            }
+
             switch (value.Type)
             {
                 case CborValueType.Object:
@@ -153,6 +161,26 @@ namespace Dahomey.Cbor.Serialization.Converters
                 case CborValueType.ByteString:
                     writer.WriteByteString(value.Value<ReadOnlyMemory<byte>>().Span);
                     break;
+            }
+        }
+
+        /// <summary>
+        /// Re-emits the semantic tag <c>Read</c> captured, so a document read into the object model and
+        /// written back says what it said. The tag is often the meaning rather than an annotation - tag
+        /// 1 makes an integer a datetime, tag 39 carries a discriminator - so losing it changed the
+        /// document silently.
+        /// </summary>
+        /// <remarks>
+        /// Unconditional, which is what makes the round trip lossless. A caller that reads a tag-1 value
+        /// and replaces it with a string does get a tag that no longer matches its content, but that is
+        /// the caller describing their own value: there is no way to tell an edited value from an
+        /// untouched one, so dropping the tag on suspicion would break the round trip this exists for.
+        /// </remarks>
+        private static void WriteSemanticTag(ref CborWriter writer, CborValue value)
+        {
+            if (value.SemanticTag.HasValue)
+            {
+                writer.WriteSemanticTag(value.SemanticTag.Value);
             }
         }
 
@@ -221,6 +249,12 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         CborObject? ICborConverter<CborObject?>.Read(ref CborReader reader)
         {
+            // Before ReadNull, which skips a semantic tag as every read entry point does. Reaching the
+            // container converter directly - Cbor.Deserialize<CborObject> - bypasses Read(CborValue),
+            // so without this the tag is consumed and lost on the way in and there is nothing left for
+            // the write path to re-emit.
+            bool hasSemanticTag = reader.TryReadSemanticTag(out ulong semanticTag);
+
             if (reader.ReadNull())
             {
                 return null;
@@ -228,6 +262,12 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             MapReaderContext mapContext = new MapReaderContext();
             reader.ReadMap(this, ref mapContext);
+
+            if (hasSemanticTag)
+            {
+                mapContext.obj.SemanticTag = semanticTag;
+            }
+
             return mapContext.obj;
         }
 
@@ -249,6 +289,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                 writer.WriteNull();
                 return;
             }
+
+            WriteSemanticTag(ref writer, value);
 
             MapWriterContext mapWriterContext = new MapWriterContext
             {
@@ -277,6 +319,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         CborArray? ICborConverter<CborArray?>.Read(ref CborReader reader)
         {
+            bool hasSemanticTag = reader.TryReadSemanticTag(out ulong semanticTag);
+
             if (reader.ReadNull())
             {
                 return null;
@@ -284,6 +328,12 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             ArrayReaderContext arrayContext = new ArrayReaderContext();
             reader.ReadArray(this, ref arrayContext);
+
+            if (hasSemanticTag)
+            {
+                arrayContext.array.SemanticTag = semanticTag;
+            }
+
             return arrayContext.array;
         }
 
@@ -305,6 +355,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                 writer.WriteNull();
                 return;
             }
+
+            WriteSemanticTag(ref writer, value);
 
             ArrayWriterContext arrayWriterContext = new ArrayWriterContext
             {
