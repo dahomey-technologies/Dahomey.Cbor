@@ -1010,14 +1010,89 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ReadOnlySpan<byte> ReadSizeAndBytes(bool allowScratchBuffer)
         {
+            CborMajorType majorType = GetHeader().MajorType;
             int size = ReadSize();
 
             if (size == -1)
             {
-                ThrowIndefiniteLengthString();
+                return ReadChunks(majorType);
             }
 
             return ReadBytes(size, allowScratchBuffer);
+        }
+
+        /// <summary>
+        /// Reads an RFC 8949 section 3.2.3 indefinite-length string: zero or more definite-length
+        /// chunks of <paramref name="majorType"/>, terminated by a break, concatenated into one value.
+        /// </summary>
+        /// <remarks>
+        /// The chunk boundaries carry no meaning — an indefinite-length string denotes exactly the
+        /// concatenation of its chunks, so a caller cannot tell one from the definite-length string of
+        /// the same content, and neither can a UTF-8 decode: a multi-byte character may straddle a
+        /// chunk boundary, which is why the bytes are joined before decoding rather than per chunk.
+        /// <para>
+        /// The result is a freshly allocated array rather than a slice of the input or the scratch
+        /// buffer, because the pieces are not contiguous in either. That allocation is confined to
+        /// documents that actually use the encoding; a definite-length string does not reach here.
+        /// </para>
+        /// </remarks>
+        private ReadOnlySpan<byte> ReadChunks(CborMajorType majorType)
+        {
+            byte[] joined = Array.Empty<byte>();
+            int length = 0;
+
+            while (!IsBreak())
+            {
+                ReadOnlySpan<byte> chunk = ReadChunk(majorType);
+
+                if (length + chunk.Length > joined.Length)
+                {
+                    Array.Resize(ref joined, Math.Max(length + chunk.Length, joined.Length * 2));
+                }
+
+                chunk.CopyTo(joined.AsSpan(length));
+                length += chunk.Length;
+            }
+
+            ConsumeBreak();
+
+            return new ReadOnlySpan<byte>(joined, 0, length);
+        }
+
+        /// <summary>
+        /// One chunk of an indefinite-length string. A chunk must be a definite-length string of the
+        /// same major type: anything else, including a nested indefinite-length string, is malformed
+        /// rather than something to interpret.
+        /// </summary>
+        private ReadOnlySpan<byte> ReadChunk(CborMajorType majorType)
+        {
+            CborReaderHeader header = GetHeader();
+
+            if (header.MajorType != majorType)
+            {
+                ThrowCbor($"Expected major type {majorType} in an indefinite-length string chunk, found {header.MajorType}");
+            }
+
+            int size = ReadSize();
+
+            if (size == -1)
+            {
+                ThrowCbor("An indefinite-length string cannot contain another indefinite-length string");
+            }
+
+            // Never the scratch buffer: it is a single shared buffer, so the next chunk would overwrite
+            // this one before it has been copied out.
+            return ReadBytes(size, allowScratchBuffer: false);
+        }
+
+        /// <summary>
+        /// Settles the reader past a break whose header <see cref="IsBreak"/> has already read.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ConsumeBreak()
+        {
+            GetHeader();
+            _state = CborReaderState.Data;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1045,11 +1120,14 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ReadOnlySequence<byte> ReadSizeAndSequence()
         {
+            CborMajorType majorType = GetHeader().MajorType;
             int size = ReadSize();
 
             if (size == -1)
             {
-                ThrowIndefiniteLengthString();
+                // The chunks are not contiguous in the input, so there is no slice of it to hand back;
+                // the joined copy becomes the sequence.
+                return new ReadOnlySequence<byte>(ReadChunks(majorType).ToArray());
             }
 
             ExpectLength(size);
@@ -1218,11 +1296,20 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void SkipSizeAndBytes()
         {
+            CborMajorType majorType = GetHeader().MajorType;
             int size = ReadSize();
 
             if (size == -1)
             {
-                ThrowIndefiniteLengthString();
+                // Skipping still validates the chunks: a malformed indefinite-length string must not
+                // pass unnoticed just because its value was not wanted.
+                while (!IsBreak())
+                {
+                    ReadChunk(majorType);
+                }
+
+                ConsumeBreak();
+                return;
             }
 
             ExpectLength(size);
@@ -1357,21 +1444,5 @@ namespace Dahomey.Cbor.Serialization
             throw BuildException(message);
         }
 
-        /// <summary>
-        /// Indefinite-length byte and text strings - RFC 8949 §3.2.3, a chunked string terminated by a
-        /// break marker - are not supported by this reader.
-        /// </summary>
-        /// <remarks>
-        /// This is a <see cref="CborException"/> rather than a <see cref="NotSupportedException"/> so
-        /// that it is caught by the same handler as every other malformed- or unreadable-input error.
-        /// A caller has no way to tell the two apart at the point of the read, and a chunked string is
-        /// a property of the document, not of the API being misused.
-        /// </remarks>
-        private void ThrowIndefiniteLengthString()
-        {
-            throw BuildException(
-                "Indefinite-length byte and text strings are not supported. "
-                + "Re-encode the value as a single definite-length string.");
-        }
     }
 }
