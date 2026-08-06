@@ -251,7 +251,8 @@ namespace Dahomey.Cbor.Serialization
         }
 
         /// <summary>
-        /// Reports whether the next data item is the null primitive.
+        /// Reports whether the next data item is the null primitive, or <c>undefined</c>, which
+        /// <see cref="GetCurrentDataItemType"/> also reports as <see cref="CborDataItemType.Null"/>.
         /// </summary>
         /// <remarks>
         /// Like <see cref="IsBreak"/>, this inspects the header and skips nothing:
@@ -269,7 +270,8 @@ namespace Dahomey.Cbor.Serialization
         /// semantic tag reads as a tag rather than as null, so the probe does not see it. The value's
         /// converter still calls <c>ReadNull()</c>, which skips the tag and yields null, so the value
         /// is unaffected -- but <see cref="RequirementPolicy.DisallowNull"/> no longer rejects that
-        /// one exotic shape. Pinned by <c>ATaggedNullIsNotRejectedByDisallowNull</c>.
+        /// one exotic shape. Pinned by <c>ATaggedNullIsNotRejectedByDisallowNull</c> and
+        /// <c>ATaggedUndefinedIsNotRejectedByDisallowNull</c>.
         /// </para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -277,7 +279,8 @@ namespace Dahomey.Cbor.Serialization
         {
             CborReaderHeader header = GetHeader();
 
-            return header.MajorType == CborMajorType.Primitive && header.Primitive == CborPrimitive.Null;
+            return header.MajorType == CborMajorType.Primitive
+                && (header.Primitive == CborPrimitive.Null || header.Primitive == CborPrimitive.Undefined);
         }
 
         public CborReaderBookmark GetBookmark()

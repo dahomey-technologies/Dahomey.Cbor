@@ -331,7 +331,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             if (size == -1 && reader.IsBreak())
             {
-                throw new CborException("Expected CBOR Array of size 5");
+                throw new CborException("Expected CBOR Array of size 6");
             }
             T5 item5 = _item5Converter.Read(ref reader);
 

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.ObjectModel;
 using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Tests.Extensions;
@@ -84,6 +85,46 @@ namespace Dahomey.Cbor.Tests
             public Tagged Member { get; set; }
         }
 
+        /// <summary>
+        /// Array format again, but part of a discriminated hierarchy, which is what actually reaches
+        /// the bookmark in <c>ObjectConverter</c>: its Array case runs only when
+        /// <c>DiscriminatorConventionRegistry.GetConvention</c> returns a convention for the type
+        /// being read, and it returns null for a type with no discriminator.
+        /// </summary>
+        /// <remarks>
+        /// Member indexes start at 1 because index 0 is the discriminator's slot.
+        /// </remarks>
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class TaggedArrayBase
+        {
+            [CborProperty(1)]
+            public Tagged Member { get; set; }
+        }
+
+        [CborDiscriminator("derived")]
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class TaggedArrayDerived : TaggedArrayBase
+        {
+            [CborProperty(2)]
+            public int Extra { get; set; }
+        }
+
+        /// <summary>
+        /// A <see cref="CborValue"/> member, which is the shape that makes the <c>undefined</c> probe
+        /// observable: its converter accepts the primitive, so nothing downstream re-raises the
+        /// requirement. A member typed <c>string</c> would fail in its own converter either way.
+        /// </summary>
+        public class RequiredValueHolder
+        {
+            [CborRequired(RequirementPolicy.DisallowNull)]
+            public CborValue Member { get; set; }
+        }
+
+        public class ValueHolder
+        {
+            public CborValue Member { get; set; }
+        }
+
         public class IntHolder
         {
             public int Value { get; set; }
@@ -164,11 +205,11 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// <c>ObjectConverter</c>'s Array format tested for the discriminator tag and discarded
-        /// whatever it found. A tag that is not the discriminator tag belongs to the first item.
+        /// Array format with no discriminator anywhere, which leaves <c>ObjectConverter</c>'s Array
+        /// case unentered and so covers the member probe alone.
         /// </summary>
         [Fact]
-        public void ArrayFormatKeepsATagOnTheFirstItemWhenItIsNotTheDiscriminator()
+        public void ArrayFormatKeepsAFirstItemTagWithoutADiscriminator()
         {
             CborOptions options = new CborOptions { ObjectFormat = CborObjectFormat.Array };
 
@@ -178,6 +219,32 @@ namespace Dahomey.Cbor.Tests
 
             Assert.Equal(1UL, holder.Member.Tag);
             Assert.Equal(5, holder.Member.Value);
+        }
+
+        /// <summary>
+        /// <c>ObjectConverter</c>'s Array format tests for the discriminator tag and previously
+        /// discarded whatever it found. A tag that is not the discriminator tag belongs to the first
+        /// item, so it is returned to the reader.
+        /// </summary>
+        /// <remarks>
+        /// Registering the discriminator is what makes this test bind: it is the condition on the
+        /// whole <c>case CborObjectFormat.Array:</c> block. The document then deliberately carries no
+        /// discriminator, so the tag the block finds is the member's.
+        /// </remarks>
+        [Fact]
+        public void ArrayFormatKeepsAFirstItemTagWhenADiscriminatorIsExpected()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<TaggedArrayDerived>();
+
+            // 82            array(2)
+            //    c1 05      tag(1) 5      <- tag 1, not the discriminator tag (39)
+            //    07         7
+            TaggedArrayDerived holder = Helper.Read<TaggedArrayDerived>("82C10507", options);
+
+            Assert.Equal(1UL, holder.Member.Tag);
+            Assert.Equal(5, holder.Member.Value);
+            Assert.Equal(7, holder.Extra);
         }
 
         public class TupleHolder
@@ -250,10 +317,6 @@ namespace Dahomey.Cbor.Tests
             //    66 4d656d626572     "Member"
             //    c1                  tag(1)
             //    f6                  null
-            // a1                     map(1)
-            //    66 4d656d626572     "Member"
-            //    c1                  tag(1)
-            //    f6                  null
             RequiredHolder holder = Cbor.Deserialize<RequiredHolder>(
                 "A1664D656D626572C1F6".HexToBytes());
 
@@ -269,15 +332,63 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
+        /// <c>undefined</c> is rejected by the same policy, because
+        /// <see cref="CborReader.GetCurrentDataItemType"/> reports both <c>Null</c> and
+        /// <c>Undefined</c> as <see cref="CborDataItemType.Null"/> and the probe replacing it has to
+        /// agree.
+        /// </summary>
+        /// <remarks>
+        /// Matching only <c>Null</c> would not reword this failure but remove it:
+        /// <c>CborValueConverter</c> maps <c>F7</c> to <c>CborValue.Null</c>, which is a non-null
+        /// reference, so no later check re-raises the requirement.
+        /// </remarks>
+        [Fact]
+        public void AnUndefinedMemberIsRejectedByDisallowNull()
+        {
+            // a1                     map(1)
+            //    66 4d656d626572     "Member"
+            //    f7                  undefined
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<RequiredValueHolder>("A1664D656D626572F7".HexToBytes()));
+
+            Assert.Equal("Property 'Member' cannot be null.", exception.Message);
+        }
+
+        /// <summary>The same byte without the policy reads as before.</summary>
+        [Fact]
+        public void AnUndefinedMemberReadsWhenThePolicyAllowsIt()
+        {
+            ValueHolder holder = Helper.Read<ValueHolder>("A1664D656D626572F7");
+
+            Assert.Equal(CborValueType.Null, holder.Member.Type);
+        }
+
+        /// <summary>
+        /// Behind a tag, <c>undefined</c> is exempt for exactly the reason a tagged null is: the probe
+        /// sees the tag's header, not the primitive behind it.
+        /// </summary>
+        [Fact]
+        public void ATaggedUndefinedIsNotRejectedByDisallowNull()
+        {
+            // a1                     map(1)
+            //    66 4d656d626572     "Member"
+            //    c1                  tag(1)
+            //    f7                  undefined
+            RequiredValueHolder holder = Cbor.Deserialize<RequiredValueHolder>(
+                "A1664D656D626572C1F7".HexToBytes());
+
+            Assert.Equal(CborValueType.Null, holder.Member.Type);
+        }
+
+        /// <summary>
         /// Nested semantic tags do not work, on this branch or on master, and this change neither
         /// fixes nor worsens them.
         /// </summary>
         /// <remarks>
-        /// <c>GetCurrentDataItemType</c>'s <c>case SemanticTag: Advance(1); return
-        /// GetCurrentDataItemType();</c> advances a second time after <c>GetHeader()</c> has already
-        /// consumed the header byte, so the recursion skips the tag byte and the byte after it. The
-        /// case is pinned here so that fixing it later is a deliberate change to a stated
-        /// expectation rather than a silent one.
+        /// A read entry point opens with a single <c>SkipSemanticTag()</c>, so the second tag arrives
+        /// where a data item is expected. The message is asserted rather than just the type: it is
+        /// what says the failure is the second tag being met as a value, so a future change that makes
+        /// nested tags work, or that breaks the first tag instead, cannot leave this test green.
         /// </remarks>
         [Fact]
         public void NestedSemanticTagsAreNotSupported()
@@ -286,8 +397,10 @@ namespace Dahomey.Cbor.Tests
             //    65 56616c7565    "Value"
             //    c1 c0            tag(1) tag(0)
             //    01               1
-            Assert.Throws<CborException>(
+            CborException exception = Assert.Throws<CborException>(
                 () => Cbor.Deserialize<IntHolder>("A16556616C7565C1C001".HexToBytes()));
+
+            Assert.Equal("[9] Invalid major type SemanticTag", exception.Message);
         }
     }
 }
