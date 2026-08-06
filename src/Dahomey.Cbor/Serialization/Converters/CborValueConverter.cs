@@ -65,7 +65,14 @@ namespace Dahomey.Cbor.Serialization.Converters
                     return reader.ReadBoolean();
 
                 case CborDataItemType.Null:
-                    reader.ReadNull();
+                    // Null covers `undefined` as well as `null`, but ReadNull accepts only the latter:
+                    // for F7 it returns false having consumed nothing, and the item still has to be
+                    // taken or the next read is handed the same header back.
+                    if (!reader.ReadNull())
+                    {
+                        reader.SkipDataItem();
+                    }
+
                     return CborValue.Null;
 
                 case CborDataItemType.Signed:
