@@ -93,7 +93,32 @@ namespace Dahomey.Cbor.Serialization.Converters
             TK key = KeyConverter.Read(ref reader);
             TV value = ValueConverter.Read(ref reader);
 
-            context.dict.Add(key, value);
+            // See CborValueConverter.ReadMapItem: these are malformed input, and were already refused
+            // -- as an ArgumentException that escapes the CborException contract.
+            try
+            {
+                context.dict.Add(key, value);
+            }
+            catch (ArgumentException exception)
+            {
+                throw reader.BuildException(DescribeAddFailure(context.dict, key, exception));
+            }
+        }
+
+        /// <summary>
+        /// Which of the three failures actually occurred. Only reached once an add has thrown, so the
+        /// ContainsKey probe costs nothing on well-formed input.
+        /// </summary>
+        private static string DescribeAddFailure(IDictionary<TK, TV> dictionary, TK key, ArgumentException exception)
+        {
+            if (key is null)
+            {
+                return MapKeyErrors.NullKey();
+            }
+
+            return dictionary.ContainsKey(key)
+                ? MapKeyErrors.Duplicate(key)
+                : MapKeyErrors.Rejected(key, exception.Message);
         }
 
         public int GetMapSize(ref WriterContext context)

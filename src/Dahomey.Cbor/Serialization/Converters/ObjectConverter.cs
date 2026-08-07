@@ -704,11 +704,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                         {
                             if (context.converter.ObjectMapping.IsCreatorMember(memberName))
                             {
-                                context.creatorValues.Add(new RawString(memberName), value);
+                                AddMemberValue(ref reader, context.creatorValues, new RawString(memberName), value);
                             }
                             else
                             {
-                                context.regularValues!.Add(new RawString(memberName), value);
+                                AddMemberValue(ref reader, context.regularValues!, new RawString(memberName), value);
                             }
                         }
                     }
@@ -732,11 +732,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                         {
                             if (context.converter.ObjectMapping.IsCreatorMember(memberIndex))
                             {
-                                context.creatorValuesByIndex.Add(memberIndex, value);
+                                AddMemberValue(ref reader, context.creatorValuesByIndex, memberIndex, value);
                             }
                             else
                             {
-                                context.regularValuesByIndex!.Add(memberIndex, value);
+                                AddMemberValue(ref reader, context.regularValuesByIndex!, memberIndex, value);
                             }
                         }
                     }
@@ -757,11 +757,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                     {
                         if (context.converter.ObjectMapping.IsCreatorMember(context.memberIndex))
                         {
-                            context.creatorValuesByIndex.Add(context.memberIndex, value);
+                            AddMemberValue(ref reader, context.creatorValuesByIndex, context.memberIndex, value);
                         }
                         else
                         {
-                            context.regularValuesByIndex!.Add(context.memberIndex, value);
+                            AddMemberValue(ref reader, context.regularValuesByIndex!, context.memberIndex, value);
                         }
                     }
 
@@ -820,6 +820,33 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
 
             return CborKeyComparer.CompareTextKeys(x.MemberName, y.MemberName);
+        }
+
+        /// <summary>
+        /// Collects one member value for a type with a creator mapping, where values are held until the
+        /// constructor can be called rather than being set on an instance.
+        /// </summary>
+        /// <remarks>
+        /// A document repeating a member reaches a <c>Dictionary.Add</c> here, exactly as a repeated
+        /// map key reaches one in the dictionary converters, and has to be refused the same way: as a
+        /// <see cref="CborException"/> rather than the <see cref="ArgumentException"/> the dictionary
+        /// raises. A type without a creator mapping never reaches this -- its members are assigned, so
+        /// the last occurrence wins there and always has.
+        /// </remarks>
+        private static void AddMemberValue<TKey>(
+            ref CborReader reader, Dictionary<TKey, object?> values, TKey key, object? value)
+            where TKey : notnull
+        {
+            try
+            {
+                values.Add(key, value);
+            }
+            catch (ArgumentException exception)
+            {
+                throw reader.BuildException(values.ContainsKey(key)
+                    ? MapKeyErrors.Duplicate(key)
+                    : MapKeyErrors.Rejected(key, exception.Message));
+            }
         }
 
         private static bool FindItem(ref CborReader reader, ReadOnlySpan<byte> name)

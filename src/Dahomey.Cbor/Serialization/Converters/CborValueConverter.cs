@@ -196,7 +196,23 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             CborValue key = Read(ref reader);
             CborValue value = Read(ref reader);
-            context.obj.Add(key, value);
+
+            // Caught rather than pre-checked with ContainsKey: a duplicate is malformed input, so the
+            // cost belongs on that path and not on the lookup every well-formed pair would pay. The
+            // document was already refused here; without this it is refused as an ArgumentException,
+            // which is outside the CborException a caller wraps deserialization in.
+            try
+            {
+                context.obj.Add(key, value);
+            }
+            catch (ArgumentException exception)
+            {
+                // A CborValue key is never null -- a CBOR null decodes to CborValue.Null, an instance --
+                // so the remaining cases are a duplicate or the dictionary refusing for another reason.
+                throw reader.BuildException(context.obj.ContainsKey(key)
+                    ? MapKeyErrors.Duplicate(key)
+                    : MapKeyErrors.Rejected(key, exception.Message));
+            }
         }
 
         int ICborMapWriter<MapWriterContext>.GetMapSize(ref MapWriterContext context)
