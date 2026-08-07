@@ -9,3 +9,6 @@ vs-chromium-project.txt
 src/**/obj/
 src/**/bin/
 
+# `dotnet pack -o ./artifacts`, as the build workflow runs it
+artifacts/
+

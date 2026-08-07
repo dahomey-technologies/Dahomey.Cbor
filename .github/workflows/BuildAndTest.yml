@@ -39,3 +39,81 @@ jobs:
 
       - name: test
         run: dotnet test -c Release src/Dahomey.Cbor.Tests
+
+      - name: test generator
+        run: dotnet test -c Release src/Dahomey.Cbor.Generator.Tests
+
+      - name: pack
+        run: dotnet pack -c Release src/Dahomey.Cbor -o ./artifacts -p:Version=0.0.0-packprobe
+
+      # The generator ships inside the Dahomey.Cbor package. NuGet loads analyzers from
+      # analyzers/dotnet/cs and nowhere else, so a dll placed anywhere else is present but inert, and
+      # the failure surfaces only in a consumer's build as a missing Configure override. Both halves
+      # are checked: that the entry is in the archive, and that a real consumer restoring the package
+      # gets a context the generator has filled in.
+      - name: verify the package carries a working generator
+        run: |
+          set -euo pipefail
+          unzip -l artifacts/Dahomey.Cbor.0.0.0-packprobe.nupkg
+          unzip -l artifacts/Dahomey.Cbor.0.0.0-packprobe.nupkg \
+            | grep -q 'analyzers/dotnet/cs/Dahomey.Cbor.Generator.dll'
+
+          mkdir -p /tmp/packprobe && cd /tmp/packprobe
+          cat > nuget.config <<'XML'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <add key="packprobe" value="${{ github.workspace }}/artifacts" />
+            </packageSources>
+          </configuration>
+          XML
+          cat > Probe.csproj <<'XML'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net10.0</TargetFramework>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="Dahomey.Cbor" Version="0.0.0-packprobe" />
+            </ItemGroup>
+          </Project>
+          XML
+          cat > Program.cs <<'CS'
+          using System;
+          using System.Buffers;
+          using Dahomey.Cbor;
+          using Dahomey.Cbor.Attributes;
+          using Dahomey.Cbor.Serialization;
+
+          public class Person
+          {
+              public int Id { get; set; }
+              public string Name { get; set; }
+          }
+
+          // Configure is abstract, so this compiles only if the packaged generator emitted it.
+          [CborSerializable(typeof(Person))]
+          public partial class ProbeContext : CborSerializerContext
+          {
+          }
+
+          public static class Program
+          {
+              public static void Main()
+              {
+                  ProbeContext context = CborSerializerContext.Default<ProbeContext>();
+                  ArrayBufferWriter<byte> writer = new ArrayBufferWriter<byte>();
+                  Cbor.Serialize(new Person { Id = 42, Name = "Ada" }, writer, context.Options);
+
+                  string hex = BitConverter.ToString(writer.WrittenSpan.ToArray()).Replace("-", "");
+                  Console.WriteLine(hex);
+
+                  // {"Id": 42, "Name": "Ada"}
+                  if (hex != "A2624964182A644E616D6563416461")
+                  {
+                      throw new Exception("the packaged generator produced unexpected bytes: " + hex);
+                  }
+              }
+          }
+          CS
+          dotnet run -c Release

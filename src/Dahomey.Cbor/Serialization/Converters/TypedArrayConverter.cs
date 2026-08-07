@@ -21,7 +21,14 @@ namespace Dahomey.Cbor.Serialization.Converters
     /// Reads and writes RFC 8746 typed arrays (tags 64-87) for the numeric element types, falling back
     /// to the ordinary per-element array encoding when no typed array tag is present.
     /// </summary>
-    internal class TypedArrayConverter<TI> : ArrayConverter<TI>, ITypedArrayReader<TI> where TI : unmanaged
+    /// <remarks>
+    /// Public for the same reason <see cref="ArrayConverter{TI}"/> is: a source-generated context names
+    /// it in a registration, and that code is compiled into the consumer's assembly rather than this
+    /// one, so an internal type is unreachable there. The constructor taking the host byte order stays
+    /// internal -- it exists so both orders can be exercised on little-endian hardware, and it is not
+    /// something a caller should be choosing.
+    /// </remarks>
+    public class TypedArrayConverter<TI> : ArrayConverter<TI>, ITypedArrayReader<TI> where TI : unmanaged
     {
         private readonly TypedArrayTagInfo _tagInfo;
         private readonly bool _hostIsLittleEndian;

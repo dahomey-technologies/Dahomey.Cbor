@@ -34,7 +34,8 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly Func<T, TM>? _memberGetter;
         private readonly Action<T, TM>? _memberSetter;
-        private readonly IMemberMapping _memberMapping;
+        private readonly IMemberMapping? _memberMapping;
+        private readonly Func<ICborConverter<TM>>? _converterFactory;
         private ICborConverter<TM>? _converter;
 
         /// <summary>
@@ -43,10 +44,14 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// <remarks>
         /// Two types that reference each other cannot both have a converter at the moment either one
         /// is being constructed. Resolving here instead means the member converter exists before the
-        /// converter it points at, which is what lets a cycle finish building at all.
+        /// converter it points at, which is what lets a cycle finish building at all -- and, on the
+        /// source-generated path, what keeps a cycle from reaching the reflection providers before
+        /// the generated registrations have run.
         /// </remarks>
         private ICborConverter<TM> Converter
-            => _converter ??= (ICborConverter<TM>)_memberMapping.Converter!;
+            => _converter ??= _converterFactory is not null
+                ? _converterFactory()
+                : (ICborConverter<TM>)_memberMapping!.Converter!;
         private ReadOnlyMemory<byte> _memberName;
         private int? _memberIndex;
         private readonly TM _defaultValue;
@@ -84,6 +89,35 @@ namespace Dahomey.Cbor.Serialization.Converters
             _shouldSerializeMethod = memberMapping.ShouldSerializeMethod;
             _lengthMode = memberMapping.LengthMode;
             _requirementPolicy = memberMapping.RequirementPolicy;
+        }
+
+        /// <summary>
+        /// Builds a member converter from accessor delegates instead of a <see cref="MemberInfo"/>.
+        /// Reflection-free and AOT-safe: no <c>Expression.Compile</c>, no <c>MakeGenericType</c>.
+        /// Used by <see cref="DelegateMemberMapping{T, TM}"/>.
+        /// </summary>
+        internal MemberConverter(
+            ReadOnlyMemory<byte> memberName,
+            int? memberIndex,
+            Func<ICborConverter<TM>> converterFactory,
+            Func<T, TM>? memberGetter,
+            Action<T, TM>? memberSetter,
+            TM defaultValue,
+            bool ignoreIfDefault,
+            Func<object, bool>? shouldSerializeMethod,
+            LengthMode lengthMode,
+            RequirementPolicy requirementPolicy)
+        {
+            _memberName = memberName;
+            _memberIndex = memberIndex;
+            _converterFactory = converterFactory;
+            _memberGetter = memberGetter;
+            _memberSetter = memberSetter;
+            _defaultValue = defaultValue;
+            _ignoreIfDefault = ignoreIfDefault;
+            _shouldSerializeMethod = shouldSerializeMethod;
+            _lengthMode = lengthMode;
+            _requirementPolicy = requirementPolicy;
         }
 
         public void Read(ref CborReader reader, object obj)
@@ -220,7 +254,8 @@ namespace Dahomey.Cbor.Serialization.Converters
     {
         private readonly StructMemberGetterDelegate<T, TM>? _memberGetter;
         private readonly StructMemberSetterDelegate<T, TM>? _memberSetter;
-        private readonly IMemberMapping _memberMapping;
+        private readonly IMemberMapping? _memberMapping;
+        private readonly Func<ICborConverter<TM>>? _converterFactory;
         private ICborConverter<TM>? _converter;
 
         /// <summary>
@@ -229,10 +264,14 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// <remarks>
         /// Two types that reference each other cannot both have a converter at the moment either one
         /// is being constructed. Resolving here instead means the member converter exists before the
-        /// converter it points at, which is what lets a cycle finish building at all.
+        /// converter it points at, which is what lets a cycle finish building at all -- and, on the
+        /// source-generated path, what keeps a cycle from reaching the reflection providers before
+        /// the generated registrations have run.
         /// </remarks>
         private ICborConverter<TM> Converter
-            => _converter ??= (ICborConverter<TM>)_memberMapping.Converter!;
+            => _converter ??= _converterFactory is not null
+                ? _converterFactory()
+                : (ICborConverter<TM>)_memberMapping!.Converter!;
         private readonly ReadOnlyMemory<byte> _memberName;
         private readonly TM _defaultValue;
         private readonly bool _ignoreIfDefault;
@@ -263,6 +302,31 @@ namespace Dahomey.Cbor.Serialization.Converters
             _defaultValue = (TM)memberMapping.DefaultValue!;
             _ignoreIfDefault = memberMapping.IgnoreIfDefault;
             _requirementPolicy = memberMapping.RequirementPolicy;
+        }
+
+        /// <summary>
+        /// Builds a struct member converter from accessor delegates instead of a <see cref="MemberInfo"/>.
+        /// Reflection-free and AOT-safe. Used by <see cref="DelegateStructMemberMapping{T, TM}"/>.
+        /// </summary>
+        internal StructMemberConverter(
+            string memberName,
+            int? memberIndex,
+            Func<ICborConverter<TM>> converterFactory,
+            StructMemberGetterDelegate<T, TM>? memberGetter,
+            StructMemberSetterDelegate<T, TM>? memberSetter,
+            TM defaultValue,
+            bool ignoreIfDefault,
+            RequirementPolicy requirementPolicy)
+        {
+            MemberNameAsString = memberName;
+            _memberName = Encoding.UTF8.GetBytes(memberName);
+            MemberIndex = memberIndex;
+            _converterFactory = converterFactory;
+            _memberGetter = memberGetter;
+            _memberSetter = memberSetter;
+            _defaultValue = defaultValue;
+            _ignoreIfDefault = ignoreIfDefault;
+            _requirementPolicy = requirementPolicy;
         }
 
         public void Read(ref CborReader reader, object obj)

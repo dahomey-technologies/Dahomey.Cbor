@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+
+    <!--
+      Roslyn component: consumed as an analyzer, not as a referenceable library. It has no package of
+      its own - Dahomey.Cbor.csproj packs this dll into analyzers/dotnet/cs so that referencing
+      Dahomey.Cbor is enough to get the generator.
+
+      Do NOT set IncludeBuildOutput=false here. It suppresses the build output that an
+      OutputItemType="Analyzer" ProjectReference resolves from, so the generator silently never runs -
+      and the symptom is a baffling CS0534 "does not implement inherited abstract member Configure" on
+      the user's context rather than anything mentioning analyzers.
+    -->
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>false</IsPackable>
+
+    <Authors>Michaël Catanzariti</Authors>
+    <Company>Dahomey Technologies</Company>
+    <Description>Source generator producing reflection-free, Native-AOT-safe CBOR mappings for Dahomey.Cbor.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- The pipeline step names are internal, and asserting on which steps were reused is the only way
+       to check incrementality: it is invisible in the generated output, which is identical either way. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dahomey.Cbor.Generator.Tests" />
+  </ItemGroup>
+
+</Project>

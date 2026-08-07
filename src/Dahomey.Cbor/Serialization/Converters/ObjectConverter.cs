@@ -151,6 +151,23 @@ namespace Dahomey.Cbor.Serialization.Converters
         public IObjectMapping ObjectMapping => _objectMapping;
 
         public ObjectConverter(CborOptions options)
+            : this(options, null)
+        {
+        }
+
+        /// <summary>
+        /// Creates an object converter that instantiates <typeparamref name="T"/> with an explicit
+        /// factory instead of discovering its default constructor by reflection.
+        /// </summary>
+        /// <param name="options">The options.</param>
+        /// <param name="factory">
+        /// Creates a new <typeparamref name="T"/>. When supplied, the reflection lookup of the
+        /// default constructor — and the <c>Expression.Compile</c> that turns it into a delegate —
+        /// is skipped entirely. Required for Native AOT, where the constructor metadata may be
+        /// trimmed away: <c>Type.GetConstructor</c> then returns null and deserialization fails with
+        /// "Cannot find a default constructor". Pass <c>() => new T()</c> from generated code.
+        /// </param>
+        public ObjectConverter(CborOptions options, Func<T>? factory)
         {
             _options = options;
             _registry = options.Registry;
@@ -208,7 +225,11 @@ namespace Dahomey.Cbor.Serialization.Converters
             _isInterfaceOrAbstract = typeof(T).IsInterface || typeof(T).IsAbstract;
             _isStruct = typeof(T).IsStruct();
 
-            if (!_isInterfaceOrAbstract && !_isStruct && _objectMapping.CreatorMapping == null)
+            if (factory != null)
+            {
+                _constructor = factory;
+            }
+            else if (!_isInterfaceOrAbstract && !_isStruct && _objectMapping.CreatorMapping == null)
             {
                 ConstructorInfo? defaultConstructorInfo = typeof(T).GetConstructor(
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,

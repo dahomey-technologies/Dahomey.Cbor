@@ -27,6 +27,13 @@ namespace Dahomey.Cbor.Serialization.Converters
     /// byte[] is deliberately absent. Tag 64 exists for it, but a plain major-type-2 byte string is
     /// both shorter and idiomatic, and is what <see cref="ByteArrayConverter"/> already writes.
     /// Tag 76 is reserved by RFC 8746; tags 83 and 87 are IEEE 754 binary128, which has no .NET type.
+    /// <para>
+    /// MATCHED PAIR: the set of keys below is duplicated as <c>TypeCollector.IsTypedArrayElementType</c>
+    /// in <c>src/Dahomey.Cbor.Generator/TypeCollector.cs</c>, which decides when the source-generated
+    /// path emits <see cref="TypedArrayConverter{TI}"/>. It cannot be shared — the generator is an
+    /// analyzer assembly and must not reference this library — so adding or removing an element type
+    /// here requires the same edit there. <c>GeneratedTypedArrayTests</c> asserts the two agree.
+    /// </para>
     /// </remarks>
     internal static class TypedArrayTags
     {
