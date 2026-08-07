@@ -10,6 +10,16 @@ namespace Dahomey.Cbor.ObjectModel
         {
         }
 
+        /// <summary>
+        /// Copies before tagging: <see cref="CborValue.Null"/> is a single instance shared by the whole
+        /// process, so tagging in place would give every null everywhere that tag. See
+        /// <see cref="CborValue.WithSemanticTag"/>.
+        /// </summary>
+        internal override CborValue WithSemanticTag(ulong semanticTag)
+        {
+            return new CborNull { SemanticTag = semanticTag };
+        }
+
         public override string ToString()
         {
             return "null";

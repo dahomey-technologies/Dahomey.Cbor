@@ -773,27 +773,26 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Fact]
-        public void TheObjectModelSeesATypedArrayAsAByteStringAndDropsItsTag()
+        public void TheObjectModelSeesATypedArrayAsATaggedByteString()
         {
             // CborValue has no typed array node, so a typed array arrives as a byte string with the tag
             // parked in CborValue.SemanticTag. Two consequences for a DOM consumer:
             //
-            //   * code that inspects or compares the value sees opaque bytes, not numbers;
-            //   * CborValueConverter never writes SemanticTag back, so reading a document and writing
-            //     it out again turns the typed array into an ordinary byte string.
+            // DOM code that inspects or compares the value therefore sees opaque bytes rather than
+            // numbers, which is the part typed arrays make easy to reach.
             //
-            // The second is a general property of the object model rather than anything typed arrays
-            // introduce -- every semantic tag is dropped this way -- but typed arrays are what make it
-            // easy to reach. It is pinned here so that changing it is a deliberate act.
+            // The tag itself survives a read-then-write, so the document still describes a typed array
+            // afterwards. That is a property of the object model rather than of typed arrays: it holds
+            // for every semantic tag.
             // D855 tag(85) 48 bytes(8) -> 1.5f, 2.5f little endian
+            const string hexBuffer = "D855480000C03F00002040";
             CborOptions options = TypedArrayOptions();
-            CborValue value = Cbor.Deserialize<CborValue>("D855480000C03F00002040".HexToBytes(), options);
+            CborValue value = Cbor.Deserialize<CborValue>(hexBuffer.HexToBytes(), options);
 
             Assert.Equal(CborValueType.ByteString, value.Type);
             Assert.Equal(85ul, value.SemanticTag);
 
-            // 48 bytes(8) -- written back without D855, so the reader no longer sees a typed array
-            Helper.TestWrite(value, "480000C03F00002040", null, options);
+            Helper.TestWrite(value, hexBuffer, null, options);
         }
 
         private static float[] ReadFloatsWith(TypedArrayConverter<float> converter, string hexBuffer)
