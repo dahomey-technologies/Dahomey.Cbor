@@ -941,6 +941,18 @@ namespace Dahomey.Cbor.Serialization
         /// </remarks>
         private ReadOnlySpan<byte> ReadChunks(CborMajorType majorType)
         {
+            return ReadChunksArray(majorType);
+        }
+
+        /// <inheritdoc cref="ReadChunks"/>
+        /// <remarks>
+        /// A plain array rather than <c>ByteBufferWriter</c>, which is the obvious tool and the wrong
+        /// one: it rents from <see cref="System.Buffers.ArrayPool{T}"/>, and the result outlives this
+        /// call, so a pooled buffer would be returned and handed to another caller underneath the one
+        /// holding it.
+        /// </remarks>
+        private byte[] ReadChunksArray(CborMajorType majorType)
+        {
             byte[] joined = Array.Empty<byte>();
             int length = 0;
 
@@ -959,7 +971,14 @@ namespace Dahomey.Cbor.Serialization
 
             ConsumeBreak();
 
-            return new ReadOnlySpan<byte>(joined, 0, length);
+            return length == joined.Length ? joined : Trim(joined, length);
+        }
+
+        private static byte[] Trim(byte[] buffer, int length)
+        {
+            byte[] exact = new byte[length];
+            Array.Copy(buffer, exact, length);
+            return exact;
         }
 
         /// <summary>
@@ -991,6 +1010,12 @@ namespace Dahomey.Cbor.Serialization
         /// <summary>
         /// Settles the reader past a break whose header <see cref="IsBreak"/> has already read.
         /// </summary>
+        /// <remarks>
+        /// Settles to <see cref="CborReaderState.Data"/> where <c>SkipArray</c> and <c>SkipMap</c>
+        /// settle to <see cref="CborReaderState.Start"/>. Equivalent in effect: only <c>Header</c> is
+        /// ever tested for, by <see cref="GetHeader"/>, and both values mean "the cached header has
+        /// been consumed". <c>Data</c> matches what <see cref="SkipDataItem"/> does for a break.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ConsumeBreak()
         {
@@ -1030,7 +1055,7 @@ namespace Dahomey.Cbor.Serialization
             {
                 // The chunks are not contiguous in the input, so there is no slice of it to hand back;
                 // the joined copy becomes the sequence.
-                return new ReadOnlySequence<byte>(ReadChunks(majorType).ToArray());
+                return new ReadOnlySequence<byte>(ReadChunksArray(majorType));
             }
 
             ExpectLength(size);
