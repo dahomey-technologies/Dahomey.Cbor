@@ -15,7 +15,7 @@ namespace Dahomey.Cbor.ObjectModel
                 .Select(i => new CborPositive((ulong)i))
                 .ToArray();
 
-        private ulong _value;
+        private readonly ulong _value;
 
         public override CborValueType Type { get { return CborValueType.Positive; } }
 
@@ -39,10 +39,6 @@ namespace Dahomey.Cbor.ObjectModel
             return Primitive<ulong, T>.Converter(_value);
         }
 
-        public void SetValue<T>(T value)
-        {
-            _value = Primitive<T, ulong>.Converter(value);
-        }
 
         public static implicit operator CborPositive(ulong value)
         {
