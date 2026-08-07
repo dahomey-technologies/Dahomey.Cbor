@@ -33,6 +33,7 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Support for RFC 8746 typed arrays, opt-in per direction (CborOptions.TypedArrayMode)
 * Support for RFC 8949 §3.4.3 bignums (tags 2 and 3) as System.Numerics.BigInteger
 * Duplicate map keys rejected on every decode target, with a last-wins opt-out (CborOptions.DuplicateKeyMode)
+* Reads RFC 8949 indefinite-length (chunked) byte and text strings; writes definite-length only
 
 ## Installation
 ### NuGet
@@ -206,11 +207,28 @@ definite-length byte string, so there is no array header to make indefinite. It 
 array not written as one.
 
 The object model does not model typed arrays. A `CborValue` holding one is a `ByteString` with the tag in
-`CborValue.SemanticTag`, so DOM code sees opaque bytes rather than numbers. Note that
-`CborValueConverter` does not write `SemanticTag` back — reading a document into a `CborValue` and
-serializing it again drops the tag, turning the typed array into a plain byte string. That is true of
-every semantic tag, not just these, but typed arrays are the easiest way to meet it. Tracked as
-https://github.com/dahomey-technologies/Dahomey.Cbor/issues/162.
+`CborValue.SemanticTag`, so DOM code sees opaque bytes rather than numbers. The tag itself survives a
+read-then-write, so the document still describes a typed array afterwards.
+
+### Indefinite-length strings (RFC 8949 §3.2.3)
+
+A byte or text string may arrive as a series of chunks terminated by a break, which is what a producer
+emits when it does not know the length in advance:
+
+```
+7F 62 7374 64 7265616D FF     reads as "stream"
+5F 42 0102 43 030405 FF       reads as the five bytes 01 02 03 04 05
+```
+
+An indefinite-length string denotes exactly the concatenation of its chunks, so it is indistinguishable
+from the definite-length string of the same content once read — there is nothing to configure and
+nothing to opt into.
+
+**Reading only.** Nothing is ever written in this form: `LengthMode.IndefiniteLength` applies to arrays
+and maps, not to strings, so what this library emits is unchanged.
+
+A chunk whose major type differs from the enclosing string, and a nested indefinite-length string, are
+both malformed and raise a `CborException`.
 
 ### Bignums (RFC 8949 §3.4.3)
 

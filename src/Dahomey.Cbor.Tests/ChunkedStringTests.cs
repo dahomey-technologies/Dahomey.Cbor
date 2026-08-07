@@ -46,9 +46,15 @@ namespace Dahomey.Cbor.Tests
         [InlineData("5F42010243030405FF", new byte[] { 1, 2, 3, 4, 5 })]
         // 5f ff -- zero chunks
         [InlineData("5FFF", new byte[0])]
+        // 5f 40 42 0102 ff -- an empty chunk, which is the one shape that copies zero bytes
+        [InlineData("5F40420102FF", new byte[] { 1, 2 })]
         public void AChunkedByteStringReadsAsItsConcatenation(string hexBuffer, byte[] expected)
         {
-            Assert.Equal(expected, Cbor.Deserialize<byte[]>(hexBuffer.HexToBytes()));
+            // Helper.Read rather than Cbor.Deserialize: it runs the same bytes through the span reader,
+            // a single-segment sequence and a one-byte-per-segment sequence. The last is what matters
+            // here -- the scratch buffer only exists in sequence mode, so it is the only shape that
+            // would catch ReadChunk asking for it and one chunk overwriting the previous.
+            Assert.Equal(expected, Helper.Read<byte[]>(hexBuffer));
         }
 
         /// <summary>
@@ -69,12 +75,23 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// A multi-byte character split across a chunk boundary. This is the case that makes joining
-        /// the bytes before decoding necessary rather than merely tidy: decoding each chunk on its own
-        /// would see two invalid fragments.
+        /// A multi-byte character split across a chunk boundary is <em>accepted</em>, not refused.
         /// </summary>
+        /// <remarks>
+        /// RFC 8949 section 3.2.3 tells producers not to do this — a chunk boundary is supposed to fall
+        /// on a character boundary — so accepting it is a lenient reading rather than a conformance
+        /// requirement. It is deliberate, and consistent with the leniency already in the reader:
+        /// <c>Encoding.UTF8.GetString</c> substitutes U+FFFD for invalid sequences rather than
+        /// throwing, so refusing this particular malformation while silently repairing others would be
+        /// arbitrary. <c>System.Formats.Cbor</c> in strict mode rejects it.
+        /// <para>
+        /// Joining the bytes before decoding is right either way: it is what makes the chunked and
+        /// definite-length forms of the same value indistinguishable, which is what section 3.2.3
+        /// requires of a reader whoever emitted the document.
+        /// </para>
+        /// </remarks>
         [Fact]
-        public void AUtf8CharacterMaySpanAChunkBoundary()
+        public void AUtf8CharacterSplitAcrossChunksIsAccepted()
         {
             // 7f 61 e2      -- first byte of U+20AC EURO SIGN, alone in its chunk
             //    62 82ac    -- its remaining two bytes
