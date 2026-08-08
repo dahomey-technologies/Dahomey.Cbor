@@ -14,6 +14,19 @@ namespace Dahomey.Cbor.Util
             public ulong key;
             public T value = default!;
             public NodeCollection? next;
+
+            /// <summary>
+            /// Whether this node is the end of a key that was actually added, as opposed to a segment
+            /// on the way to a longer one.
+            /// </summary>
+            /// <remarks>
+            /// Keys are split into eight-byte segments, one node each, so adding "PropertyAlpha"
+            /// creates a node for its first eight bytes - "Property" - that no lookup should ever
+            /// find. Without this flag it is found, and answers with <c>default(T)</c>: a null
+            /// converter, or an entry whose ordinal belongs to another member. The tree cannot tell a
+            /// stored default from an absent value, so the distinction has to be recorded.
+            /// </remarks>
+            public bool hasValue;
         }
 
         private class NodeCollection
@@ -141,6 +154,7 @@ namespace Dahomey.Cbor.Util
             }
 
             last.value = value;
+            last.hasValue = true;
         }
 
         public bool TryGetValue(ReadOnlySpan<byte> key, [MaybeNullWhen(false)] out T value)
@@ -177,6 +191,12 @@ namespace Dahomey.Cbor.Util
                         return false;
                     }
                 }
+            }
+
+            if (!node.hasValue)
+            {
+                value = default!;
+                return false;
             }
 
             value = node.value;

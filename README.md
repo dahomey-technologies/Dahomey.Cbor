@@ -454,13 +454,12 @@ A repeated key that matches no member is not a duplicate member — what happens
 ``UnhandledNameMode``'s question, and repeating one does not change the answer. Neither is a null map
 key, which is refused in both modes: there is no earlier occurrence for a later one to win over.
 
-Two consequences of that follow, both by construction rather than by choice:
+The **discriminator** is refused when repeated, even though it is a key of the map rather than a
+member of the type: two readers disagreeing about which occurrence names the type is how one document
+comes to mean two things.
 
-* **A repeated discriminator key is not refused.** The discriminator is not a deserializable member,
-  so a repeat of it is an unknown name like any other, and the first occurrence is the one that
-  decides the type.
-* **A type whose members are mapped to the same CBOR name** — two ``[CborProperty("X")]`` on one type,
-  say — writes a document with a repeated key that it then cannot read back. The mapping is ambiguous
-  in both directions, since only one of the two members can ever be read from key ``X``, so it is
-  worth removing rather than working around; ``DuplicateKeyMode.LastWins`` will read such a document
-  if you have one already.
+One case the policy does not reach: **a type mapping two members to the same CBOR name** — two
+``[CborProperty("X")]``, say — writes a document with a repeated key that it then cannot read back.
+The mapping is ambiguous in both directions, since only one of the two members can ever be read from
+key ``X``, so it is worth removing rather than working around; ``DuplicateKeyMode.LastWins`` will read
+such a document if you have one already.

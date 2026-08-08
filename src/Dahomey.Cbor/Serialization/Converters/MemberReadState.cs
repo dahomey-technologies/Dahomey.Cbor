@@ -36,6 +36,14 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// <summary>Ordinals 64 and above, for the rare type that has that many members.</summary>
         private HashSet<int>? _seenBeyond;
 
+        /// <summary>
+        /// The discriminator, which has no ordinal because it is not a member of the type: it names
+        /// the type rather than carrying a value, and is read by the convention rather than by a
+        /// member converter. It is still a key of the map, so a document repeating it is refused like
+        /// any other repeat.
+        /// </summary>
+        private bool _discriminatorRead;
+
         public MemberReadState(bool trackRequiredMembers, bool rejectDuplicates)
         {
             _requiredMembersRead = trackRequiredMembers ? new HashSet<IMemberConverter>() : null;
@@ -91,6 +99,19 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             _seenBeyond ??= new HashSet<int>();
             return !_seenBeyond.Add(index);
+        }
+
+        /// <inheritdoc cref="MarkRead(in MemberReadEntry)"/>
+        public bool MarkDiscriminatorRead()
+        {
+            if (!_rejectDuplicates)
+            {
+                return false;
+            }
+
+            bool alreadyRead = _discriminatorRead;
+            _discriminatorRead = true;
+            return alreadyRead;
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.Util;
+using System.Text;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -27,5 +28,38 @@ namespace Dahomey.Cbor.Tests
                 Assert.Equal(value, actualValue);
             }
         }
-    }
+    
+        /// <summary>
+        /// A key is stored one node per eight bytes, so a longer key builds nodes for its prefixes on
+        /// the way. Those are not entries, and looking one up must miss rather than answer with the
+        /// default value of a stored one.
+        /// </summary>
+        /// <remarks>
+        /// What it answered instead was <c>default(T)</c> with <c>true</c>, which for a member lookup
+        /// is a null converter — a <see cref="System.NullReferenceException"/> from a document that
+        /// merely used a key eight bytes long.
+        /// </remarks>
+        [Fact]
+        public void APrefixOfALongerKeyIsNotFound()
+        {
+            ByteBufferDictionary<int> dictionary = new ByteBufferDictionary<int>();
+            dictionary.Add(Encoding.UTF8.GetBytes("PropertyAlpha"), 12);
+
+            Assert.False(dictionary.TryGetValue(Encoding.UTF8.GetBytes("Property"), out int _));
+            Assert.True(dictionary.TryGetValue(Encoding.UTF8.GetBytes("PropertyAlpha"), out int found));
+            Assert.Equal(12, found);
+        }
+
+        /// <summary>And a prefix that was itself added is found, being an entry in its own right.</summary>
+        [Fact]
+        public void APrefixThatIsAlsoAKeyIsFound()
+        {
+            ByteBufferDictionary<int> dictionary = new ByteBufferDictionary<int>();
+            dictionary.Add(Encoding.UTF8.GetBytes("PropertyAlpha"), 12);
+            dictionary.Add(Encoding.UTF8.GetBytes("Property"), 13);
+
+            Assert.True(dictionary.TryGetValue(Encoding.UTF8.GetBytes("Property"), out int found));
+            Assert.Equal(13, found);
+        }
+}
 }

@@ -501,6 +501,79 @@ namespace Dahomey.Cbor.Tests.Issues
             Assert.Equal("$.A", exception.Path);
         }
 
+        /// <summary>
+        /// The discriminator is a key of the map without being a member of the type, so it has no
+        /// ordinal - but it is still a key, and a document repeating it is refused like any other.
+        /// Worth refusing specifically: two readers disagreeing on which occurrence names the type is
+        /// how a document means one thing here and another thing downstream.
+        /// </summary>
+        [Fact]
+        public void ARepeatedDiscriminatorIsRejected()
+        {
+            byte[] document = Map(("_t", "Square"), ("_t", "Square"), ("B", 2));
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Shape>(document, Polymorphic()));
+
+            Assert.Contains("Duplicate map key", exception.Message);
+            Assert.Contains("_t", exception.Message);
+        }
+
+        /// <summary>
+        /// And under LastWins it is read like any other repeated key, the last occurrence winning -
+        /// which for the discriminator means the first one still chose the type, since that is the one
+        /// the convention read on the way in.
+        /// </summary>
+        [Fact]
+        public void ARepeatedDiscriminatorIsAcceptedUnderLastWins()
+        {
+            CborOptions options = Polymorphic();
+            options.DuplicateKeyMode = DuplicateKeyMode.LastWins;
+
+            byte[] document = Map(("_t", "Square"), ("_t", "Square"), ("B", 2));
+
+            Square square = Assert.IsType<Square>(Cbor.Deserialize<Shape>(document, options));
+            Assert.Equal(2, square.B);
+        }
+
+        /// <summary>
+        /// The discriminator is expected where it appears, so it is not an unhandled name. It was
+        /// reported as one, which made <see cref="UnhandledNameMode.ThrowException"/> and polymorphism
+        /// mutually exclusive: every polymorphic read threw on its own type tag.
+        /// </summary>
+        [Fact]
+        public void TheDiscriminatorIsNotAnUnhandledName()
+        {
+            CborOptions options = Polymorphic();
+            options.UnhandledNameMode = UnhandledNameMode.ThrowException;
+
+            byte[] document = Map(("_t", "Square"), ("A", 1), ("B", 2));
+
+            Square square = Assert.IsType<Square>(Cbor.Deserialize<Shape>(document, options));
+            Assert.Equal(1, square.A);
+            Assert.Equal(2, square.B);
+        }
+
+        /// <summary>
+        /// A member name eight bytes long that is the prefix of a longer member's name resolves to no
+        /// member, and has to be treated as the unknown name it is rather than as the first member of
+        /// the type - which is what the lookup used to answer, ordinal and all.
+        /// </summary>
+        [Fact]
+        public void AKeyThatIsAPrefixOfAMemberNameIsNotAMember()
+        {
+            byte[] document = Map(("PropertyAlpha", 1), ("Property", 2));
+
+            PrefixHolder holder = Cbor.Deserialize<PrefixHolder>(document);
+
+            Assert.Equal(1, holder.PropertyAlpha);
+        }
+
+        public class PrefixHolder
+        {
+            public int PropertyAlpha { get; set; }
+        }
+
         [CborObjectFormat(CborObjectFormat.Array)]
         public class ArrayHolder
         {

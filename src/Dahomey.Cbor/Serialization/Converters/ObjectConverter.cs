@@ -401,8 +401,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             if (!_memberConvertersForRead.TryGetValue(memberName, out MemberReadEntry entry))
             {
-                HandleUnknownName(ref reader, typeof(T), memberName);
-                reader.SkipDataItem();
+                HandleUnmappedName(ref reader, ref state, memberName);
             }
             else
             {
@@ -416,8 +415,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             if (!_memberConvertersForReadByIndex.TryGetValue(memberIndex, out MemberReadEntry entry))
             {
-                HandleUnknownIndex(ref reader, typeof(T), memberIndex);
-                reader.SkipDataItem();
+                HandleUnmappedIndex(ref reader, ref state, memberIndex);
             }
             else
             {
@@ -430,8 +428,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (!_memberConvertersForRead.TryGetValue(memberName, out MemberReadEntry entry))
             {
-                HandleUnknownName(ref reader, typeof(T), memberName);
-                reader.SkipDataItem();
+                HandleUnmappedName(ref reader, ref state, memberName);
                 value = default!;
                 return false;
             }
@@ -447,8 +444,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (!_memberConvertersForReadByIndex.TryGetValue(memberIndex, out MemberReadEntry entry))
             {
-                HandleUnknownIndex(ref reader, typeof(T), memberIndex);
-                reader.SkipDataItem();
+                HandleUnmappedIndex(ref reader, ref state, memberIndex);
                 value = default!;
                 return false;
             }
@@ -1070,6 +1066,54 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
 
             return context.memberIndex < context.memberConvertersForWrite.Count;
+        }
+
+        /// <summary>
+        /// A key that matched no member. That is the discriminator - which is a key of the map without
+        /// being a member of the type - or a name the type does not know, and the two are answered
+        /// differently: the discriminator is expected here and has already been read by the
+        /// convention, so it is skipped rather than reported as unhandled, while a repeat of it is a
+        /// duplicate map key like any other.
+        /// </summary>
+        /// <remarks>
+        /// Reached only once a lookup has already missed, so recognising the discriminator costs
+        /// nothing on the path taken by every member that maps to something.
+        /// </remarks>
+        private void HandleUnmappedName(ref CborReader reader, ref MemberReadState state, ReadOnlySpan<byte> memberName)
+        {
+            if (_discriminatorConvention != null && memberName.SequenceEqual(_discriminatorConvention.MemberName))
+            {
+                if (state.MarkDiscriminatorRead())
+                {
+                    throw reader.BuildException(MapKeyErrors.Duplicate(Encoding.UTF8.GetString(memberName)));
+                }
+            }
+            else
+            {
+                HandleUnknownName(ref reader, typeof(T), memberName);
+            }
+
+            reader.SkipDataItem();
+        }
+
+        /// <inheritdoc cref="HandleUnmappedName"/>
+        private void HandleUnmappedIndex(ref CborReader reader, ref MemberReadState state, int memberIndex)
+        {
+            // The discriminator is always written at index 0 -- see DiscriminatorMapping.MemberIndex --
+            // so in an integer-keyed map that index is its own whenever the type has a convention.
+            if (_discriminatorConvention != null && memberIndex == 0)
+            {
+                if (state.MarkDiscriminatorRead())
+                {
+                    throw reader.BuildException(MapKeyErrors.Duplicate(memberIndex));
+                }
+            }
+            else
+            {
+                HandleUnknownIndex(ref reader, typeof(T), memberIndex);
+            }
+
+            reader.SkipDataItem();
         }
 
         private void HandleUnknownName(ref CborReader reader, Type type, ReadOnlySpan<byte> rawName)
