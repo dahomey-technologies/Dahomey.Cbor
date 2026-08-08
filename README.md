@@ -68,7 +68,7 @@ A read that fails throws a ``CborException`` naming both the offending byte offs
 the model it was reached from:
 
 ```
-[129] Expected major type TextString (3) Failed to deserialize from "$.Items[7].Name".
+[129] Expected major type TextString (3). Failed to deserialize from "$.Items[7].Name".
 ```
 
 The same path is available on its own, in the notation ``System.Text.Json`` uses, for code that needs
@@ -86,13 +86,18 @@ catch (CborException exception)
 }
 ```
 
-``$`` alone means the root value itself was wrong — the document contradicts the requested type
-outright. ``Path`` is ``null`` when no position could be determined, which is what a failure raised
-inside a converter you registered yourself looks like: custom converters contribute no segments, so a
-path stops at the member holding them.
+Every failure raised while deserializing has a path, down to ``$`` for a document that contradicts the
+requested type outright — so ``Path`` being ``null`` means the exception did not come from a read at
+all, such as a serialization failure or a mapping the registry refused to build.
 
-Text taken from the document — map keys and member names — is truncated in both the message and the
-path, so a message's length follows the shape of the document rather than the size of the values in it.
+A path is as precise as the converters it passed through. Converters you register yourself contribute
+no segment of their own, so a failure inside one is reported against the member that holds it rather
+than against anything within.
+
+Member names and map keys read the same way — ``$.Map.key`` — and are bracketed and escaped when they
+would otherwise be ambiguous: a member genuinely named ``a.b`` is written ``$['a.b']``. Text taken from
+the document is also truncated, so a message's length follows the shape of a document rather than the
+size of the values in it.
 
 ### Serialization
 

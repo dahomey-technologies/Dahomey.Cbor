@@ -400,7 +400,7 @@ namespace Dahomey.Cbor.Tests
             CborException exception = Assert.Throws<CborException>(
                 () => Cbor.Deserialize<IntHolder>("A16556616C7565C1C001".HexToBytes()));
 
-            Assert.Equal("[9] Invalid major type SemanticTag Failed to deserialize from \"$.Value\".", exception.Message);
+            Assert.Equal("[9] Invalid major type SemanticTag. Failed to deserialize from \"$.Value\".", exception.Message);
         }
     }
 }

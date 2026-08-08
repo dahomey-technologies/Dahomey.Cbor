@@ -27,10 +27,19 @@ namespace Dahomey.Cbor
 
         /// <summary>
         /// Where in the deserialized model the failure occurred, in the notation used by
-        /// <c>System.Text.Json</c>: <c>$.Items[7].Name</c>. <c>$</c> alone means the root value, and
-        /// <c>null</c> means the path is unknown - the failure happened outside any converter that
-        /// contributes a segment, which includes converters supplied by the caller.
+        /// <c>System.Text.Json</c>: <c>$.Items[7].Name</c>. <c>$</c> alone means the root value itself.
         /// </summary>
+        /// <remarks>
+        /// Every failure raised while deserializing has a path, down to <c>$</c> for a document that
+        /// contradicts the requested type outright. <c>null</c> therefore means the exception did not
+        /// come from a read at all - a serialization failure, or a mapping the registry refused to
+        /// build.
+        /// <para>
+        /// A path is as precise as the converters it passed through. Converters supplied by the caller
+        /// contribute no segment of their own, so a failure inside one is reported against the member
+        /// that holds it rather than against anything within.
+        /// </para>
+        /// </remarks>
         public string? Path
         {
             get
@@ -68,21 +77,29 @@ namespace Dahomey.Cbor
             get
             {
                 string? path = Path;
-                return path == null
-                    ? base.Message
-                    : $"{base.Message} Failed to deserialize from \"{path}\".";
+
+                if (path == null)
+                {
+                    return base.Message;
+                }
+
+                return $"{base.Message}{SentenceSeparator(base.Message)}Failed to deserialize from \"{path}\".";
             }
         }
 
-        /// <summary>Records that this failure happened inside the member <paramref name="name"/>.</summary>
+        /// <summary>
+        /// Records that this failure happened under <paramref name="name"/> - a member of an object or
+        /// a key of a map, which read the same way in a path and are not worth distinguishing.
+        /// </summary>
         /// <remarks>
-        /// The name is the one the document used, not necessarily one the type declares - an unknown
-        /// member rejected by <see cref="UnhandledNameMode"/> fails under whatever name it arrived with
-        /// - so it is truncated on the same terms as any other quoted document text.
+        /// The name is whatever the document sent, not necessarily one the type declares: an unknown
+        /// member rejected by <see cref="UnhandledNameMode"/> fails under the name it arrived with, and
+        /// a map key is arbitrary by definition. It is therefore bounded and quoted rather than pasted
+        /// in, so that a chosen name cannot forge structure in the message that carries it.
         /// </remarks>
-        internal void PushMember(string name)
+        internal void PushName(string? name)
         {
-            PushSegment("." + TextTruncation.Ellipsize(name));
+            PushSegment(FormatName(TextTruncation.Ellipsize(name ?? string.Empty)));
         }
 
         /// <summary>Records that this failure happened at position <paramref name="index"/> of an array.</summary>
@@ -91,10 +108,78 @@ namespace Dahomey.Cbor
             PushSegment($"[{index}]");
         }
 
-        /// <summary>Records that this failure happened under the map key <paramref name="key"/>.</summary>
-        internal void PushKey(string? key)
+        /// <summary>
+        /// <c>.Name</c> for a name that reads unambiguously as one, <c>['Name']</c> for anything else.
+        /// </summary>
+        /// <remarks>
+        /// A name containing a dot, a bracket or a quote would otherwise be indistinguishable from the
+        /// path syntax around it: <c>a.b</c> as a single member reads exactly like member <c>b</c> of
+        /// member <c>a</c>. The bracketed form is the same answer <c>System.Text.Json</c> gives, and
+        /// escaping inside it is what stops a name from closing the quotation the message wraps the
+        /// path in.
+        /// </remarks>
+        private static string FormatName(string name)
         {
-            PushSegment($"['{TextTruncation.Ellipsize(key ?? string.Empty)}']");
+            if (name.Length != 0 && IsSimpleName(name))
+            {
+                return "." + name;
+            }
+
+            StringBuilder builder = new StringBuilder(name.Length + 4);
+            builder.Append("['");
+
+            foreach (char c in name)
+            {
+                switch (c)
+                {
+                    case '\\':
+                    case '\'':
+                    case '"':
+                        builder.Append('\\').Append(c);
+                        break;
+                    default:
+                        if (c < ' ' || c == '\u007f')
+                        {
+                            builder.Append("\\u").Append(((int)c).ToString("x4"));
+                        }
+                        else
+                        {
+                            builder.Append(c);
+                        }
+                        break;
+                }
+            }
+
+            return builder.Append("']").ToString();
+        }
+
+        private static bool IsSimpleName(string name)
+        {
+            foreach (char c in name)
+            {
+                if (!char.IsLetterOrDigit(c) && c != '_')
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// What to put between the base message and the path. The two are separate sentences, but base
+        /// messages are inconsistent about ending in a full stop and adding a second one reads worse
+        /// than adding none.
+        /// </summary>
+        private static string SentenceSeparator(string message)
+        {
+            if (message.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            char last = message[message.Length - 1];
+            return last == '.' || last == '!' || last == '?' ? " " : ". ";
         }
 
         /// <summary>

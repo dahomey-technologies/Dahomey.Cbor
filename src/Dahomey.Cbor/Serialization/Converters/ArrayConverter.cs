@@ -11,6 +11,17 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             public TI[] array;
             public List<TI> list;
+
+            /// <summary>
+            /// Index of the item currently being read, or -1 before the first one. Doubles as the
+            /// write position on the definite-length branch, where the array is allocated up front.
+            /// </summary>
+            /// <remarks>
+            /// Read on failure to name the position in <see cref="CborException.Path"/>. It is
+            /// advanced before the item is read rather than as a side effect of storing it, so that
+            /// an item that throws has already claimed its own index and the indefinite-length branch
+            /// counts too.
+            /// </remarks>
             public int index;
         }
 
@@ -37,8 +48,27 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return null;
             }
 
-            ReaderContext context = new ReaderContext();
-            reader.ReadArray(this, ref context);
+            // Before the first item, so that a failure on the array header itself - the common case of
+            // a document that is not an array at all - is not attributed to item 0.
+            ReaderContext context = new ReaderContext { index = -1 };
+
+            try
+            {
+                reader.ReadArray(this, ref context);
+            }
+            catch (CborException exception)
+            {
+                if (context.index >= 0)
+                {
+                    exception.PushIndex(context.index);
+                }
+                else
+                {
+                    exception.MarkPathKnown();
+                }
+
+                throw;
+            }
 
             if (context.array != null)
             {
@@ -82,11 +112,12 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadArrayItem(ref CborReader reader, ref ReaderContext context)
         {
+            int index = ++context.index;
             TI item = ItemConverter.Read(ref reader);
 
             if (context.array != null)
             {
-                context.array[context.index++] = item;
+                context.array[index] = item;
             }
             else
             {

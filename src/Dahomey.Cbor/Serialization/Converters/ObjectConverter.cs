@@ -271,9 +271,12 @@ namespace Dahomey.Cbor.Serialization.Converters
             };
 
             // Members name themselves in ReadItem, where the name is still in hand. What is left for
-            // this frame is the failure that never reached a member -- a document whose shape
-            // contradicts the mapping outright -- which has no segment to contribute but is still a
-            // position worth reporting as such: the object itself, $ at the root.
+            // this frame is every failure that never reached a member -- a document whose shape
+            // contradicts the mapping outright, a creator that rejects what was collected, a required
+            // member that never arrived -- which has no segment to contribute but is still a position
+            // worth reporting as such: the object itself, $ at the root. The whole body is covered so
+            // that a required member missing from the root reports the same way as one missing from a
+            // nested object, rather than losing its path for being validated after the loop.
             try
             {
                 switch (_objectMapping.ObjectFormat)
@@ -300,84 +303,84 @@ namespace Dahomey.Cbor.Serialization.Converters
                         }
                         break;
                 }
+
+                if (context.converter == null)
+                {
+                    context.converter = this;
+                }
+                IObjectMapping objectMapping = context.converter.ObjectMapping;
+
+                if (objectMapping.CreatorMapping != null)
+                {
+                    switch (_objectMapping.ObjectFormat)
+                    {
+                        case CborObjectFormat.StringKeyMap:
+                            {
+                                context.obj = (T)objectMapping.CreatorMapping.CreateInstance(context.creatorValues!);
+                                if (objectMapping.OnDeserializingMethod != null)
+                                {
+                                    ((Action<T>)objectMapping.OnDeserializingMethod)(context.obj);
+                                }
+
+                                foreach (KeyValuePair<RawString, object> value in context.regularValues!)
+                                {
+                                    if (!context.converter.MemberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter? memberConverter))
+                                    {
+                                        // should not happen
+                                        throw new CborException("Unexpected error");
+                                    }
+
+                                    memberConverter.Set(context.obj, value.Value);
+                                }
+                            }
+                            break;
+                        case CborObjectFormat.IntKeyMap:
+                        case CborObjectFormat.Array:
+                            {
+                                context.obj = (T)objectMapping.CreatorMapping.CreateInstance(context.creatorValuesByIndex!);
+                                if (objectMapping.OnDeserializingMethod != null)
+                                {
+                                    ((Action<T>)objectMapping.OnDeserializingMethod)(context.obj);
+                                }
+
+                                foreach (KeyValuePair<int, object> value in context.regularValuesByIndex!)
+                                {
+                                    if (!context.converter.MemberConvertersForReadByIndex.TryGetValue(value.Key, out IMemberConverter? memberConverter))
+                                    {
+                                        // should not happen
+                                        throw new CborException("Unexpected error");
+                                    }
+
+                                    memberConverter.Set(context.obj, value.Value);
+                                }
+                            }
+                            break;
+                    }
+                }
+
+                if (context.readMembers != null)
+                {
+                    foreach (IMemberConverter memberConverter in context.converter.RequiredMemberConvertersForRead)
+                    {
+                        if (!context.readMembers.Contains(memberConverter))
+                        {
+                            throw new CborException($"Required property '{Encoding.UTF8.GetString(memberConverter.MemberName)}' not found in JSON.");
+                        }
+                    }
+                }
+
+                if (objectMapping.OnDeserializedMethod != null)
+                {
+                    ((Action<T>)objectMapping.OnDeserializedMethod)(context.obj);
+                }
+
+                return context.obj;
             }
             catch (CborException exception)
             {
                 exception.MarkPathKnown();
                 throw;
             }
-
-            if (context.converter == null)
-            {
-                context.converter = this;
-            }
-            IObjectMapping objectMapping = context.converter.ObjectMapping;
-
-            if (objectMapping.CreatorMapping != null)
-            {
-                switch (_objectMapping.ObjectFormat)
-                {
-                    case CborObjectFormat.StringKeyMap:
-                        {
-                            context.obj = (T)objectMapping.CreatorMapping.CreateInstance(context.creatorValues!);
-                            if (objectMapping.OnDeserializingMethod != null)
-                            {
-                                ((Action<T>)objectMapping.OnDeserializingMethod)(context.obj);
-                            }
-
-                            foreach (KeyValuePair<RawString, object> value in context.regularValues!)
-                            {
-                                if (!context.converter.MemberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter? memberConverter))
-                                {
-                                    // should not happen
-                                    throw new CborException("Unexpected error");
-                                }
-
-                                memberConverter.Set(context.obj, value.Value);
-                            }
-                        }
-                        break;
-                    case CborObjectFormat.IntKeyMap:
-                    case CborObjectFormat.Array:
-                        {
-                            context.obj = (T)objectMapping.CreatorMapping.CreateInstance(context.creatorValuesByIndex!);
-                            if (objectMapping.OnDeserializingMethod != null)
-                            {
-                                ((Action<T>)objectMapping.OnDeserializingMethod)(context.obj);
-                            }
-
-                            foreach (KeyValuePair<int, object> value in context.regularValuesByIndex!)
-                            {
-                                if (!context.converter.MemberConvertersForReadByIndex.TryGetValue(value.Key, out IMemberConverter? memberConverter))
-                                {
-                                    // should not happen
-                                    throw new CborException("Unexpected error");
-                                }
-
-                                memberConverter.Set(context.obj, value.Value);
-                            }
-                        }
-                        break;
-                }
-            }
-
-            if (context.readMembers != null)
-            {
-                foreach (IMemberConverter memberConverter in context.converter.RequiredMemberConvertersForRead)
-                {
-                    if (!context.readMembers.Contains(memberConverter))
-                    {
-                        throw new CborException($"Required property '{Encoding.UTF8.GetString(memberConverter.MemberName)}' not found in JSON.");
-                    }
-                }
-            }
-
-            if (objectMapping.OnDeserializedMethod != null)
-            {
-                ((Action<T>)objectMapping.OnDeserializedMethod)(context.obj);
-            }
-
-            return context.obj;
         }
 
         public void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers)
@@ -731,7 +734,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                         {
                             // The name as it appears in the document. Decoding it here rather than
                             // keeping it around costs nothing until something has already failed.
-                            exception.PushMember(Encoding.UTF8.GetString(memberName));
+                            exception.PushName(Encoding.UTF8.GetString(memberName));
                             throw;
                         }
                     }
@@ -824,7 +827,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (memberMapping.MemberIndex == memberIndex && memberMapping.MemberInfo != null)
                 {
-                    exception.PushMember(memberMapping.MemberInfo.Name);
+                    exception.PushName(memberMapping.MemberInfo.Name);
                     return;
                 }
             }

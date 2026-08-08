@@ -72,7 +72,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (context.hasKey)
                 {
-                    exception.PushKey(context.key?.ToString());
+                    exception.PushName(DescribeKey(context.key));
                 }
                 else if (context.index >= 0)
                 {
@@ -151,6 +151,27 @@ namespace Dahomey.Cbor.Serialization.Converters
             catch (ArgumentException exception)
             {
                 throw reader.BuildException(DescribeAddFailure(context.dict, key, exception));
+            }
+        }
+
+        /// <summary>
+        /// How to name the key in a path, when naming it is all that is left to do.
+        /// </summary>
+        /// <remarks>
+        /// <typeparamref name="TK"/> is the caller's type and its <c>ToString</c> is the caller's code,
+        /// running here while an exception is already in flight. Letting it throw would replace the
+        /// failure being reported with an unrelated one and lose the read error entirely, so an
+        /// unnameable key is reported as no name rather than as a new problem.
+        /// </remarks>
+        private static string? DescribeKey(TK? key)
+        {
+            try
+            {
+                return key?.ToString();
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
 
