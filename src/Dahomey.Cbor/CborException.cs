@@ -33,8 +33,9 @@ namespace Dahomey.Cbor
         /// Every failure raised while deserializing has a path, down to <c>$</c> for a document that
         /// contradicts the requested type outright. <c>null</c> therefore means the exception did not
         /// come from a read at all - a serialization failure, or a mapping the registry refused to
-        /// build - unless a caller has put segments on it themselves through
-        /// <see cref="PrependPathMember(string)"/>.
+        /// build - unless a caller has marked it themselves through
+        /// <see cref="PrependPathMember(string)"/> or <see cref="PrependPathIndex(int)"/>, either of
+        /// which makes a path known even where it adds no segment.
         /// <para>
         /// A path is as precise as the converters it passed through. Converters supplied by the caller
         /// contribute no segment of their own, so a failure inside one is reported against the member
@@ -97,7 +98,9 @@ namespace Dahomey.Cbor
 
         /// <summary>
         /// Records that this failure happened under <paramref name="name"/> - a member of an object or
-        /// a key of a map, which read the same way in a path and are not worth distinguishing.
+        /// a key of a map, which read the same way in a path and are not worth distinguishing. Call it
+        /// from a converter's <c>catch</c> and rethrow the same exception with a bare <c>throw;</c>:
+        /// wrapping it in a new one bakes a half-built path into the new message.
         /// </summary>
         /// <remarks>
         /// Call this from a converter's <c>catch</c> and rethrow the same exception with a bare
