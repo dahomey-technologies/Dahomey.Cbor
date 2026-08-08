@@ -18,9 +18,10 @@ namespace Dahomey.Cbor.Tests
     /// catch. For anything decoding untrusted frames that is the difference between a handled bad frame
     /// and an unhandled exception, and nothing in the message said which key or where.
     /// <para>
-    /// Rejecting rather than letting the last occurrence win is the behaviour that was already there;
-    /// this changes the exception, not the outcome. Silently keeping one of two values for the same key
-    /// would be a data-integrity decision, and a much larger change than a contract fix.
+    /// Rejecting was already the behaviour of every target that inserts into a dictionary; #167 changed
+    /// the exception, not the outcome. What target-dependence was left - a mapped class with settable
+    /// members taking the last occurrence - is settled in #169, which makes rejecting the policy
+    /// everywhere and puts last-wins behind <see cref="CborOptions.DuplicateKeyMode"/>.
     /// </para>
     /// </remarks>
     public class DuplicateMapKeyTests
@@ -96,17 +97,18 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// Duplicate members of a POCO are a different question and deliberately unchanged: the last
-        /// occurrence wins, as it did before, because a member is matched by name rather than inserted
-        /// into a dictionary.
+        /// Duplicate members of a POCO are refused too, since #169 settled the policy as reject
+        /// everywhere. The full matrix of targets and modes lives in
+        /// <see cref="Issues.Issue0169"/>; this is the one row that used to read the other way.
         /// </summary>
         [Fact]
-        public void DuplicatePocoMembersStillTakeTheLastValue()
+        public void DuplicatePocoMembersAreRejected()
         {
             // a2 6141 01 6141 02  -- {"A": 1, "A": 2}
-            DuplicateHolder holder = Cbor.Deserialize<DuplicateHolder>("A2614101614102".HexToBytes());
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<DuplicateHolder>("A2614101614102".HexToBytes()));
 
-            Assert.Equal(2, holder.A);
+            Assert.Contains("Duplicate map key", exception.Message);
         }
 
         public class DuplicateHolder
