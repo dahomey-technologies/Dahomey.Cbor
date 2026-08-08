@@ -6,7 +6,7 @@ namespace Dahomey.Cbor.ObjectModel
     {
         private readonly static CborString _empty = new CborString(string.Empty);
 
-        private string _value;
+        private readonly string _value;
 
         public override CborValueType Type { get { return CborValueType.String; } }
 
@@ -20,10 +20,6 @@ namespace Dahomey.Cbor.ObjectModel
             return Primitive<string, T>.Converter(_value);
         }
 
-        public void SetValue<T>(T value)
-        {
-            _value = Primitive<T, string>.Converter(value);
-        }
 
         public static implicit operator CborString(string value)
         {

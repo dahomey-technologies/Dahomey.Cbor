@@ -7,7 +7,7 @@ namespace Dahomey.Cbor.ObjectModel
         private readonly static CborBoolean _false = new CborBoolean(false);
         private readonly static CborBoolean _true = new CborBoolean(true);
 
-        private bool _value;
+        private readonly bool _value;
 
         public override CborValueType Type { get { return CborValueType.Boolean; } }
 
@@ -31,10 +31,6 @@ namespace Dahomey.Cbor.ObjectModel
             return Primitive<bool, T>.Converter(_value);
         }
 
-        public void SetValue<T>(T value)
-        {
-            _value = Primitive<T, bool>.Converter(value);
-        }
 
         public static implicit operator CborBoolean(bool value)
         {

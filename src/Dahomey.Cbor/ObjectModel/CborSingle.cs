@@ -16,7 +16,7 @@ namespace Dahomey.Cbor.ObjectModel
                 .Select(i => new CborSingle(i))
                 .ToArray();
 
-        private float _value;
+        private readonly float _value;
 
         public override CborValueType Type { get { return CborValueType.Single; } }
 
@@ -40,10 +40,6 @@ namespace Dahomey.Cbor.ObjectModel
             return Primitive<float, T>.Converter(_value);
         }
 
-        public void SetValue<T>(T value)
-        {
-            _value = Primitive<T, float>.Converter(value);
-        }
 
         public static implicit operator CborSingle(float value)
         {

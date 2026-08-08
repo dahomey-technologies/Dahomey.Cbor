@@ -16,7 +16,7 @@ namespace Dahomey.Cbor.ObjectModel
                 .Select(i => new CborDecimal(i))
                 .ToArray();
 
-        private decimal _value;
+        private readonly decimal _value;
 
         public override CborValueType Type { get { return CborValueType.Decimal; } }
 
@@ -40,10 +40,6 @@ namespace Dahomey.Cbor.ObjectModel
             return Primitive<decimal, T>.Converter(_value);
         }
 
-        public void SetValue<T>(T value)
-        {
-            _value = Primitive<T, decimal>.Converter(value);
-        }
 
         public static implicit operator CborDecimal(decimal value)
         {

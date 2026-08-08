@@ -15,7 +15,7 @@ namespace Dahomey.Cbor.ObjectModel
                 .Select(i => new CborNegative(i))
                 .ToArray();
 
-        private long _value;
+        private readonly long _value;
 
         public override CborValueType Type => CborValueType.Negative;
 
@@ -44,10 +44,6 @@ namespace Dahomey.Cbor.ObjectModel
             return Primitive<long, T>.Converter(_value);
         }
 
-        public void SetValue<T>(T value)
-        {
-            _value = Primitive<T, long>.Converter(value);
-        }
 
         public static implicit operator CborNegative(long value)
         {

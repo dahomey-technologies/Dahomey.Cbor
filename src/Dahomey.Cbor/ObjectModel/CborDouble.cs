@@ -16,7 +16,7 @@ namespace Dahomey.Cbor.ObjectModel
                 .Select(i => new CborDouble(i))
                 .ToArray();
 
-        private double _value;
+        private readonly double _value;
 
         public override CborValueType Type { get { return CborValueType.Double; } }
 
@@ -40,10 +40,6 @@ namespace Dahomey.Cbor.ObjectModel
             return Primitive<double, T>.Converter(_value);
         }
 
-        public void SetValue<T>(T value)
-        {
-            _value = Primitive<T, double>.Converter(value);
-        }
 
         public static implicit operator CborDouble(double value)
         {
