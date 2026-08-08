@@ -230,8 +230,10 @@ namespace Dahomey.Cbor
         /// <see cref="DuplicateKeyMode.Reject"/>, uniformly across every decode target.
         /// </summary>
         /// <remarks>
-        /// Read once per repeated key rather than per key, so a document that contains no duplicates -
-        /// which is all of them until one does - pays nothing for this setting being available.
+        /// Read once when a map or an object starts, not per key, and each read then runs to the end
+        /// on the value it took. Settable at any point in an options object's life, including on the
+        /// long-lived <see cref="Default"/>; a change made while a document is being read applies to
+        /// the maps that start after it, so no single map is read half one way and half the other.
         /// </remarks>
         public DuplicateKeyMode DuplicateKeyMode { get; set; }
 

@@ -31,6 +31,9 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             /// <inheritdoc cref="index"/>
             public bool hasKey;
+
+            /// <inheritdoc cref="CborValueConverter.MapReaderContext.lastWins"/>
+            public bool lastWins;
         }
 
         public struct WriterContext
@@ -130,6 +133,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         public void ReadBeginMap(int size, ref ReaderContext context)
         {
             context.dict = InstantiateTempCollection();
+            context.lastWins = _options.DuplicateKeyMode == DuplicateKeyMode.LastWins;
         }
 
         public void ReadMapItem(ref CborReader reader, ref ReaderContext context)
@@ -144,7 +148,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             TV value = ValueConverter.Read(ref reader);
 
-            if (_options.DuplicateKeyMode == DuplicateKeyMode.LastWins)
+            if (context.lastWins)
             {
                 // An indexer assignment rather than Add, so a repeated key overwrites. Still guarded:
                 // the dictionary is the caller's in the IDictionary case and may refuse an entry for

@@ -95,9 +95,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// Numbers the members added to the read lookups above, so each carries a
         /// <see cref="MemberReadEntry.Ordinal"/> distinct within this converter. Counts entries rather
         /// than distinct member converters, so that presenting the same member converter twice cannot
-        /// hand two members one number.
+        /// hand two members one number. Starts at 1, leaving 0 to mean no member at all.
         /// </summary>
-        private int _nextReadOrdinal;
+        private int _nextReadOrdinal = 1;
         public List<IMemberConverter> _requiredMemberConvertersForRead = new List<IMemberConverter>();
         private readonly List<IMemberConverter> _memberConvertersForWrite;
         private List<IMemberConverter>? _deterministicMemberConvertersForWrite;
@@ -675,6 +675,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                     }
                 }
 
+                // Settled once, on the first item, and not revisited: every member of this object is
+                // resolved by the converter chosen here, so the ordinals its entries carry mean the
+                // same thing for the whole read -- which is what lets one bitmask stand for "already
+                // read" across it.
                 if (context.creatorValues == null && context.creatorValuesByIndex == null)
                 {
                     if (!_isStruct && context.obj == null)
@@ -722,11 +726,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                             {
                                 if (context.converter.ObjectMapping.IsCreatorMember(memberName))
                                 {
-                                    AddMemberValue(ref reader, context.creatorValues, new RawString(memberName), value);
+                                    AddMemberValue(ref reader, context.readState.LastWins, context.creatorValues, new RawString(memberName), value);
                                 }
                                 else
                                 {
-                                    AddMemberValue(ref reader, context.regularValues!, new RawString(memberName), value);
+                                    AddMemberValue(ref reader, context.readState.LastWins, context.regularValues!, new RawString(memberName), value);
                                 }
                             }
                         }
@@ -760,11 +764,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                             {
                                 if (context.converter.ObjectMapping.IsCreatorMember(memberIndex))
                                 {
-                                    AddMemberValue(ref reader, context.creatorValuesByIndex, memberIndex, value);
+                                    AddMemberValue(ref reader, context.readState.LastWins, context.creatorValuesByIndex, memberIndex, value);
                                 }
                                 else
                                 {
-                                    AddMemberValue(ref reader, context.regularValuesByIndex!, memberIndex, value);
+                                    AddMemberValue(ref reader, context.readState.LastWins, context.regularValuesByIndex!, memberIndex, value);
                                 }
                             }
                         }
@@ -793,11 +797,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                         {
                             if (context.converter.ObjectMapping.IsCreatorMember(context.memberIndex))
                             {
-                                AddMemberValue(ref reader, context.creatorValuesByIndex, context.memberIndex, value);
+                                AddMemberValue(ref reader, context.readState.LastWins, context.creatorValuesByIndex, context.memberIndex, value);
                             }
                             else
                             {
-                                AddMemberValue(ref reader, context.regularValuesByIndex!, context.memberIndex, value);
+                                AddMemberValue(ref reader, context.readState.LastWins, context.regularValuesByIndex!, context.memberIndex, value);
                             }
                         }
                     }
@@ -918,19 +922,19 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// constructor can be called rather than being set on an instance.
         /// </summary>
         /// <remarks>
-        /// A document repeating a member reaches a <c>Dictionary.Add</c> here, exactly as a repeated
-        /// map key reaches one in the dictionary converters, and is refused the same way: as a
-        /// <see cref="CborException"/> rather than the <see cref="ArgumentException"/> the dictionary
-        /// raises. A type without a creator mapping does not reach this -- its members are assigned to
-        /// an instance -- so the repeat is caught for that path in <c>MarkMemberRead</c> instead, which
-        /// is what keeps the answer from depending on whether the type happens to have a non-default
-        /// constructor.
+        /// A repeated member is refused before it gets here: every value reaching this has come
+        /// through <c>ReadValue</c>, which resolves the member and calls <c>MarkMemberRead</c> first,
+        /// so under <see cref="DuplicateKeyMode.Reject"/> the <c>Add</c> below cannot be handed a key
+        /// it already holds. That is deliberate - one place decides what a repeated member means, for
+        /// the creator path and the assign path alike, rather than each learning it from the container
+        /// it happens to write into. What is left here is the container's own refusals, and a repeat
+        /// this converter could not identify, which <c>Add</c> still catches and names correctly.
         /// </remarks>
-        private void AddMemberValue<TKey>(
-            ref CborReader reader, Dictionary<TKey, object?> values, TKey key, object? value)
+        private static void AddMemberValue<TKey>(
+            ref CborReader reader, bool lastWins, Dictionary<TKey, object> values, TKey key, object value)
             where TKey : notnull
         {
-            if (_options.DuplicateKeyMode == DuplicateKeyMode.LastWins)
+            if (lastWins)
             {
                 values[key] = value;
                 return;

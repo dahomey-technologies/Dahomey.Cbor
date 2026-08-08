@@ -27,9 +27,16 @@ namespace Dahomey.Cbor.Serialization.Converters
         public IMemberConverter Converter { get; }
 
         /// <summary>
-        /// This member's position in its converter's read set. Dense enough for a bitmask, and stable
-        /// for the life of the converter; nothing depends on the value beyond its being distinct.
+        /// This member's position in its converter's read set, counted from 1. Dense enough for a
+        /// bitmask, and stable for the life of the converter; nothing depends on the value beyond its
+        /// being distinct.
         /// </summary>
+        /// <remarks>
+        /// Counted from 1 so that 0 - the ordinal of <c>default(MemberReadEntry)</c> - identifies no
+        /// member. A lookup that reports success while yielding the default entry would otherwise hand
+        /// back the first member's identity, and be reported as a duplicate of it: a wrong answer
+        /// about a member that was never read, in place of whatever the real failure was.
+        /// </remarks>
         public int Ordinal { get; }
     }
 }

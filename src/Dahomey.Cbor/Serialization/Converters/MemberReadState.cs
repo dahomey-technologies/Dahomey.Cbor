@@ -44,6 +44,14 @@ namespace Dahomey.Cbor.Serialization.Converters
             _seenBeyond = null;
         }
 
+        /// <summary>
+        /// Whether this read is running under <see cref="DuplicateKeyMode.LastWins"/>. Taken once,
+        /// when the read started, and answered from here rather than re-read from the options, so
+        /// that every path of one object read agrees on the policy even if the options change
+        /// underneath it.
+        /// </summary>
+        public readonly bool LastWins => !_rejectDuplicates;
+
         /// <summary>Whether required members are being tracked at all.</summary>
         public readonly bool TracksRequiredMembers => _requiredMembersRead != null;
 
@@ -58,29 +66,31 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// </summary>
         /// <remarks>
         /// Always false under <see cref="DuplicateKeyMode.LastWins"/>, where nothing is going to be
-        /// refused: the bookkeeping is skipped rather than done and discarded. A negative ordinal
-        /// belongs to a member this cannot tell apart from another and is never reported as a repeat -
-        /// saying "duplicate" about something unidentified would be worse than saying nothing.
+        /// refused: the bookkeeping is skipped rather than done and discarded. Also false for an entry
+        /// identifying no member - see <see cref="MemberReadEntry.Ordinal"/> - since saying "duplicate"
+        /// about something unidentified would be worse than saying nothing.
         /// </remarks>
         public bool MarkRead(in MemberReadEntry entry)
         {
             _requiredMembersRead?.Add(entry.Converter);
 
-            if (!_rejectDuplicates || entry.Ordinal < 0)
+            if (!_rejectDuplicates || entry.Ordinal <= 0)
             {
                 return false;
             }
 
-            if (entry.Ordinal < 64)
+            int index = entry.Ordinal - 1;
+
+            if (index < 64)
             {
-                ulong bit = 1UL << entry.Ordinal;
+                ulong bit = 1UL << index;
                 bool alreadyRead = (_seen & bit) != 0;
                 _seen |= bit;
                 return alreadyRead;
             }
 
             _seenBeyond ??= new HashSet<int>();
-            return !_seenBeyond.Add(entry.Ordinal);
+            return !_seenBeyond.Add(index);
         }
     }
 }
