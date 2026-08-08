@@ -1038,10 +1038,12 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (_options.UnhandledNameMode == UnhandledNameMode.ThrowException)
             {
-                // The name is whatever the document chose to send, so it is quoted back on the same
-                // terms as any other document text rather than copied into the message whole.
+                // The name is whatever the document chose to send, so it is bounded and escaped on the
+                // same terms as any other document text rather than copied into the message whole.
+                // UTF-8 rather than ASCII: a CBOR text string is UTF-8, and decoding it as ASCII turned
+                // every non-ASCII member name into a row of question marks.
                 throw reader.BuildException(
-                    $"Unhandled name [{TextTruncation.Ellipsize(Encoding.ASCII.GetString(rawName))}] in class [{type.Name}] while deserializing.");
+                    $"Unhandled name [{TextTruncation.Ellipsize(Encoding.UTF8.GetString(rawName))}] in class [{type.Name}] while deserializing.");
             }
         }
 

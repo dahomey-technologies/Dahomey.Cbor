@@ -1,4 +1,5 @@
 using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.ObjectModel;
 using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Tests.Extensions;
 using Dahomey.Cbor.Util;
@@ -18,9 +19,9 @@ namespace Dahomey.Cbor.Tests.Issues
     /// successful read allocates nothing for it - it only keeps enough state to answer where it was,
     /// which is an index and, for a map, the current key.
     /// <para>
-    /// A path of <c>$</c> means the root value itself was wrong; a null <see cref="CborException.Path"/>
-    /// means no converter on the way up could name a position at all, which is what a failure inside a
-    /// caller-supplied converter looks like. Those are different answers and are kept apart.
+    /// A path of <c>$</c> means the root value itself was wrong. Every read has at least that much, so
+    /// a null <see cref="CborException.Path"/> means the exception did not come from a read at all -
+    /// and those two answers are worth telling apart.
     /// </para>
     /// </remarks>
     public class Issue0135
@@ -372,6 +373,86 @@ namespace Dahomey.Cbor.Tests.Issues
                 () => Cbor.Deserialize<Child>("A1644E616D65F6".HexToBytes(), options));
 
             Assert.Equal("Property 'Name' cannot be null. Failed to deserialize from \"$.Name\".", fullStop.Message);
+        }
+
+        /// <summary>
+        /// The object model reaches the same converters by a different door, so it has to mark the
+        /// root as well - otherwise a scalar conversion is exactly the case that reports nothing,
+        /// which is what <see cref="CborException.Path"/> now promises cannot happen.
+        /// </summary>
+        [Fact]
+        public void ConvertingFromTheObjectModelReportsTheRootToo()
+        {
+            CborObject source = new CborObject { ["Name"] = "abc" };
+
+            CborException scalar = Assert.Throws<CborException>(() => source.ToObject<int>());
+            CborException collection = Assert.Throws<CborException>(() => source.ToObject<List<int>>());
+            CborException array = Assert.Throws<CborException>(
+                () => new CborArray(1, "abc").ToCollection<List<int>>());
+
+            Assert.Equal("$", scalar.Path);
+            Assert.Equal("$", collection.Path);
+            Assert.Equal("$[1]", array.Path);
+        }
+
+        /// <summary>
+        /// The budget is spent on the rendered result, not on the source. Counting the source would
+        /// let a name of control characters - each of which renders as six - past a bound that looks
+        /// like 64 and is really 384.
+        /// </summary>
+        [Fact]
+        public void TheLengthBoundHoldsAgainstTextChosenToDefeatIt()
+        {
+            CborOptions options = new CborOptions { UnhandledNameMode = UnhandledNameMode.ThrowException };
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Child>(WriteSingleMemberMap(new string('\n', 300)), options));
+
+            Assert.True(exception.Message.Length < 300, $"message was {exception.Message.Length} chars");
+            Assert.Contains("(300 characters)", exception.Path);
+        }
+
+        /// <summary>
+        /// Truncation lands between characters, never inside one: half a surrogate pair is not valid
+        /// UTF-16 and can break whatever the message is written to.
+        /// </summary>
+        [Fact]
+        public void TruncationDoesNotSplitASurrogatePair()
+        {
+            CborOptions options = new CborOptions { UnhandledNameMode = UnhandledNameMode.ThrowException };
+            string name = new string('a', 63) + "\U0001F600" + new string('a', 40);
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Child>(WriteSingleMemberMap(name), options));
+
+            string path = Assert.IsType<string>(exception.Path);
+
+            for (int i = 0; i < path.Length; i++)
+            {
+                if (char.IsHighSurrogate(path[i]))
+                {
+                    Assert.True(i + 1 < path.Length && char.IsLowSurrogate(path[i + 1]), "high surrogate left unpaired");
+                }
+                else
+                {
+                    Assert.False(char.IsLowSurrogate(path[i]), "low surrogate left unpaired");
+                }
+            }
+        }
+
+        /// <summary>
+        /// A non-ASCII member name survives the round trip into the message it is rejected with.
+        /// </summary>
+        [Fact]
+        public void AnUnhandledNameIsDecodedAsUtf8()
+        {
+            CborOptions options = new CborOptions { UnhandledNameMode = UnhandledNameMode.ThrowException };
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Child>(WriteSingleMemberMap("naïve"), options));
+
+            Assert.Contains("naïve", exception.Message);
+            Assert.Equal("$.naïve", exception.Path);
         }
 
         private static byte[] WriteSingleMemberMap(string memberName)

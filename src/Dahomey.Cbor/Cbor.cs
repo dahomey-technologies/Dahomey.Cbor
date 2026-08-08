@@ -298,48 +298,6 @@ namespace Dahomey.Cbor
             }
         }
 
-        /// <summary>
-        /// Reads one value at the root of a document, so that a failure on the root itself still has a
-        /// position to report: <see cref="CborException.Path"/> of <c>$</c>.
-        /// </summary>
-        /// <remarks>
-        /// The converters that name members, indices and keys only do so from inside a container. A
-        /// document that contradicts the requested type outright never reaches one of them, and that is
-        /// the failure the caller is least able to place from a byte offset alone -- so the root is
-        /// marked here, where every read passes exactly once.
-        /// <para>
-        /// The speculative read in <c>TryReadItem</c> is deliberately not routed through this: it
-        /// throws as a matter of course while waiting for more of the stream, and discards what it
-        /// catches.
-        /// </para>
-        /// </remarks>
-        private static T ReadRoot<T>(ref CborReader reader, ICborConverter<T> converter)
-        {
-            try
-            {
-                return converter.Read(ref reader);
-            }
-            catch (CborException exception)
-            {
-                exception.MarkPathKnown();
-                throw;
-            }
-        }
-
-        /// <inheritdoc cref="ReadRoot{T}(ref CborReader, ICborConverter{T})"/>
-        private static object? ReadRoot(ref CborReader reader, ICborConverter converter)
-        {
-            try
-            {
-                return converter.Read(ref reader);
-            }
-            catch (CborException exception)
-            {
-                exception.MarkPathKnown();
-                throw;
-            }
-        }
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static T Deserialize<T>(
             ReadOnlySpan<byte> buffer,
@@ -348,7 +306,7 @@ namespace Dahomey.Cbor
             options ??= CborOptions.Default;
             CborReader reader = new CborReader(buffer, options.MaxDepth);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
-            return ReadRoot(ref reader, converter);
+            return RootReader.Read(ref reader, converter);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -359,7 +317,7 @@ namespace Dahomey.Cbor
             options ??= CborOptions.Default;
             CborReader reader = new CborReader(buffer, options.MaxDepth);
             ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
-            return ReadRoot(ref reader, converter);
+            return RootReader.Read(ref reader, converter);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -371,7 +329,7 @@ namespace Dahomey.Cbor
             options ??= CborOptions.Default;
             CborReader reader = new CborReader(buffer, options.MaxDepth);
             ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
-            return ReadRoot(ref reader, cborConverter);
+            return RootReader.Read(ref reader, cborConverter);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -383,7 +341,7 @@ namespace Dahomey.Cbor
             options ??= CborOptions.Default;
             CborReader reader = new CborReader(buffer, options.MaxDepth);
             ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
-            return ReadRoot(ref reader, cborConverter);
+            return RootReader.Read(ref reader, cborConverter);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -397,7 +355,7 @@ namespace Dahomey.Cbor
             while (reader.DataAvailable)
             {
                 ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
-                list.Add(ReadRoot(ref reader, converter));
+                list.Add(RootReader.Read(ref reader, converter));
             }
             return list.ToArray();
         }
@@ -413,7 +371,7 @@ namespace Dahomey.Cbor
             while (reader.DataAvailable)
             {
                 ICborConverter<T> converter = options.Registry.ConverterRegistry.Lookup<T>();
-                list.Add(ReadRoot(ref reader, converter));
+                list.Add(RootReader.Read(ref reader, converter));
             }
             return list.ToArray();
         }
@@ -431,7 +389,7 @@ namespace Dahomey.Cbor
             {
                 ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
 
-                var obj = ReadRoot(ref reader, cborConverter);
+                var obj = RootReader.Read(ref reader, cborConverter);
                 if (obj != null)
                 {
                     list.Add(obj);
@@ -452,7 +410,7 @@ namespace Dahomey.Cbor
             while (reader.DataAvailable)
             {
                 ICborConverter cborConverter = options.Registry.ConverterRegistry.Lookup(objectType);
-                var obj = ReadRoot(ref reader, cborConverter);
+                var obj = RootReader.Read(ref reader, cborConverter);
                 if (obj != null)
                 {
                     list.Add(obj);

@@ -249,7 +249,7 @@ namespace Dahomey.Cbor.ObjectModel
 
             ICborConverter<CborValue> cborValueConverter = options.Registry.ConverterRegistry.Lookup<CborValue>();
             CborReader reader = new CborReader(buffer.WrittenSpan);
-            return cborValueConverter.Read(ref reader);
+            return RootReader.Read(ref reader, cborValueConverter);
         }
 }
 }

@@ -70,9 +70,11 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             catch (CborException exception)
             {
-                if (context.hasKey)
+                string? key = context.hasKey ? DescribeKey(context.key) : null;
+
+                if (key != null)
                 {
-                    exception.PushName(DescribeKey(context.key));
+                    exception.PushName(key);
                 }
                 else if (context.index >= 0)
                 {
@@ -160,8 +162,12 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// <remarks>
         /// <typeparamref name="TK"/> is the caller's type and its <c>ToString</c> is the caller's code,
         /// running here while an exception is already in flight. Letting it throw would replace the
-        /// failure being reported with an unrelated one and lose the read error entirely, so an
-        /// unnameable key is reported as no name rather than as a new problem.
+        /// failure being reported with an unrelated one and lose the read error entirely.
+        /// <para>
+        /// Returning null hands the caller back to the entry's index, which says something true, rather
+        /// than to an empty name, which would be indistinguishable from a key that really is the empty
+        /// string.
+        /// </para>
         /// </remarks>
         private static string? DescribeKey(TK? key)
         {

@@ -99,7 +99,7 @@ namespace Dahomey.Cbor
         /// </remarks>
         internal void PushName(string? name)
         {
-            PushSegment(FormatName(TextTruncation.Ellipsize(name ?? string.Empty)));
+            PushSegment(FormatName(name ?? string.Empty));
         }
 
         /// <summary>Records that this failure happened at position <paramref name="index"/> of an array.</summary>
@@ -120,37 +120,14 @@ namespace Dahomey.Cbor
         /// </remarks>
         private static string FormatName(string name)
         {
-            if (name.Length != 0 && IsSimpleName(name))
+            // A name short enough to survive whole and made only of token characters needs neither
+            // bracketing nor escaping, so it reads as what it is.
+            if (name.Length != 0 && name.Length <= TextTruncation.MaxCharsInMessage && IsSimpleName(name))
             {
                 return "." + name;
             }
 
-            StringBuilder builder = new StringBuilder(name.Length + 4);
-            builder.Append("['");
-
-            foreach (char c in name)
-            {
-                switch (c)
-                {
-                    case '\\':
-                    case '\'':
-                    case '"':
-                        builder.Append('\\').Append(c);
-                        break;
-                    default:
-                        if (c < ' ' || c == '\u007f')
-                        {
-                            builder.Append("\\u").Append(((int)c).ToString("x4"));
-                        }
-                        else
-                        {
-                            builder.Append(c);
-                        }
-                        break;
-                }
-            }
-
-            return builder.Append("']").ToString();
+            return "['" + TextTruncation.Ellipsize(name, escapeApostrophe: true) + "']";
         }
 
         private static bool IsSimpleName(string name)
