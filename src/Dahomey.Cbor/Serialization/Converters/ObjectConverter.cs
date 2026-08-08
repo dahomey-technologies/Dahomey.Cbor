@@ -734,7 +734,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                         {
                             // The name as it appears in the document. Decoding it here rather than
                             // keeping it around costs nothing until something has already failed.
-                            exception.PushName(Encoding.UTF8.GetString(memberName));
+                            exception.PrependPathMember(Encoding.UTF8.GetString(memberName));
                             throw;
                         }
                     }
@@ -827,12 +827,12 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (memberMapping.MemberIndex == memberIndex && memberMapping.MemberInfo != null)
                 {
-                    exception.PushName(memberMapping.MemberInfo.Name);
+                    exception.PrependPathMember(memberMapping.MemberInfo.Name);
                     return;
                 }
             }
 
-            exception.PushIndex(memberIndex);
+            exception.PrependPathIndex(memberIndex);
         }
 
         private void ReadValueForStruct(ref CborReader reader, ref T instance, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers)

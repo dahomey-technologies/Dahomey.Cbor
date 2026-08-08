@@ -87,7 +87,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (context.index >= 0)
                 {
-                    exception.PushIndex(context.index);
+                    exception.PrependPathIndex(context.index);
                 }
                 else
                 {

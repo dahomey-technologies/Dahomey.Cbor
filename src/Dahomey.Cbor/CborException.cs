@@ -92,18 +92,42 @@ namespace Dahomey.Cbor
         /// a key of a map, which read the same way in a path and are not worth distinguishing.
         /// </summary>
         /// <remarks>
-        /// The name is whatever the document sent, not necessarily one the type declares: an unknown
-        /// member rejected by <see cref="UnhandledNameMode"/> fails under the name it arrived with, and
-        /// a map key is arbitrary by definition. It is therefore bounded and quoted rather than pasted
-        /// in, so that a chosen name cannot forge structure in the message that carries it.
+        /// Call this from a converter's <c>catch</c> and rethrow with a bare <c>throw;</c>, so that the
+        /// original stack trace survives. Each frame adds only its own segment, outermost last:
+        /// <code>
+        /// try
+        /// {
+        ///     return ReadPayload(ref reader);
+        /// }
+        /// catch (CborException exception)
+        /// {
+        ///     exception.PrependPathMember("Payload");
+        ///     throw;
+        /// }
+        /// </code>
+        /// <para>
+        /// Only a converter that decodes a structure of its own needs this. One registered against a
+        /// member is already named by the object holding it, and one that delegates to other converters
+        /// inherits whatever they contribute.
+        /// </para>
+        /// <para>
+        /// The name may be one the document chose rather than one a type declares - a map key is
+        /// arbitrary by definition - so it is bounded in length and escaped, and cannot forge structure
+        /// in the message that carries it. A null or empty name is recorded as an unnamed segment
+        /// rather than rejected: this runs while an exception is already in flight, and throwing a
+        /// second one over a diagnostic would lose the first.
+        /// </para>
         /// </remarks>
-        internal void PushName(string? name)
+        public void PrependPathMember(string? name)
         {
             PushSegment(FormatName(name ?? string.Empty));
         }
 
-        /// <summary>Records that this failure happened at position <paramref name="index"/> of an array.</summary>
-        internal void PushIndex(int index)
+        /// <summary>
+        /// Records that this failure happened at position <paramref name="index"/> of an array.
+        /// </summary>
+        /// <inheritdoc cref="PrependPathMember(string)" path="/remarks"/>
+        public void PrependPathIndex(int index)
         {
             PushSegment($"[{index}]");
         }

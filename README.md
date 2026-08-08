@@ -90,9 +90,28 @@ Every failure raised while deserializing has a path, down to ``$`` for a documen
 requested type outright — so ``Path`` being ``null`` means the exception did not come from a read at
 all, such as a serialization failure or a mapping the registry refused to build.
 
-A path is as precise as the converters it passed through. Converters you register yourself contribute
-no segment of their own, so a failure inside one is reported against the member that holds it rather
-than against anything within.
+A path is as precise as the converters it passed through. A converter you register yourself is already
+named by the object holding it, and one that delegates to other converters inherits whatever they
+contribute — so most custom converters need do nothing. A converter that decodes a structure of its
+own can name positions inside it by adding a segment on the way out:
+
+```csharp
+public override Payload Read(ref CborReader reader)
+{
+    try
+    {
+        return ReadBody(ref reader);
+    }
+    catch (CborException exception)
+    {
+        exception.PrependPathMember("Body");   // or PrependPathIndex(i) inside a sequence
+        throw;                                 // bare throw, so the stack trace survives
+    }
+}
+```
+
+Each frame adds only its own segment, outermost last, and nothing is built until something has
+actually failed.
 
 Member names and map keys read the same way — ``$.Map.key`` — and are bracketed and escaped when they
 would otherwise be ambiguous: a member genuinely named ``a.b`` is written ``$['a.b']``. Text taken from

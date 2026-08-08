@@ -1,6 +1,7 @@
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.ObjectModel;
 using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Tests.Extensions;
 using Dahomey.Cbor.Util;
 using System.Collections.Generic;
@@ -453,6 +454,95 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Assert.Contains("naïve", exception.Message);
             Assert.Equal("$.naïve", exception.Path);
+        }
+
+        /// <summary>
+        /// A converter that decodes a structure of its own can name positions inside it, which is
+        /// otherwise the one thing the framework cannot do on a caller's behalf.
+        /// </summary>
+        private class BodyConverter : CborConverterBase<Body>
+        {
+            public override Body Read(ref CborReader reader)
+            {
+                reader.ReadBeginArray();
+                reader.ReadSize();
+
+                try
+                {
+                    return new Body { Count = reader.ReadInt32() };
+                }
+                catch (CborException exception)
+                {
+                    exception.PrependPathIndex(0);
+                    throw;
+                }
+            }
+
+            public override void Write(ref CborWriter writer, Body value, LengthMode lengthMode)
+            {
+                writer.WriteBeginArray(1);
+                writer.WriteInt32(value.Count);
+                writer.WriteEndArray(1);
+            }
+        }
+
+        private class Body
+        {
+            public int Count { get; set; }
+        }
+
+        private class BodyHolder
+        {
+            public Body Body { get; set; }
+        }
+
+        [Fact]
+        public void ACustomConverterCanNamePositionsWithinItself()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ConverterRegistry.RegisterConverter(typeof(Body), new BodyConverter());
+
+            // a1                  map(1)
+            //    64 426f6479      "Body"
+            //    81               array(1)
+            //       63 616263     "abc", where an integer was required
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<BodyHolder>("A164426F64798163616263".HexToBytes(), options));
+
+            Assert.Equal("$.Body[0]", exception.Path);
+        }
+
+        /// <summary>
+        /// Doing nothing remains correct: a custom converter that adds no segment is still named by
+        /// the member holding it, which is why the seam above is a refinement rather than a duty.
+        /// </summary>
+        [Fact]
+        public void ACustomConverterThatAddsNothingIsStillNamedByItsMember()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ConverterRegistry.RegisterConverter(typeof(Body), new SilentBodyConverter());
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<BodyHolder>("A164426F64798163616263".HexToBytes(), options));
+
+            Assert.Equal("$.Body", exception.Path);
+        }
+
+        private class SilentBodyConverter : CborConverterBase<Body>
+        {
+            public override Body Read(ref CborReader reader)
+            {
+                reader.ReadBeginArray();
+                reader.ReadSize();
+                return new Body { Count = reader.ReadInt32() };
+            }
+
+            public override void Write(ref CborWriter writer, Body value, LengthMode lengthMode)
+            {
+                writer.WriteBeginArray(1);
+                writer.WriteInt32(value.Count);
+                writer.WriteEndArray(1);
+            }
         }
 
         private static byte[] WriteSingleMemberMap(string memberName)

@@ -74,11 +74,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 if (key != null)
                 {
-                    exception.PushName(key);
+                    exception.PrependPathMember(key);
                 }
                 else if (context.index >= 0)
                 {
-                    exception.PushIndex(context.index);
+                    exception.PrependPathIndex(context.index);
                 }
                 else
                 {

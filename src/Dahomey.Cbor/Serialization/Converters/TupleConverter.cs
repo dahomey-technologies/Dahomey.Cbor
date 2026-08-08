@@ -18,7 +18,7 @@
             }
             catch (CborException exception)
             {
-                exception.PushIndex(index);
+                exception.PrependPathIndex(index);
                 throw;
             }
         }
