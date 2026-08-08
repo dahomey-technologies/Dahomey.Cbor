@@ -1,5 +1,29 @@
-namespace Dahomey.Cbor.Serialization.Converters
+﻿namespace Dahomey.Cbor.Serialization.Converters
 {
+    /// <summary>
+    /// Reads one item of a tuple, naming its position in <see cref="CborException.Path"/> if it fails.
+    /// </summary>
+    /// <remarks>
+    /// A tuple has no member names to report, so the position is all there is to say - and it is what a
+    /// caller needs, because the items of a tuple are otherwise indistinguishable in a message. Shared
+    /// by every arity rather than written out in each, since each item read is otherwise identical.
+    /// </remarks>
+    internal static class TupleItemReader
+    {
+        public static T Read<T>(ref CborReader reader, ICborConverter<T> converter, int index)
+        {
+            try
+            {
+                return converter.Read(ref reader);
+            }
+            catch (CborException exception)
+            {
+                exception.PushIndex(index);
+                throw;
+            }
+        }
+    }
+
     public class Tuple2Converter<T1, T2> : CborConverterBase<(T1, T2)>
     {
         private readonly CborOptions _options;
@@ -31,13 +55,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 throw new CborException("Expected CBOR Array of size 2");
             }
-            T1 item1 = _item1Converter.Read(ref reader);
+            T1 item1 = TupleItemReader.Read(ref reader, _item1Converter, 0);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 2");
             }
-            T2 item2 = _item2Converter.Read(ref reader);
+            T2 item2 = TupleItemReader.Read(ref reader, _item2Converter, 1);
 
             return (item1, item2);
         }
@@ -87,19 +111,19 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 throw new CborException("Expected CBOR Array of size 3");
             }
-            T1 item1 = _item1Converter.Read(ref reader);
+            T1 item1 = TupleItemReader.Read(ref reader, _item1Converter, 0);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 3");
             }
-            T2 item2 = _item2Converter.Read(ref reader);
+            T2 item2 = TupleItemReader.Read(ref reader, _item2Converter, 1);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 3");
             }
-            T3 item3 = _item3Converter.Read(ref reader);
+            T3 item3 = TupleItemReader.Read(ref reader, _item3Converter, 2);
 
             return (item1, item2, item3);
         }
@@ -152,25 +176,25 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
-            T1 item1 = _item1Converter.Read(ref reader);
+            T1 item1 = TupleItemReader.Read(ref reader, _item1Converter, 0);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
-            T2 item2 = _item2Converter.Read(ref reader);
+            T2 item2 = TupleItemReader.Read(ref reader, _item2Converter, 1);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
-            T3 item3 = _item3Converter.Read(ref reader);
+            T3 item3 = TupleItemReader.Read(ref reader, _item3Converter, 2);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 4");
             }
-            T4 item4 = _item4Converter.Read(ref reader);
+            T4 item4 = TupleItemReader.Read(ref reader, _item4Converter, 3);
 
             return (item1, item2, item3, item4);
         }
@@ -226,31 +250,31 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
-            T1 item1 = _item1Converter.Read(ref reader);
+            T1 item1 = TupleItemReader.Read(ref reader, _item1Converter, 0);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
-            T2 item2 = _item2Converter.Read(ref reader);
+            T2 item2 = TupleItemReader.Read(ref reader, _item2Converter, 1);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
-            T3 item3 = _item3Converter.Read(ref reader);
+            T3 item3 = TupleItemReader.Read(ref reader, _item3Converter, 2);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
-            T4 item4 = _item4Converter.Read(ref reader);
+            T4 item4 = TupleItemReader.Read(ref reader, _item4Converter, 3);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 5");
             }
-            T5 item5 = _item5Converter.Read(ref reader);
+            T5 item5 = TupleItemReader.Read(ref reader, _item5Converter, 4);
 
             return (item1, item2, item3, item4, item5);
         }
@@ -309,37 +333,37 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
-            T1 item1 = _item1Converter.Read(ref reader);
+            T1 item1 = TupleItemReader.Read(ref reader, _item1Converter, 0);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
-            T2 item2 = _item2Converter.Read(ref reader);
+            T2 item2 = TupleItemReader.Read(ref reader, _item2Converter, 1);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
-            T3 item3 = _item3Converter.Read(ref reader);
+            T3 item3 = TupleItemReader.Read(ref reader, _item3Converter, 2);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
-            T4 item4 = _item4Converter.Read(ref reader);
+            T4 item4 = TupleItemReader.Read(ref reader, _item4Converter, 3);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
-            T5 item5 = _item5Converter.Read(ref reader);
+            T5 item5 = TupleItemReader.Read(ref reader, _item5Converter, 4);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 6");
             }
-            T6 item6 = _item6Converter.Read(ref reader);
+            T6 item6 = TupleItemReader.Read(ref reader, _item6Converter, 5);
 
             return (item1, item2, item3, item4, item5, item6);
         }
@@ -401,43 +425,43 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
-            T1 item1 = _item1Converter.Read(ref reader);
+            T1 item1 = TupleItemReader.Read(ref reader, _item1Converter, 0);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
-            T2 item2 = _item2Converter.Read(ref reader);
+            T2 item2 = TupleItemReader.Read(ref reader, _item2Converter, 1);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
-            T3 item3 = _item3Converter.Read(ref reader);
+            T3 item3 = TupleItemReader.Read(ref reader, _item3Converter, 2);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
-            T4 item4 = _item4Converter.Read(ref reader);
+            T4 item4 = TupleItemReader.Read(ref reader, _item4Converter, 3);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
-            T5 item5 = _item5Converter.Read(ref reader);
+            T5 item5 = TupleItemReader.Read(ref reader, _item5Converter, 4);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
-            T6 item6 = _item6Converter.Read(ref reader);
+            T6 item6 = TupleItemReader.Read(ref reader, _item6Converter, 5);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 7");
             }
-            T7 item7 = _item7Converter.Read(ref reader);
+            T7 item7 = TupleItemReader.Read(ref reader, _item7Converter, 6);
 
             return (item1, item2, item3, item4, item5, item6, item7);
         }
@@ -501,50 +525,50 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
-            T1 item1 = _item1Converter.Read(ref reader);
+            T1 item1 = TupleItemReader.Read(ref reader, _item1Converter, 0);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
-            T2 item2 = _item2Converter.Read(ref reader);
+            T2 item2 = TupleItemReader.Read(ref reader, _item2Converter, 1);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
-            T3 item3 = _item3Converter.Read(ref reader);
+            T3 item3 = TupleItemReader.Read(ref reader, _item3Converter, 2);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
-            T4 item4 = _item4Converter.Read(ref reader);
+            T4 item4 = TupleItemReader.Read(ref reader, _item4Converter, 3);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
-            T5 item5 = _item5Converter.Read(ref reader);
+            T5 item5 = TupleItemReader.Read(ref reader, _item5Converter, 4);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
-            T6 item6 = _item6Converter.Read(ref reader);
+            T6 item6 = TupleItemReader.Read(ref reader, _item6Converter, 5);
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
-            T7 item7 = _item7Converter.Read(ref reader);
+            T7 item7 = TupleItemReader.Read(ref reader, _item7Converter, 6);
 
 
             if (size == -1 && reader.IsBreak())
             {
                 throw new CborException("Expected CBOR Array of size 8");
             }
-            T8 item8 = _item8Converter.Read(ref reader);
+            T8 item8 = TupleItemReader.Read(ref reader, _item8Converter, 7);
 
             return (item1, item2, item3, item4, item5, item6, item7, item8);
         }

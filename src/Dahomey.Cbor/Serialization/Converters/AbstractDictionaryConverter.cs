@@ -13,6 +13,24 @@ namespace Dahomey.Cbor.Serialization.Converters
         public struct ReaderContext
         {
             public IDictionary<TK, TV> dict;
+
+            /// <summary>
+            /// Where the entry currently being read sits, and what it is keyed by once that much has
+            /// been decoded. Only read when an entry has thrown, to name the position in
+            /// <see cref="CborException.Path"/>.
+            /// </summary>
+            /// <remarks>
+            /// The key is the better name of the two, so <see cref="index"/> - which counts entries
+            /// from 0, and is -1 before the first one - is only used for a failure that happened
+            /// before the key itself could be read.
+            /// </remarks>
+            public int index;
+
+            /// <inheritdoc cref="index"/>
+            public TK? key;
+
+            /// <inheritdoc cref="index"/>
+            public bool hasKey;
         }
 
         public struct WriterContext
@@ -42,8 +60,32 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return default!;
             }
 
-            ReaderContext context = new ReaderContext();
-            reader.ReadMap(this, ref context);
+            // Before the first entry, so that a failure on the map header itself is not attributed
+            // to entry 0.
+            ReaderContext context = new ReaderContext { index = -1 };
+
+            try
+            {
+                reader.ReadMap(this, ref context);
+            }
+            catch (CborException exception)
+            {
+                if (context.hasKey)
+                {
+                    exception.PushKey(context.key?.ToString());
+                }
+                else if (context.index >= 0)
+                {
+                    exception.PushIndex(context.index);
+                }
+                else
+                {
+                    exception.MarkPathKnown();
+                }
+
+                throw;
+            }
+
             return InstantiateCollection(context.dict);
         }
 
@@ -90,7 +132,14 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadMapItem(ref CborReader reader, ref ReaderContext context)
         {
+            context.index++;
+            context.hasKey = false;
+
             TK key = KeyConverter.Read(ref reader);
+
+            context.key = key;
+            context.hasKey = true;
+
             TV value = ValueConverter.Read(ref reader);
 
             // See CborValueConverter.ReadMapItem: these are malformed input, and were already refused

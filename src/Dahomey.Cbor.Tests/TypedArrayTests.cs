@@ -584,7 +584,7 @@ namespace Dahomey.Cbor.Tests
             // A1 map(1) 6153 "S" F6 null
             CborException exception = Assert.Throws<CborException>(
                 () => Cbor.Deserialize<NullableSamplesHolder>("A16153F6".HexToBytes(), options));
-            Assert.Equal("Property 'S' cannot be null.", exception.Message);
+            Assert.Equal("Property 'S' cannot be null. Failed to deserialize from \"$.S\".", exception.Message);
         }
 
         [Fact]

@@ -201,8 +201,12 @@ namespace Dahomey.Cbor.Tests
             CborException exception = Assert.Throws<CborException>(
                 () => Cbor.Deserialize<Dictionary<string, int>>(writer.WrittenSpan.ToArray()));
 
-            Assert.True(exception.Message.Length < 200, $"message was {exception.Message.Length} chars");
+            // Two bounded quotations of the key now, not one: the description of what went wrong and
+            // the path saying where. Both are truncated on the same terms, so the message stays a
+            // function of the document's shape rather than of the length of the key it carries.
+            Assert.True(exception.Message.Length < 300, $"message was {exception.Message.Length} chars");
             Assert.Contains("Duplicate map key", exception.Message);
+            Assert.DoesNotContain(key, exception.Message);
         }
     }
 }

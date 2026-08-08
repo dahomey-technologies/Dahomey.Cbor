@@ -1,3 +1,5 @@
+using Dahomey.Cbor.Util;
+
 namespace Dahomey.Cbor.Serialization.Converters
 {
     /// <summary>
@@ -12,13 +14,6 @@ namespace Dahomey.Cbor.Serialization.Converters
     /// </remarks>
     internal static class MapKeyErrors
     {
-        /// <summary>
-        /// How much of a key is worth repeating. A key comes from the document being decoded, which for
-        /// anything reading untrusted frames means an attacker chooses it, and exception messages end
-        /// up in logs.
-        /// </summary>
-        private const int MaxKeyCharsInMessage = 64;
-
         public static string NullKey()
         {
             return "A map key cannot be null.";
@@ -40,11 +35,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private static string Describe(object key)
         {
-            string text = key.ToString() ?? string.Empty;
-
-            return text.Length <= MaxKeyCharsInMessage
-                ? text
-                : text.Substring(0, MaxKeyCharsInMessage) + $"... ({text.Length} characters)";
+            return TextTruncation.Ellipsize(key.ToString() ?? string.Empty);
         }
     }
 }
