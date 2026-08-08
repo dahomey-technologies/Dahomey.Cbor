@@ -110,6 +110,19 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly IDiscriminatorConvention? _discriminatorConvention = null;
 
         /// <summary>
+        /// Whether this type's own mapping carries a discriminator, as opposed to merely resolving a
+        /// convention.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="DiscriminatorConventionRegistry"/> answers with the convention of a hierarchy
+        /// for every base type and interface in it, so a convention being resolvable says nothing
+        /// about this type writing a discriminator. Only a type that does can have the key in its
+        /// documents, and only for such a type is an unmapped key at that name - or at index 0, where
+        /// a discriminator always sits - the discriminator rather than something the document made up.
+        /// </remarks>
+        private readonly bool _hasDiscriminatorMember;
+
+        /// <summary>
         /// The members to write, in the order to write them: declaration order normally, deterministic
         /// key order when <see cref="CborOptions.Deterministic"/> is set.
         /// </summary>
@@ -186,6 +199,8 @@ namespace Dahomey.Cbor.Serialization.Converters
             foreach (IMemberMapping memberMapping in _objectMapping.GetMemberMappingsForConverter(this))
             {
                 IMemberConverter memberConverter = memberMapping.GenerateMemberConverter();
+
+                _hasDiscriminatorMember |= memberMapping is IDiscriminatorMapping;
 
                 bool isCreatorMember = false;
 
@@ -722,11 +737,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                             {
                                 if (context.converter.ObjectMapping.IsCreatorMember(memberName))
                                 {
-                                    AddMemberValue(ref reader, context.readState.LastWins, context.creatorValues, new RawString(memberName), value);
+                                    AddMemberValue(ref reader, context.readState.Mode, context.creatorValues, new RawString(memberName), value);
                                 }
                                 else
                                 {
-                                    AddMemberValue(ref reader, context.readState.LastWins, context.regularValues!, new RawString(memberName), value);
+                                    AddMemberValue(ref reader, context.readState.Mode, context.regularValues!, new RawString(memberName), value);
                                 }
                             }
                         }
@@ -760,11 +775,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                             {
                                 if (context.converter.ObjectMapping.IsCreatorMember(memberIndex))
                                 {
-                                    AddMemberValue(ref reader, context.readState.LastWins, context.creatorValuesByIndex, memberIndex, value);
+                                    AddMemberValue(ref reader, context.readState.Mode, context.creatorValuesByIndex, memberIndex, value);
                                 }
                                 else
                                 {
-                                    AddMemberValue(ref reader, context.readState.LastWins, context.regularValuesByIndex!, memberIndex, value);
+                                    AddMemberValue(ref reader, context.readState.Mode, context.regularValuesByIndex!, memberIndex, value);
                                 }
                             }
                         }
@@ -793,11 +808,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                         {
                             if (context.converter.ObjectMapping.IsCreatorMember(context.memberIndex))
                             {
-                                AddMemberValue(ref reader, context.readState.LastWins, context.creatorValuesByIndex, context.memberIndex, value);
+                                AddMemberValue(ref reader, context.readState.Mode, context.creatorValuesByIndex, context.memberIndex, value);
                             }
                             else
                             {
-                                AddMemberValue(ref reader, context.readState.LastWins, context.regularValuesByIndex!, context.memberIndex, value);
+                                AddMemberValue(ref reader, context.readState.Mode, context.regularValuesByIndex!, context.memberIndex, value);
                             }
                         }
                     }
@@ -927,10 +942,10 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// this converter could not identify, which <c>Add</c> still catches and names correctly.
         /// </remarks>
         private static void AddMemberValue<TKey>(
-            ref CborReader reader, bool lastWins, Dictionary<TKey, object> values, TKey key, object value)
+            ref CborReader reader, DuplicateKeyMode mode, Dictionary<TKey, object> values, TKey key, object value)
             where TKey : notnull
         {
-            if (lastWins)
+            if (mode == DuplicateKeyMode.LastWins)
             {
                 values[key] = value;
                 return;
@@ -1081,7 +1096,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// </remarks>
         private void HandleUnmappedName(ref CborReader reader, ref MemberReadState state, ReadOnlySpan<byte> memberName)
         {
-            if (_discriminatorConvention != null && memberName.SequenceEqual(_discriminatorConvention.MemberName))
+            if (_hasDiscriminatorMember && memberName.SequenceEqual(_discriminatorConvention!.MemberName))
             {
                 if (state.MarkDiscriminatorRead())
                 {
@@ -1100,8 +1115,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         private void HandleUnmappedIndex(ref CborReader reader, ref MemberReadState state, int memberIndex)
         {
             // The discriminator is always written at index 0 -- see DiscriminatorMapping.MemberIndex --
-            // so in an integer-keyed map that index is its own whenever the type has a convention.
-            if (_discriminatorConvention != null && memberIndex == 0)
+            // so in an integer-keyed map that index is its own, for a type that writes one.
+            if (_hasDiscriminatorMember && memberIndex == 0)
             {
                 if (state.MarkDiscriminatorRead())
                 {

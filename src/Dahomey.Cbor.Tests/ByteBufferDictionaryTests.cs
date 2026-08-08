@@ -28,7 +28,7 @@ namespace Dahomey.Cbor.Tests
                 Assert.Equal(value, actualValue);
             }
         }
-    
+
         /// <summary>
         /// A key is stored one node per eight bytes, so a longer key builds nodes for its prefixes on
         /// the way. Those are not entries, and looking one up must miss rather than answer with the
@@ -61,5 +61,5 @@ namespace Dahomey.Cbor.Tests
             Assert.True(dictionary.TryGetValue(Encoding.UTF8.GetBytes("Property"), out int found));
             Assert.Equal(13, found);
         }
-}
+    }
 }

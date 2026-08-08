@@ -599,6 +599,31 @@ namespace Dahomey.Cbor.Tests.Issues
             Assert.Equal(13, holder.B);
         }
 
+        [CborObjectFormat(CborObjectFormat.IntKeyMap)]
+        public class IndexOneHolder
+        {
+            [CborProperty(1)]
+            public int Value { get; set; }
+        }
+
+        /// <summary>
+        /// Index 0 is where a discriminator sits, but only for a type that writes one. On a type that
+        /// does not, an unmapped 0 is an unknown index like any other and must be reported as one -
+        /// recognising it by position alone would swallow it, and report a repeat of it as a duplicate
+        /// discriminator the document never carried.
+        /// </summary>
+        [Fact]
+        public void AnUnmappedIndexZeroIsNotTakenForADiscriminator()
+        {
+            CborOptions options = new CborOptions { UnhandledNameMode = UnhandledNameMode.ThrowException };
+
+            // a2 00 09 01 02  -- {0: 9, 1: 2}
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<IndexOneHolder>("A2000901 02".Replace(" ", "").HexToBytes(), options));
+
+            Assert.Contains("Unhandled index [0]", exception.Message);
+        }
+
         public class Pair
         {
             public Holder First { get; set; }

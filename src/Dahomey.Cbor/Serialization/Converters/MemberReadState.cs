@@ -50,15 +50,16 @@ namespace Dahomey.Cbor.Serialization.Converters
             _rejectDuplicates = rejectDuplicates;
             _seen = 0;
             _seenBeyond = null;
+            _discriminatorRead = false;
         }
 
         /// <summary>
-        /// Whether this read is running under <see cref="DuplicateKeyMode.LastWins"/>. Taken once,
-        /// when the read started, and answered from here rather than re-read from the options, so
-        /// that every path of one object read agrees on the policy even if the options change
-        /// underneath it.
+        /// The mode this read is running under. Taken once, when the read started, and answered from
+        /// here rather than re-read from the options, so that every path of one object read agrees on
+        /// the policy even if the options change underneath it.
         /// </summary>
-        public readonly bool LastWins => !_rejectDuplicates;
+        public readonly DuplicateKeyMode Mode
+            => _rejectDuplicates ? DuplicateKeyMode.Reject : DuplicateKeyMode.LastWins;
 
         /// <summary>Whether required members are being tracked at all.</summary>
         public readonly bool TracksRequiredMembers => _requiredMembersRead != null;
