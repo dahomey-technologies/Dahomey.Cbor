@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Buffers;
 using System.Buffers.Binary;
 
@@ -221,6 +221,7 @@ namespace Dahomey.Cbor.Serialization
         /// Counts the complete data items in <paramref name="buffer"/> and reports how many bytes they
         /// occupy, so a caller can tell a cleanly-terminated sequence from a truncated one.
         /// </summary>
+        /// <param name="buffer">The bytes to scan.</param>
         /// <param name="consumed">Bytes occupied by the complete items.</param>
         /// <param name="count">Number of complete items found.</param>
         /// <returns>

@@ -13,6 +13,24 @@ namespace Dahomey.Cbor.Serialization.Converters
         public struct ReaderContext
         {
             public IDictionary<TK, TV> dict;
+
+            /// <summary>
+            /// Where the entry currently being read sits, and what it is keyed by once that much has
+            /// been decoded. Only read when an entry has thrown, to name the position in
+            /// <see cref="CborException.Path"/>.
+            /// </summary>
+            /// <remarks>
+            /// The key is the better name of the two, so <see cref="index"/> - which counts entries
+            /// from 0, and is -1 before the first one - is only used for a failure that happened
+            /// before the key itself could be read.
+            /// </remarks>
+            public int index;
+
+            /// <inheritdoc cref="index"/>
+            public TK? key;
+
+            /// <inheritdoc cref="index"/>
+            public bool hasKey;
         }
 
         public struct WriterContext
@@ -42,8 +60,34 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return default!;
             }
 
-            ReaderContext context = new ReaderContext();
-            reader.ReadMap(this, ref context);
+            // Before the first entry, so that a failure on the map header itself is not attributed
+            // to entry 0.
+            ReaderContext context = new ReaderContext { index = -1 };
+
+            try
+            {
+                reader.ReadMap(this, ref context);
+            }
+            catch (CborException exception)
+            {
+                string? key = context.hasKey ? DescribeKey(context.key) : null;
+
+                if (key != null)
+                {
+                    exception.PrependPathMember(key);
+                }
+                else if (context.index >= 0)
+                {
+                    exception.PrependPathIndex(context.index);
+                }
+                else
+                {
+                    exception.MarkPathKnown();
+                }
+
+                throw;
+            }
+
             return InstantiateCollection(context.dict);
         }
 
@@ -90,7 +134,14 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public void ReadMapItem(ref CborReader reader, ref ReaderContext context)
         {
+            context.index++;
+            context.hasKey = false;
+
             TK key = KeyConverter.Read(ref reader);
+
+            context.key = key;
+            context.hasKey = true;
+
             TV value = ValueConverter.Read(ref reader);
 
             // See CborValueConverter.ReadMapItem: these are malformed input, and were already refused
@@ -102,6 +153,31 @@ namespace Dahomey.Cbor.Serialization.Converters
             catch (ArgumentException exception)
             {
                 throw reader.BuildException(DescribeAddFailure(context.dict, key, exception));
+            }
+        }
+
+        /// <summary>
+        /// How to name the key in a path, when naming it is all that is left to do.
+        /// </summary>
+        /// <remarks>
+        /// <typeparamref name="TK"/> is the caller's type and its <c>ToString</c> is the caller's code,
+        /// running here while an exception is already in flight. Letting it throw would replace the
+        /// failure being reported with an unrelated one and lose the read error entirely.
+        /// <para>
+        /// Returning null hands the caller back to the entry's index, which says something true, rather
+        /// than to an empty name, which would be indistinguishable from a key that really is the empty
+        /// string.
+        /// </para>
+        /// </remarks>
+        private static string? DescribeKey(TK? key)
+        {
+            try
+            {
+                return key?.ToString();
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
 

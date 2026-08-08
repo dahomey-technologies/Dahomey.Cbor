@@ -47,6 +47,7 @@ namespace Dahomey.Cbor.Serialization
         {
         }
 
+        /// <param name="bufferWriter">Where the encoded bytes are written.</param>
         /// <param name="maxDepth">
         /// Maximum nesting depth of maps and arrays. Exceeding it throws a <see cref="CborException"/>
         /// rather than recursing until the stack is exhausted, which is what an object graph
@@ -57,6 +58,12 @@ namespace Dahomey.Cbor.Serialization
         {
         }
 
+        /// <param name="bufferWriter">Where the encoded bytes are written.</param>
+        /// <param name="maxDepth">
+        /// Maximum nesting depth of maps and arrays. Exceeding it throws a <see cref="CborException"/>
+        /// rather than recursing until the stack is exhausted, which is what an object graph
+        /// containing a reference cycle would otherwise do. Must be positive.
+        /// </param>
         /// <param name="deterministic">
         /// Refuse indefinite lengths, which admit more than one encoding of the same value. Checked
         /// here rather than only on <see cref="CborOptions"/> because the options are the

@@ -61,7 +61,17 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 if (reader.TryReadSemanticTag(out ulong tag) && TypedArrayTags.IsTypedArrayTag(tag))
                 {
-                    return ReadTypedArray(ref reader, tag);
+                    try
+                    {
+                        return ReadTypedArray(ref reader, tag);
+                    }
+                    catch (CborException exception)
+                    {
+                        // Decoded whole rather than item by item, so a failure belongs to the array
+                        // itself. See AbstractCollectionConverter.Read.
+                        exception.MarkPathKnown();
+                        throw;
+                    }
                 }
 
                 // Some other tag, which CBOR says to ignore. Hand it back rather than keeping it

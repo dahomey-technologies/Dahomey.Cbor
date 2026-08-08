@@ -351,7 +351,7 @@ namespace Dahomey.Cbor.Tests
             CborException exception = Assert.Throws<CborException>(
                 () => Cbor.Deserialize<RequiredValueHolder>("A1664D656D626572F7".HexToBytes()));
 
-            Assert.Equal("Property 'Member' cannot be null.", exception.Message);
+            Assert.Equal("Property 'Member' cannot be null. Failed to deserialize from \"$.Member\".", exception.Message);
         }
 
         /// <summary>The same byte without the policy reads as before.</summary>
@@ -400,7 +400,7 @@ namespace Dahomey.Cbor.Tests
             CborException exception = Assert.Throws<CborException>(
                 () => Cbor.Deserialize<IntHolder>("A16556616C7565C1C001".HexToBytes()));
 
-            Assert.Equal("[9] Invalid major type SemanticTag", exception.Message);
+            Assert.Equal("[9] Invalid major type SemanticTag. Failed to deserialize from \"$.Value\".", exception.Message);
         }
     }
 }

@@ -218,7 +218,7 @@ namespace Dahomey.Cbor.ObjectModel
 
             ICborConverter<CborObject> cborObjectConverter = options.Registry.ConverterRegistry.Lookup<CborObject>();
             CborReader reader = new CborReader(buffer.WrittenSpan);
-            return cborObjectConverter.Read(ref reader);
+            return RootReader.Read(ref reader, cborObjectConverter);
         }
 
         public T ToObject<T>(CborOptions? options = null)
@@ -232,7 +232,7 @@ namespace Dahomey.Cbor.ObjectModel
 
             ICborConverter<T> objectConverter = options.Registry.ConverterRegistry.Lookup<T>();
             CborReader reader = new CborReader(buffer.WrittenSpan);
-            return objectConverter.Read(ref reader);
+            return RootReader.Read(ref reader, objectConverter);
         }
 
         public override bool TryGetMember(GetMemberBinder binder, [MaybeNullWhen(false)] out object? result)

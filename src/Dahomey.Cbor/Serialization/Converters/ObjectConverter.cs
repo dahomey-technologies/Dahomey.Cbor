@@ -270,102 +270,117 @@ namespace Dahomey.Cbor.Serialization.Converters
                 readMembers = _requiredMemberConvertersForRead.Count != 0 ? new HashSet<IMemberConverter>() : null
             };
 
-            switch (_objectMapping.ObjectFormat)
-            {
-                case CborObjectFormat.StringKeyMap:
-                    {
-                        context.creatorValues = _objectMapping.CreatorMapping != null ? new() : null;
-                        context.regularValues = _objectMapping.CreatorMapping != null ? new () : null;
-                        reader.ReadMap(this, ref context);
-                    }
-                    break;
-                case CborObjectFormat.IntKeyMap:
-                    {
-                        context.creatorValuesByIndex = _objectMapping.CreatorMapping != null ? new() : null;
-                        context.regularValuesByIndex = _objectMapping.CreatorMapping != null ? new() : null;
-                        reader.ReadMap(this, ref context);
-                    }
-                    break;
-                case CborObjectFormat.Array:
-                    {
-                        context.creatorValuesByIndex = _objectMapping.CreatorMapping != null ? new() : null;
-                        context.regularValuesByIndex = _objectMapping.CreatorMapping != null ? new() : null;
-                        reader.ReadArray(this, ref context);
-                    }
-                    break;
-            }
-
-            if (context.converter == null)
-            {
-                context.converter = this;
-            }
-            IObjectMapping objectMapping = context.converter.ObjectMapping;
-
-            if (objectMapping.CreatorMapping != null)
+            // Members name themselves in ReadItem, where the name is still in hand. What is left for
+            // this frame is every failure that never reached a member -- a document whose shape
+            // contradicts the mapping outright, a creator that rejects what was collected, a required
+            // member that never arrived -- which has no segment to contribute but is still a position
+            // worth reporting as such: the object itself, $ at the root. The whole body is covered so
+            // that a required member missing from the root reports the same way as one missing from a
+            // nested object, rather than losing its path for being validated after the loop.
+            try
             {
                 switch (_objectMapping.ObjectFormat)
                 {
                     case CborObjectFormat.StringKeyMap:
                         {
-                            context.obj = (T)objectMapping.CreatorMapping.CreateInstance(context.creatorValues!);
-                            if (objectMapping.OnDeserializingMethod != null)
-                            {
-                                ((Action<T>)objectMapping.OnDeserializingMethod)(context.obj);
-                            }
-
-                            foreach (KeyValuePair<RawString, object> value in context.regularValues!)
-                            {
-                                if (!context.converter.MemberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter? memberConverter))
-                                {
-                                    // should not happen
-                                    throw new CborException("Unexpected error");
-                                }
-
-                                memberConverter.Set(context.obj, value.Value);
-                            }
+                            context.creatorValues = _objectMapping.CreatorMapping != null ? new() : null;
+                            context.regularValues = _objectMapping.CreatorMapping != null ? new () : null;
+                            reader.ReadMap(this, ref context);
                         }
                         break;
                     case CborObjectFormat.IntKeyMap:
+                        {
+                            context.creatorValuesByIndex = _objectMapping.CreatorMapping != null ? new() : null;
+                            context.regularValuesByIndex = _objectMapping.CreatorMapping != null ? new() : null;
+                            reader.ReadMap(this, ref context);
+                        }
+                        break;
                     case CborObjectFormat.Array:
                         {
-                            context.obj = (T)objectMapping.CreatorMapping.CreateInstance(context.creatorValuesByIndex!);
-                            if (objectMapping.OnDeserializingMethod != null)
-                            {
-                                ((Action<T>)objectMapping.OnDeserializingMethod)(context.obj);
-                            }
-
-                            foreach (KeyValuePair<int, object> value in context.regularValuesByIndex!)
-                            {
-                                if (!context.converter.MemberConvertersForReadByIndex.TryGetValue(value.Key, out IMemberConverter? memberConverter))
-                                {
-                                    // should not happen
-                                    throw new CborException("Unexpected error");
-                                }
-
-                                memberConverter.Set(context.obj, value.Value);
-                            }
+                            context.creatorValuesByIndex = _objectMapping.CreatorMapping != null ? new() : null;
+                            context.regularValuesByIndex = _objectMapping.CreatorMapping != null ? new() : null;
+                            reader.ReadArray(this, ref context);
                         }
                         break;
                 }
-            }
 
-            if (context.readMembers != null)
-            {
-                foreach (IMemberConverter memberConverter in context.converter.RequiredMemberConvertersForRead)
+                if (context.converter == null)
                 {
-                    if (!context.readMembers.Contains(memberConverter))
+                    context.converter = this;
+                }
+                IObjectMapping objectMapping = context.converter.ObjectMapping;
+
+                if (objectMapping.CreatorMapping != null)
+                {
+                    switch (_objectMapping.ObjectFormat)
                     {
-                        throw new CborException($"Required property '{Encoding.UTF8.GetString(memberConverter.MemberName)}' not found in JSON.");
+                        case CborObjectFormat.StringKeyMap:
+                            {
+                                context.obj = (T)objectMapping.CreatorMapping.CreateInstance(context.creatorValues!);
+                                if (objectMapping.OnDeserializingMethod != null)
+                                {
+                                    ((Action<T>)objectMapping.OnDeserializingMethod)(context.obj);
+                                }
+
+                                foreach (KeyValuePair<RawString, object> value in context.regularValues!)
+                                {
+                                    if (!context.converter.MemberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter? memberConverter))
+                                    {
+                                        // should not happen
+                                        throw new CborException("Unexpected error");
+                                    }
+
+                                    memberConverter.Set(context.obj, value.Value);
+                                }
+                            }
+                            break;
+                        case CborObjectFormat.IntKeyMap:
+                        case CborObjectFormat.Array:
+                            {
+                                context.obj = (T)objectMapping.CreatorMapping.CreateInstance(context.creatorValuesByIndex!);
+                                if (objectMapping.OnDeserializingMethod != null)
+                                {
+                                    ((Action<T>)objectMapping.OnDeserializingMethod)(context.obj);
+                                }
+
+                                foreach (KeyValuePair<int, object> value in context.regularValuesByIndex!)
+                                {
+                                    if (!context.converter.MemberConvertersForReadByIndex.TryGetValue(value.Key, out IMemberConverter? memberConverter))
+                                    {
+                                        // should not happen
+                                        throw new CborException("Unexpected error");
+                                    }
+
+                                    memberConverter.Set(context.obj, value.Value);
+                                }
+                            }
+                            break;
                     }
                 }
-            }
 
-            if (objectMapping.OnDeserializedMethod != null)
+                if (context.readMembers != null)
+                {
+                    foreach (IMemberConverter memberConverter in context.converter.RequiredMemberConvertersForRead)
+                    {
+                        if (!context.readMembers.Contains(memberConverter))
+                        {
+                            throw new CborException($"Required property '{Encoding.UTF8.GetString(memberConverter.MemberName)}' not found in JSON.");
+                        }
+                    }
+                }
+
+                if (objectMapping.OnDeserializedMethod != null)
+                {
+                    ((Action<T>)objectMapping.OnDeserializedMethod)(context.obj);
+                }
+
+                return context.obj;
+            }
+            catch (CborException exception)
             {
-                ((Action<T>)objectMapping.OnDeserializedMethod)(context.obj);
+                exception.MarkPathKnown();
+                throw;
             }
-
-            return context.obj;
         }
 
         public void ReadValue(ref CborReader reader, object obj, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers)
@@ -689,27 +704,38 @@ namespace Dahomey.Cbor.Serialization.Converters
                 case CborObjectFormat.StringKeyMap:
                     {
                         ReadOnlySpan<byte> memberName = reader.ReadRawString();
-                        if (context.creatorValues == null)
+
+                        try
                         {
-                            if (_isStruct)
+                            if (context.creatorValues == null)
                             {
-                                ReadValueForStruct(ref reader, ref context.obj, memberName, context.readMembers!);
+                                if (_isStruct)
+                                {
+                                    ReadValueForStruct(ref reader, ref context.obj, memberName, context.readMembers!);
+                                }
+                                else
+                                {
+                                    context.converter.ReadValue(ref reader, context.obj!, memberName, context.readMembers!);
+                                }
                             }
-                            else
+                            else if (context.converter.ReadValue(ref reader, memberName, context.readMembers!, out object? value))
                             {
-                                context.converter.ReadValue(ref reader, context.obj!, memberName, context.readMembers!);
+                                if (context.converter.ObjectMapping.IsCreatorMember(memberName))
+                                {
+                                    AddMemberValue(ref reader, context.creatorValues, new RawString(memberName), value);
+                                }
+                                else
+                                {
+                                    AddMemberValue(ref reader, context.regularValues!, new RawString(memberName), value);
+                                }
                             }
                         }
-                        else if (context.converter.ReadValue(ref reader, memberName, context.readMembers!, out object? value))
+                        catch (CborException exception)
                         {
-                            if (context.converter.ObjectMapping.IsCreatorMember(memberName))
-                            {
-                                AddMemberValue(ref reader, context.creatorValues, new RawString(memberName), value);
-                            }
-                            else
-                            {
-                                AddMemberValue(ref reader, context.regularValues!, new RawString(memberName), value);
-                            }
+                            // The name as it appears in the document. Decoding it here rather than
+                            // keeping it around costs nothing until something has already failed.
+                            exception.PrependPathMember(Encoding.UTF8.GetString(memberName));
+                            throw;
                         }
                     }
                     break;
@@ -717,57 +743,96 @@ namespace Dahomey.Cbor.Serialization.Converters
                     {
                         int memberIndex = reader.ReadInt32();
 
-                        if (context.creatorValuesByIndex == null)
+                        try
                         {
-                            if (_isStruct)
+                            if (context.creatorValuesByIndex == null)
                             {
-                                ReadValueForStruct(ref reader, ref context.obj, memberIndex, context.readMembers!);
+                                if (_isStruct)
+                                {
+                                    ReadValueForStruct(ref reader, ref context.obj, memberIndex, context.readMembers!);
+                                }
+                                else
+                                {
+                                    context.converter.ReadValue(ref reader, context.obj!, memberIndex, context.readMembers!);
+                                }
                             }
-                            else
+                            else if (context.converter.ReadValue(ref reader, memberIndex, context.readMembers!, out object? value))
                             {
-                                context.converter.ReadValue(ref reader, context.obj!, memberIndex, context.readMembers!);
+                                if (context.converter.ObjectMapping.IsCreatorMember(memberIndex))
+                                {
+                                    AddMemberValue(ref reader, context.creatorValuesByIndex, memberIndex, value);
+                                }
+                                else
+                                {
+                                    AddMemberValue(ref reader, context.regularValuesByIndex!, memberIndex, value);
+                                }
                             }
                         }
-                        else if (context.converter.ReadValue(ref reader, memberIndex, context.readMembers!, out object? value))
+                        catch (CborException exception)
                         {
-                            if (context.converter.ObjectMapping.IsCreatorMember(memberIndex))
-                            {
-                                AddMemberValue(ref reader, context.creatorValuesByIndex, memberIndex, value);
-                            }
-                            else
-                            {
-                                AddMemberValue(ref reader, context.regularValuesByIndex!, memberIndex, value);
-                            }
+                            PushMemberSegment(exception, context.converter, memberIndex);
+                            throw;
                         }
                     }
                     break;
                 case CborObjectFormat.Array:
-                    if (context.creatorValuesByIndex == null)
+                    try
                     {
-                        if (_isStruct)
+                        if (context.creatorValuesByIndex == null)
                         {
-                            ReadValueForStruct(ref reader, ref context.obj, context.memberIndex, context.readMembers!);
+                            if (_isStruct)
+                            {
+                                ReadValueForStruct(ref reader, ref context.obj, context.memberIndex, context.readMembers!);
+                            }
+                            else
+                            {
+                                context.converter.ReadValue(ref reader, context.obj!, context.memberIndex, context.readMembers!);
+                            }
                         }
-                        else
+                        else if (context.converter.ReadValue(ref reader, context.memberIndex, context.readMembers!, out object? value))
                         {
-                            context.converter.ReadValue(ref reader, context.obj!, context.memberIndex, context.readMembers!);
+                            if (context.converter.ObjectMapping.IsCreatorMember(context.memberIndex))
+                            {
+                                AddMemberValue(ref reader, context.creatorValuesByIndex, context.memberIndex, value);
+                            }
+                            else
+                            {
+                                AddMemberValue(ref reader, context.regularValuesByIndex!, context.memberIndex, value);
+                            }
                         }
                     }
-                    else if (context.converter.ReadValue(ref reader, context.memberIndex, context.readMembers!, out object? value))
+                    catch (CborException exception)
                     {
-                        if (context.converter.ObjectMapping.IsCreatorMember(context.memberIndex))
-                        {
-                            AddMemberValue(ref reader, context.creatorValuesByIndex, context.memberIndex, value);
-                        }
-                        else
-                        {
-                            AddMemberValue(ref reader, context.regularValuesByIndex!, context.memberIndex, value);
-                        }
+                        PushMemberSegment(exception, context.converter, context.memberIndex);
+                        throw;
                     }
 
                     context.memberIndex++;
                     break;
             }
+        }
+
+        /// <summary>
+        /// Names the member at <paramref name="memberIndex"/> in the failure path, by the name it has
+        /// on the type rather than by its position, which is what a caller reading the message is
+        /// looking for. Falls back to the position when the index maps to no member -- an index the
+        /// document invented, which has no name to give.
+        /// </summary>
+        private static void PushMemberSegment(CborException exception, IObjectConverter converter, int memberIndex)
+        {
+            // The name comes from the mapping rather than from the member converter: an integer-keyed
+            // member has no name in the document, so the converter carries an empty one, and the name
+            // on the type is exactly what the document does not say and the caller needs told.
+            foreach (IMemberMapping memberMapping in converter.ObjectMapping.MemberMappings)
+            {
+                if (memberMapping.MemberIndex == memberIndex && memberMapping.MemberInfo != null)
+                {
+                    exception.PrependPathMember(memberMapping.MemberInfo.Name);
+                    return;
+                }
+            }
+
+            exception.PrependPathIndex(memberIndex);
         }
 
         private void ReadValueForStruct(ref CborReader reader, ref T instance, ReadOnlySpan<byte> memberName, HashSet<IMemberConverter> readMembers)
@@ -973,7 +1038,12 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (_options.UnhandledNameMode == UnhandledNameMode.ThrowException)
             {
-                throw reader.BuildException($"Unhandled name [{Encoding.ASCII.GetString(rawName)}] in class [{type.Name}] while deserializing.");
+                // The name is whatever the document chose to send, so it is bounded and escaped on the
+                // same terms as any other document text rather than copied into the message whole.
+                // UTF-8 rather than ASCII: a CBOR text string is UTF-8, and decoding it as ASCII turned
+                // every non-ASCII member name into a row of question marks.
+                throw reader.BuildException(
+                    $"Unhandled name [{TextTruncation.Ellipsize(Encoding.UTF8.GetString(rawName))}] in class [{type.Name}] while deserializing.");
             }
         }
 
