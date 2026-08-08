@@ -40,6 +40,8 @@ namespace Dahomey.Cbor.Serialization.Conventions
         /// <see cref="UnhandledNameMode.Silent"/>, otherwise the unknown subtype's extra members throw
         /// instead of being skipped.
         /// </remarks>
+        /// <param name="serializationRegistry">The registry the convention resolves types through.</param>
+        /// <param name="memberName">Name of the member carrying the discriminator.</param>
         public DefaultDiscriminatorConvention(
             SerializationRegistry serializationRegistry, string memberName, Type? fallbackType)
         {

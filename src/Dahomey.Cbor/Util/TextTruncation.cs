@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text;
 
 namespace Dahomey.Cbor.Util
@@ -24,6 +24,7 @@ namespace Dahomey.Cbor.Util
         /// </remarks>
         public const int MaxCharsInMessage = 64;
 
+        /// <param name="text">The document text to render.</param>
         /// <param name="escapeApostrophe">
         /// Set where the result is wrapped in <c>'…'</c>, as a path segment is. Left off elsewhere so
         /// that ordinary prose is not littered with backslashes.

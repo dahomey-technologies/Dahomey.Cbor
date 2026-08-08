@@ -102,6 +102,7 @@ namespace Dahomey.Cbor.Serialization
         {
         }
 
+        /// <param name="buffer">The document to read.</param>
         /// <param name="maxDepth">
         /// Maximum nesting depth of maps and arrays. Exceeding it throws a <see cref="CborException"/>
         /// rather than recursing until the stack is exhausted, which is what deeply nested hostile
@@ -269,7 +270,7 @@ namespace Dahomey.Cbor.Serialization
         /// One consequence, which is the reason this is not simply equivalent: a null behind a
         /// semantic tag reads as a tag rather than as null, so the probe does not see it. The value's
         /// converter still calls <c>ReadNull()</c>, which skips the tag and yields null, so the value
-        /// is unaffected -- but <see cref="RequirementPolicy.DisallowNull"/> no longer rejects that
+        /// is unaffected -- but <see cref="Attributes.RequirementPolicy.DisallowNull"/> no longer rejects that
         /// one exotic shape. Pinned by <c>ATaggedNullIsNotRejectedByDisallowNull</c> and
         /// <c>ATaggedUndefinedIsNotRejectedByDisallowNull</c>.
         /// </para>

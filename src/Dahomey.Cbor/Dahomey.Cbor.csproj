@@ -16,6 +16,14 @@
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/29336625?s=200&amp;v=4</PackageIconUrl>
     <Copyright>Copyright © Dahomey Technologies 2020</Copyright>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <!--
+      Ships the XML doc alongside the assembly, so that the guidance on the public surface - notably
+      how a custom converter contributes to CborException.Path, and why it must rethrow rather than
+      wrap - reaches consumers in IntelliSense rather than living only in this repository.
+      CS1591 stays off: documenting every public member is a larger undertaking than this enables.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>

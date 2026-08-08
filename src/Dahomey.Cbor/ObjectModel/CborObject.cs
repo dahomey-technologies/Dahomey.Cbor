@@ -218,7 +218,7 @@ namespace Dahomey.Cbor.ObjectModel
 
             ICborConverter<CborObject> cborObjectConverter = options.Registry.ConverterRegistry.Lookup<CborObject>();
             CborReader reader = new CborReader(buffer.WrittenSpan);
-            return cborObjectConverter.Read(ref reader);
+            return RootReader.Read(ref reader, cborObjectConverter);
         }
 
         public T ToObject<T>(CborOptions? options = null)

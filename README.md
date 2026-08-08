@@ -90,6 +90,10 @@ Every failure raised while deserializing has a path, down to ``$`` for a documen
 requested type outright — so ``Path`` being ``null`` means the exception did not come from a read at
 all, such as a serialization failure or a mapping the registry refused to build.
 
+The path grows as the exception travels back up the stack, so read it once the read has failed rather
+than part of the way out of it: an intercepting ``catch`` that logs ``Message`` and rethrows sees only
+the path as far as it is known at that point.
+
 A path is as precise as the converters it passed through. A converter you register yourself is already
 named by the object holding it, and one that delegates to other converters inherits whatever they
 contribute — so most custom converters need do nothing. A converter that decodes a structure of its
@@ -105,7 +109,7 @@ public override Payload Read(ref CborReader reader)
     catch (CborException exception)
     {
         exception.PrependPathMember("Body");   // or PrependPathIndex(i) inside a sequence
-        throw;                                 // bare throw, so the stack trace survives
+        throw;                                 // rethrow the same exception, do not wrap it
     }
 }
 ```

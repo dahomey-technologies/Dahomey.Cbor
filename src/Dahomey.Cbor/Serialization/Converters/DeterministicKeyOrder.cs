@@ -1,4 +1,4 @@
-using Dahomey.Cbor.ObjectModel;
+﻿using Dahomey.Cbor.ObjectModel;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
@@ -41,6 +41,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// Returns the entries in deterministic key order, encoding each key exactly once with
         /// <paramref name="keyConverter" />.
         /// </summary>
+        /// <param name="entries">The entries to order.</param>
+        /// <param name="keyConverter">Encodes each key, so the order is the order of the bytes written.</param>
         /// <param name="maxDepth">
         /// Depth bound for the scratch writer. A key is normally a scalar, but nothing forbids a
         /// composite one, and the bound should be the caller's rather than the default.

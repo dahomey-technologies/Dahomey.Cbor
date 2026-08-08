@@ -30,7 +30,6 @@ namespace Dahomey.Cbor.Serialization.Conventions
         /// Registers the convention.This behaves like a stack, so the 
         /// last convention registered is the first convention consulted.
         /// </summary>
-        /// <param name="type">The type.</param>
         /// <param name="convention">The convention.</param>
         public void RegisterConvention(IDiscriminatorConvention convention)
         {

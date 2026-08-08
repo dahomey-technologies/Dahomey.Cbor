@@ -545,6 +545,40 @@ namespace Dahomey.Cbor.Tests.Issues
             }
         }
 
+        /// <summary>
+        /// Building a <see cref="CborObject"/> from a value reads it back, so it is a read like any
+        /// other and reports like one.
+        /// </summary>
+        [Fact]
+        public void BuildingAnObjectFromANonObjectReportsTheRoot()
+        {
+            CborException exception = Assert.Throws<CborException>(() => CborObject.FromObject(1));
+
+            Assert.Equal("$", exception.Path);
+        }
+
+        /// <summary>
+        /// The public seam runs inside a caller's <c>catch</c>, so it answers nonsense with something
+        /// harmless rather than with a second exception over the top of the first.
+        /// </summary>
+        [Fact]
+        public void TheSeamRefusesToInventAPositionItWasNotGiven()
+        {
+            CborException negative = new CborException("boom");
+            negative.PrependPathIndex(-1);
+
+            CborException huge = new CborException("boom");
+            huge.PrependPathMember(new string('\n', 500));
+
+            // A negative index is not a position, so it names none - but the failure is still marked
+            // as having been seen.
+            Assert.Equal("$", negative.Path);
+
+            // A caller-supplied name is bounded and escaped on the same terms as document text.
+            Assert.True(huge.Path!.Length < 100, $"path was {huge.Path.Length} chars");
+            Assert.DoesNotContain("\n", huge.Path);
+        }
+
         private static byte[] WriteSingleMemberMap(string memberName)
         {
             ByteBufferWriter writer = new ByteBufferWriter();

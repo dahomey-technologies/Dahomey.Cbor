@@ -33,7 +33,8 @@ namespace Dahomey.Cbor
         /// Every failure raised while deserializing has a path, down to <c>$</c> for a document that
         /// contradicts the requested type outright. <c>null</c> therefore means the exception did not
         /// come from a read at all - a serialization failure, or a mapping the registry refused to
-        /// build.
+        /// build - unless a caller has put segments on it themselves through
+        /// <see cref="PrependPathMember(string)"/>.
         /// <para>
         /// A path is as precise as the converters it passed through. Converters supplied by the caller
         /// contribute no segment of their own, so a failure inside one is reported against the member
@@ -71,6 +72,13 @@ namespace Dahomey.Cbor
         /// known yet when the reader throws: the byte offset is all it has. Everything the base message
         /// said is preserved, and the path is appended to it once the stack has unwound far enough for
         /// the model position to be known.
+        /// <para>
+        /// It follows that this grows as the exception travels: read while the stack is still
+        /// unwinding, it reports the path as far as it is known, not the whole of it. Anything that
+        /// captures the text mid-flight - an intercepting <c>catch</c> that logs and rethrows, a
+        /// wrapper exception built from it - captures a partial answer. <see cref="Path"/> has the same
+        /// property, for the same reason.
+        /// </para>
         /// </remarks>
         public override string Message
         {
@@ -92,8 +100,8 @@ namespace Dahomey.Cbor
         /// a key of a map, which read the same way in a path and are not worth distinguishing.
         /// </summary>
         /// <remarks>
-        /// Call this from a converter's <c>catch</c> and rethrow with a bare <c>throw;</c>, so that the
-        /// original stack trace survives. Each frame adds only its own segment, outermost last:
+        /// Call this from a converter's <c>catch</c> and rethrow the same exception with a bare
+        /// <c>throw;</c>. Each frame adds only its own segment, outermost last:
         /// <code>
         /// try
         /// {
@@ -106,6 +114,14 @@ namespace Dahomey.Cbor
         /// }
         /// </code>
         /// <para>
+        /// Rethrowing the same exception is not only about the stack trace. <see cref="Message"/> is
+        /// composed on demand from the segments collected so far, so wrapping this exception in a new
+        /// one - <c>throw new CborException("…" + exception.Message)</c> - freezes a half-built path
+        /// into the new message and then appends the rest of it a second time as the stack keeps
+        /// unwinding. Read <see cref="Message"/> or <see cref="Path"/> once the read has failed, not
+        /// part of the way out of it.
+        /// </para>
+        /// <para>
         /// Only a converter that decodes a structure of its own needs this. One registered against a
         /// member is already named by the object holding it, and one that delegates to other converters
         /// inherits whatever they contribute.
@@ -113,9 +129,10 @@ namespace Dahomey.Cbor
         /// <para>
         /// The name may be one the document chose rather than one a type declares - a map key is
         /// arbitrary by definition - so it is bounded in length and escaped, and cannot forge structure
-        /// in the message that carries it. A null or empty name is recorded as an unnamed segment
-        /// rather than rejected: this runs while an exception is already in flight, and throwing a
-        /// second one over a diagnostic would lose the first.
+        /// in the message that carries it. A null or empty name is recorded rather than rejected, since
+        /// this runs while an exception is already in flight and throwing a second one over a
+        /// diagnostic would lose the first; it renders as <c>['']</c>, which a genuinely empty name
+        /// also does, so prefer <see cref="PrependPathIndex(int)"/> where a position is known.
         /// </para>
         /// </remarks>
         public void PrependPathMember(string? name)
@@ -124,11 +141,19 @@ namespace Dahomey.Cbor
         }
 
         /// <summary>
-        /// Records that this failure happened at position <paramref name="index"/> of an array.
+        /// Records that this failure happened at position <paramref name="index"/> of a sequence. A
+        /// negative index is not a position and contributes no segment, though the failure is still
+        /// marked as having been seen here.
         /// </summary>
         /// <inheritdoc cref="PrependPathMember(string)" path="/remarks"/>
         public void PrependPathIndex(int index)
         {
+            if (index < 0)
+            {
+                MarkPathKnown();
+                return;
+            }
+
             PushSegment($"[{index}]");
         }
 
