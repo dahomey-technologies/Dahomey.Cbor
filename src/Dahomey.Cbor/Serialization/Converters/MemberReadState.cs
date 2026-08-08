@@ -12,8 +12,9 @@ namespace Dahomey.Cbor.Serialization.Converters
     /// neither piece of state costs an allocation on the path taken by a document with no duplicates
     /// and no required members - which is most documents.
     /// <para>
-    /// Members are identified by an ordinal assigned per converter, so "already read" is a bit in a
-    /// <see cref="ulong"/>: one test and one or per member. A type with more than 64 deserializable
+    /// Members are identified by the ordinal their <see cref="MemberReadEntry"/> carries, so "already
+    /// read" is a bit in a <see cref="ulong"/>: one test and one or per member, with nothing to look
+    /// up, since the read path has the entry in hand already. A type with more than 64 deserializable
     /// members falls back to a set, allocated only if a member past the 64th is actually read.
     /// </para>
     /// </remarks>
@@ -43,19 +44,8 @@ namespace Dahomey.Cbor.Serialization.Converters
             _seenBeyond = null;
         }
 
-        /// <summary>
-        /// Whether a member read twice is to be refused. Checked before the ordinal is looked up, so
-        /// <see cref="DuplicateKeyMode.LastWins"/> pays nothing for the check being available.
-        /// </summary>
-        public readonly bool RejectsDuplicates => _rejectDuplicates;
-
         /// <summary>Whether required members are being tracked at all.</summary>
         public readonly bool TracksRequiredMembers => _requiredMembersRead != null;
-
-        public readonly void MarkRequiredMemberRead(IMemberConverter memberConverter)
-        {
-            _requiredMembersRead?.Add(memberConverter);
-        }
 
         public readonly bool WasRead(IMemberConverter memberConverter)
         {
@@ -63,31 +53,34 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         /// <summary>
-        /// Records that the member with this ordinal has been read, and says whether it had been read
-        /// already.
+        /// Records that the document has supplied this member, and says whether it had supplied it
+        /// once already - which is a duplicate map key, for a caller that means to refuse one.
         /// </summary>
-        /// <param name="ordinal">
-        /// The member's position in its converter's read set, or -1 for a member that has none. A
-        /// member with no ordinal is never reported as a repeat: saying "duplicate" about something
-        /// this cannot actually tell apart would be worse than saying nothing.
-        /// </param>
-        public bool MarkSeen(int ordinal)
+        /// <remarks>
+        /// Always false under <see cref="DuplicateKeyMode.LastWins"/>, where nothing is going to be
+        /// refused: the bookkeeping is skipped rather than done and discarded. A negative ordinal
+        /// belongs to a member this cannot tell apart from another and is never reported as a repeat -
+        /// saying "duplicate" about something unidentified would be worse than saying nothing.
+        /// </remarks>
+        public bool MarkRead(in MemberReadEntry entry)
         {
-            if (ordinal < 0)
+            _requiredMembersRead?.Add(entry.Converter);
+
+            if (!_rejectDuplicates || entry.Ordinal < 0)
             {
                 return false;
             }
 
-            if (ordinal < 64)
+            if (entry.Ordinal < 64)
             {
-                ulong bit = 1UL << ordinal;
-                bool alreadySeen = (_seen & bit) != 0;
+                ulong bit = 1UL << entry.Ordinal;
+                bool alreadyRead = (_seen & bit) != 0;
                 _seen |= bit;
-                return alreadySeen;
+                return alreadyRead;
             }
 
             _seenBeyond ??= new HashSet<int>();
-            return !_seenBeyond.Add(ordinal);
+            return !_seenBeyond.Add(entry.Ordinal);
         }
     }
 }

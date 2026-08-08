@@ -19,8 +19,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, ref MemberReadState state, [MaybeNullWhen(false)] out object value);
         bool ReadValue(ref CborReader reader, int memberIndex, ref MemberReadState state, [MaybeNullWhen(false)] out object value);
         IReadOnlyList<IMemberConverter> MemberConvertersForWrite { get; }
-        ByteBufferDictionary<IMemberConverter> MemberConvertersForRead { get; }
-        Dictionary<int, IMemberConverter> MemberConvertersForReadByIndex { get; }
+        ByteBufferDictionary<MemberReadEntry> MemberConvertersForRead { get; }
+        Dictionary<int, MemberReadEntry> MemberConvertersForReadByIndex { get; }
         IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead { get; }
         IObjectMapping ObjectMapping { get; }
     }
@@ -88,24 +88,16 @@ namespace Dahomey.Cbor.Serialization.Converters
             public LengthMode lengthMode;
         }
 
-        private readonly ByteBufferDictionary<IMemberConverter> _memberConvertersForRead = new ByteBufferDictionary<IMemberConverter>();
-        private readonly Dictionary<int, IMemberConverter> _memberConvertersForReadByIndex = new();
+        private readonly ByteBufferDictionary<MemberReadEntry> _memberConvertersForRead = new ByteBufferDictionary<MemberReadEntry>();
+        private readonly Dictionary<int, MemberReadEntry> _memberConvertersForReadByIndex = new();
 
         /// <summary>
-        /// A small dense number per deserializable member, so that <see cref="MemberReadState"/> can
-        /// hold "already read" as a bitmask instead of a set. Numbered by the order members were built
-        /// in, which is arbitrary but stable, since nothing depends on the value beyond its being
-        /// distinct within this converter.
+        /// Numbers the members added to the read lookups above, so each carries a
+        /// <see cref="MemberReadEntry.Ordinal"/> distinct within this converter. Counts entries rather
+        /// than distinct member converters, so that presenting the same member converter twice cannot
+        /// hand two members one number.
         /// </summary>
-        /// <remarks>
-        /// Built once per converter - which is itself built once per type and cached for the lifetime
-        /// of the options - and keyed by reference, like the required-member set. Kept here rather
-        /// than on <see cref="IMemberConverter"/> so that no member converter carries a number that
-        /// only means something relative to one converter: a mapping free to hand the same member
-        /// converter to two <see cref="ObjectConverter{T}"/>s would make such a number silently wrong
-        /// for one of them, and wrong here means a duplicate reported that is not one.
-        /// </remarks>
-        private readonly Dictionary<IMemberConverter, int> _readOrdinals = new();
+        private int _nextReadOrdinal;
         public List<IMemberConverter> _requiredMemberConvertersForRead = new List<IMemberConverter>();
         private readonly List<IMemberConverter> _memberConvertersForWrite;
         private List<IMemberConverter>? _deterministicMemberConvertersForWrite;
@@ -161,8 +153,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return sorted;
             }
         }
-        public ByteBufferDictionary<IMemberConverter> MemberConvertersForRead => _memberConvertersForRead;
-        public Dictionary<int, IMemberConverter> MemberConvertersForReadByIndex => _memberConvertersForReadByIndex;
+        public ByteBufferDictionary<MemberReadEntry> MemberConvertersForRead => _memberConvertersForRead;
+        public Dictionary<int, MemberReadEntry> MemberConvertersForReadByIndex => _memberConvertersForReadByIndex;
         public IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead => _requiredMemberConvertersForRead;
         public IObjectMapping ObjectMapping => _objectMapping;
 
@@ -211,18 +203,18 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 if (memberMapping.CanBeDeserialized || isCreatorMember)
                 {
-                    _readOrdinals[memberConverter] = _readOrdinals.Count;
-
                     switch (_objectMapping.ObjectFormat)
                     {
                         case CborObjectFormat.StringKeyMap:
-                            _memberConvertersForRead.Add(memberConverter.MemberName, memberConverter);
+                            _memberConvertersForRead.Add(
+                                memberConverter.MemberName, new MemberReadEntry(memberConverter, _nextReadOrdinal++));
                             break;
                         case CborObjectFormat.IntKeyMap:
                         case CborObjectFormat.Array:
                             if (memberConverter.MemberIndex.HasValue)
                             {
-                                _memberConvertersForReadByIndex.Add(memberConverter.MemberIndex.Value, memberConverter);
+                                _memberConvertersForReadByIndex.Add(
+                                    memberConverter.MemberIndex.Value, new MemberReadEntry(memberConverter, _nextReadOrdinal++));
                             }
                             break;
                     }
@@ -344,13 +336,13 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                                 foreach (KeyValuePair<RawString, object> value in context.regularValues!)
                                 {
-                                    if (!context.converter.MemberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out IMemberConverter? memberConverter))
+                                    if (!context.converter.MemberConvertersForRead.TryGetValue(value.Key.Buffer.Span, out MemberReadEntry entry))
                                     {
                                         // should not happen
                                         throw new CborException("Unexpected error");
                                     }
 
-                                    memberConverter.Set(context.obj, value.Value);
+                                    entry.Converter.Set(context.obj, value.Value);
                                 }
                             }
                             break;
@@ -365,13 +357,13 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                                 foreach (KeyValuePair<int, object> value in context.regularValuesByIndex!)
                                 {
-                                    if (!context.converter.MemberConvertersForReadByIndex.TryGetValue(value.Key, out IMemberConverter? memberConverter))
+                                    if (!context.converter.MemberConvertersForReadByIndex.TryGetValue(value.Key, out MemberReadEntry entry))
                                     {
                                         // should not happen
                                         throw new CborException("Unexpected error");
                                     }
 
-                                    memberConverter.Set(context.obj, value.Value);
+                                    entry.Converter.Set(context.obj, value.Value);
                                 }
                             }
                             break;
@@ -407,36 +399,36 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             T value = (T)obj;
 
-            if (!_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter? memberConverter))
+            if (!_memberConvertersForRead.TryGetValue(memberName, out MemberReadEntry entry))
             {
                 HandleUnknownName(ref reader, typeof(T), memberName);
                 reader.SkipDataItem();
             }
             else
             {
-                MarkMemberRead(ref reader, ref state, memberConverter, memberName);
-                memberConverter.Read(ref reader, value);
+                MarkMemberRead(ref reader, ref state, entry, memberName);
+                entry.Converter.Read(ref reader, value);
             }
         }
         public void ReadValue(ref CborReader reader, object obj, int memberIndex, ref MemberReadState state)
         {
             T value = (T)obj;
 
-            if (!_memberConvertersForReadByIndex.TryGetValue(memberIndex, out IMemberConverter? memberConverter))
+            if (!_memberConvertersForReadByIndex.TryGetValue(memberIndex, out MemberReadEntry entry))
             {
                 HandleUnknownIndex(ref reader, typeof(T), memberIndex);
                 reader.SkipDataItem();
             }
             else
             {
-                MarkMemberRead(ref reader, ref state, memberConverter, memberIndex);
-                memberConverter.Read(ref reader, value);
+                MarkMemberRead(ref reader, ref state, entry, memberIndex);
+                entry.Converter.Read(ref reader, value);
             }
         }
 
         public bool ReadValue(ref CborReader reader, ReadOnlySpan<byte> memberName, ref MemberReadState state, [MaybeNullWhen(false)] out object value)
         {
-            if (!_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter? memberConverter))
+            if (!_memberConvertersForRead.TryGetValue(memberName, out MemberReadEntry entry))
             {
                 HandleUnknownName(ref reader, typeof(T), memberName);
                 reader.SkipDataItem();
@@ -445,15 +437,15 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             else
             {
-                MarkMemberRead(ref reader, ref state, memberConverter, memberName);
-                value = memberConverter.Read(ref reader);
+                MarkMemberRead(ref reader, ref state, entry, memberName);
+                value = entry.Converter.Read(ref reader);
                 return true;
             }
         }
 
         public bool ReadValue(ref CborReader reader, int memberIndex, ref MemberReadState state, [MaybeNullWhen(false)] out object value)
         {
-            if (!_memberConvertersForReadByIndex.TryGetValue(memberIndex, out IMemberConverter? memberConverter))
+            if (!_memberConvertersForReadByIndex.TryGetValue(memberIndex, out MemberReadEntry entry))
             {
                 HandleUnknownIndex(ref reader, typeof(T), memberIndex);
                 reader.SkipDataItem();
@@ -462,8 +454,8 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
             else
             {
-                MarkMemberRead(ref reader, ref state, memberConverter, memberIndex);
-                value = memberConverter.Read(ref reader);
+                MarkMemberRead(ref reader, ref state, entry, memberIndex);
+                value = entry.Converter.Read(ref reader);
                 return true;
             }
         }
@@ -845,11 +837,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private void ReadValueForStruct(ref CborReader reader, ref T instance, ReadOnlySpan<byte> memberName, ref MemberReadState state)
         {
-            if (_memberConvertersForRead.TryGetValue(memberName, out IMemberConverter? memberConverter))
+            if (_memberConvertersForRead.TryGetValue(memberName, out MemberReadEntry entry))
             {
-                MarkMemberRead(ref reader, ref state, memberConverter, memberName);
+                MarkMemberRead(ref reader, ref state, entry, memberName);
 
-                ((IMemberConverter<T>)memberConverter).Read(ref reader, ref instance);
+                ((IMemberConverter<T>)entry.Converter).Read(ref reader, ref instance);
             }
             else
             {
@@ -859,11 +851,11 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private void ReadValueForStruct(ref CborReader reader, ref T instance, int memberIndex, ref MemberReadState state)
         {
-            if (_memberConvertersForReadByIndex.TryGetValue(memberIndex, out IMemberConverter? memberConverter))
+            if (_memberConvertersForReadByIndex.TryGetValue(memberIndex, out MemberReadEntry entry))
             {
-                MarkMemberRead(ref reader, ref state, memberConverter, memberIndex);
+                MarkMemberRead(ref reader, ref state, entry, memberIndex);
 
-                ((IMemberConverter<T>)memberConverter).Read(ref reader, ref instance);
+                ((IMemberConverter<T>)entry.Converter).Read(ref reader, ref instance);
             }
             else
             {
@@ -882,10 +874,10 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// member to be a repeat of, and what becomes of it is
         /// <see cref="CborOptions.UnhandledNameMode"/>'s question rather than this one's.
         /// </remarks>
-        private void MarkMemberRead(
-            ref CborReader reader, ref MemberReadState state, IMemberConverter memberConverter, ReadOnlySpan<byte> memberName)
+        private static void MarkMemberRead(
+            ref CborReader reader, ref MemberReadState state, in MemberReadEntry entry, ReadOnlySpan<byte> memberName)
         {
-            if (IsRepeat(ref state, memberConverter))
+            if (state.MarkRead(entry))
             {
                 // Decoded here rather than kept around: the name is in hand as bytes, and is only
                 // wanted as text once the read has already failed.
@@ -893,24 +885,14 @@ namespace Dahomey.Cbor.Serialization.Converters
             }
         }
 
-        /// <inheritdoc cref="MarkMemberRead(ref CborReader, ref MemberReadState, IMemberConverter, ReadOnlySpan{byte})"/>
-        private void MarkMemberRead(
-            ref CborReader reader, ref MemberReadState state, IMemberConverter memberConverter, int memberIndex)
+        /// <inheritdoc cref="MarkMemberRead(ref CborReader, ref MemberReadState, in MemberReadEntry, ReadOnlySpan{byte})"/>
+        private static void MarkMemberRead(
+            ref CborReader reader, ref MemberReadState state, in MemberReadEntry entry, int memberIndex)
         {
-            if (IsRepeat(ref state, memberConverter))
+            if (state.MarkRead(entry))
             {
                 throw reader.BuildException(MapKeyErrors.Duplicate(memberIndex));
             }
-        }
-
-        private bool IsRepeat(ref MemberReadState state, IMemberConverter memberConverter)
-        {
-            state.MarkRequiredMemberRead(memberConverter);
-
-            // The ordinal lookup is skipped entirely under LastWins, where nothing is going to be
-            // refused and the answer would only be discarded.
-            return state.RejectsDuplicates
-                && state.MarkSeen(_readOrdinals.TryGetValue(memberConverter, out int ordinal) ? ordinal : -1);
         }
 
         private static int CompareMembersForDeterministicOrder(IMemberConverter x, IMemberConverter y)

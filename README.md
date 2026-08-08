@@ -409,12 +409,16 @@ differently hashing — bytes than what was received. Hash the wire bytes direct
 
 ### Duplicate map keys (RFC 8949 §5.6)
 
-A CBOR map carrying the same key twice is rejected with a ``CborException`` naming the key and where
-it was read:
+A CBOR map carrying the same key twice is rejected with a ``CborException`` naming the key, the byte
+it was read at, and the path it sits at:
 
 ```
-[7] Duplicate map key: "a"
+[6] Duplicate map key: A. Failed to deserialize from "$.A".
 ```
+
+The object model is the one target that reports no path segment for it — ``CborValue``/``CborObject``
+maps are not members, so the path of a duplicate at the root of one stays ``$``. The offset and the
+key are given whatever the target.
 
 This applies to every decode target — the ``CborValue`` object model, ``Dictionary<K,V>`` and the
 other dictionary types, and mapped classes with or without a creator mapping. §5.6 requires a
@@ -449,3 +453,14 @@ is not offered.
 A repeated key that matches no member is not a duplicate member — what happens to an unknown name is
 ``UnhandledNameMode``'s question, and repeating one does not change the answer. Neither is a null map
 key, which is refused in both modes: there is no earlier occurrence for a later one to win over.
+
+Two consequences of that follow, both by construction rather than by choice:
+
+* **A repeated discriminator key is not refused.** The discriminator is not a deserializable member,
+  so a repeat of it is an unknown name like any other, and the first occurrence is the one that
+  decides the type.
+* **A type whose members are mapped to the same CBOR name** — two ``[CborProperty("X")]`` on one type,
+  say — writes a document with a repeated key that it then cannot read back. The mapping is ambiguous
+  in both directions, since only one of the two members can ever be read from key ``X``, so it is
+  worth removing rather than working around; ``DuplicateKeyMode.LastWins`` will read such a document
+  if you have one already.

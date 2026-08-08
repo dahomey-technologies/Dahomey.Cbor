@@ -438,6 +438,239 @@ namespace Dahomey.Cbor.Tests.Issues
 
         #endregion
 
+        #region The paths where a per-converter ordinal could go wrong
+
+        public abstract class Shape
+        {
+            public int A { get; set; }
+        }
+
+        [CborDiscriminator("Square")]
+        public class Square : Shape
+        {
+            public int B { get; set; }
+        }
+
+        private static CborOptions Polymorphic()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Square>();
+            return options;
+        }
+
+        /// <summary>
+        /// A polymorphic read runs on the derived type's converter, not the one the call started on,
+        /// so the ordinals in play are that converter's. A well-formed document has to survive it.
+        /// </summary>
+        [Fact]
+        public void APolymorphicDocumentWithoutDuplicatesIsRead()
+        {
+            byte[] document = Map(("_t", "Square"), ("A", 1), ("B", 2));
+
+            Shape shape = Cbor.Deserialize<Shape>(document, Polymorphic());
+
+            Square square = Assert.IsType<Square>(shape);
+            Assert.Equal(1, square.A);
+            Assert.Equal(2, square.B);
+        }
+
+        /// <summary>A member declared on the derived type, repeated.</summary>
+        [Fact]
+        public void APolymorphicDuplicateOnADerivedMemberIsRejected()
+        {
+            byte[] document = Map(("_t", "Square"), ("A", 1), ("B", 2), ("B", 3));
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Shape>(document, Polymorphic()));
+
+            Assert.Equal("$.B", exception.Path);
+            Assert.Contains("Duplicate map key", exception.Message);
+        }
+
+        /// <summary>
+        /// And one inherited from the base, which the derived converter numbers among its own members.
+        /// </summary>
+        [Fact]
+        public void APolymorphicDuplicateOnAnInheritedMemberIsRejected()
+        {
+            byte[] document = Map(("_t", "Square"), ("A", 1), ("A", 2));
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Shape>(document, Polymorphic()));
+
+            Assert.Equal("$.A", exception.Path);
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class ArrayHolder
+        {
+            [CborProperty(0)]
+            public int A { get; set; }
+
+            [CborProperty(1)]
+            public int B { get; set; }
+        }
+
+        /// <summary>
+        /// Array format cannot express a repeated key - members are positional - so nothing there is
+        /// ever a duplicate. The assertion worth having is that the tracking does not invent one, since
+        /// each item is read at an index the reader advances itself.
+        /// </summary>
+        [Fact]
+        public void ArrayFormatIsUnaffected()
+        {
+            // 82 0c 0d  -- [12, 13]
+            ArrayHolder holder = Cbor.Deserialize<ArrayHolder>("820C0D".HexToBytes());
+
+            Assert.Equal(12, holder.A);
+            Assert.Equal(13, holder.B);
+        }
+
+        public class Pair
+        {
+            public Holder First { get; set; }
+            public Holder Second { get; set; }
+            public List<Holder> Items { get; set; }
+        }
+
+        /// <summary>
+        /// Two objects of the same type in one document each get their own state. If it leaked between
+        /// them - a field on the converter rather than in the reader context, say - the second would be
+        /// refused for a member the first had read.
+        /// </summary>
+        [Fact]
+        public void SiblingsOfTheSameTypeDoNotShareState()
+        {
+            byte[] document = SiblingsDocument();
+
+            Pair pair = Cbor.Deserialize<Pair>(document);
+
+            Assert.Equal(1, pair.First.A);
+            Assert.Equal(2, pair.Second.A);
+            Assert.Equal(new[] { 3, 4 }, pair.Items.ConvertAll(item => item.A));
+        }
+
+        /// <summary>And a duplicate nested inside one of them is still caught, and named by its path.</summary>
+        [Fact]
+        public void ADuplicateNestedInAMemberIsRejected()
+        {
+            ByteBufferWriter writer = new ByteBufferWriter();
+            CborWriter cborWriter = new CborWriter(writer);
+            cborWriter.WriteBeginMap(1);
+            cborWriter.WriteString("Second");
+            cborWriter.WriteBeginMap(2);
+            cborWriter.WriteString("A");
+            cborWriter.WriteInt32(1);
+            cborWriter.WriteString("A");
+            cborWriter.WriteInt32(2);
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Pair>(writer.WrittenSpan.ToArray()));
+
+            Assert.Equal("$.Second.A", exception.Path);
+        }
+
+        public class MixedHolder
+        {
+            public int Id { get; set; }
+            public int Extra { get; set; }
+
+            [CborConstructor]
+            public MixedHolder(int id)
+            {
+                Id = id;
+            }
+        }
+
+        /// <summary>
+        /// A creator type collects constructor arguments and ordinary members into two different
+        /// dictionaries. Both are member reads, so a repeat of either is refused the same way.
+        /// </summary>
+        [Fact]
+        public void AMixedCreatorTypeRejectsADuplicateOnEitherKindOfMember()
+        {
+            CborException onCreatorMember = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<MixedHolder>(Map(("Id", 12), ("Id", 13), ("Extra", 1))));
+
+            Assert.Equal("$.Id", onCreatorMember.Path);
+
+            CborException onRegularMember = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<MixedHolder>(Map(("Id", 12), ("Extra", 1), ("Extra", 2))));
+
+            Assert.Equal("$.Extra", onRegularMember.Path);
+        }
+
+        [Fact]
+        public void AMixedCreatorTypeKeepsTheLastValueOfEitherKindUnderLastWins()
+        {
+            MixedHolder onCreatorMember =
+                Cbor.Deserialize<MixedHolder>(Map(("Id", 12), ("Id", 13), ("Extra", 1)), LastWins);
+
+            Assert.Equal(13, onCreatorMember.Id);
+
+            MixedHolder onRegularMember =
+                Cbor.Deserialize<MixedHolder>(Map(("Id", 12), ("Extra", 1), ("Extra", 2)), LastWins);
+
+            Assert.Equal(2, onRegularMember.Extra);
+        }
+
+        #endregion
+
+        /// <summary>
+        /// A map of text keys to values that are either an int or a string, written in the order given
+        /// so that a repeated key stays repeated.
+        /// </summary>
+        private static byte[] Map(params (string Key, object Value)[] entries)
+        {
+            ByteBufferWriter writer = new ByteBufferWriter();
+            CborWriter cborWriter = new CborWriter(writer);
+            cborWriter.WriteBeginMap(entries.Length);
+
+            foreach ((string key, object value) in entries)
+            {
+                cborWriter.WriteString(key);
+
+                if (value is int number)
+                {
+                    cborWriter.WriteInt32(number);
+                }
+                else
+                {
+                    cborWriter.WriteString((string)value);
+                }
+            }
+
+            return writer.WrittenSpan.ToArray();
+        }
+
+        /// <summary>{"First": {"A": 1}, "Second": {"A": 2}, "Items": [{"A": 3}, {"A": 4}]}</summary>
+        private static byte[] SiblingsDocument()
+        {
+            ByteBufferWriter writer = new ByteBufferWriter();
+            CborWriter cborWriter = new CborWriter(writer);
+            cborWriter.WriteBeginMap(3);
+
+            cborWriter.WriteString("First");
+            WriteHolder(ref cborWriter, 1);
+
+            cborWriter.WriteString("Second");
+            WriteHolder(ref cborWriter, 2);
+
+            cborWriter.WriteString("Items");
+            cborWriter.WriteBeginArray(2);
+            WriteHolder(ref cborWriter, 3);
+            WriteHolder(ref cborWriter, 4);
+
+            return writer.WrittenSpan.ToArray();
+        }
+
+        private static void WriteHolder(ref CborWriter writer, int a)
+        {
+            writer.WriteBeginMap(1);
+            writer.WriteString("A");
+            writer.WriteInt32(a);
+        }
+
         /// <summary>
         /// A two-entry map carrying the same text key twice, for keys whose hex is not worth spelling
         /// out by hand.
