@@ -197,6 +197,14 @@ namespace Dahomey.Cbor.Serialization.Converters
             CborValue key = Read(ref reader);
             CborValue value = Read(ref reader);
 
+            if (_options.DuplicateKeyMode == DuplicateKeyMode.LastWins)
+            {
+                // An indexer assignment rather than Add: under LastWins a repeated key overwrites
+                // instead of throwing, and Add has no overwriting form.
+                context.obj[key] = value;
+                return;
+            }
+
             // Caught rather than pre-checked with ContainsKey: a duplicate is malformed input, so the
             // cost belongs on that path and not on the lookup every well-formed pair would pay. The
             // document was already refused here; without this it is refused as an ArgumentException,
