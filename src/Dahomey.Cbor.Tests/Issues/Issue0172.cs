@@ -72,8 +72,9 @@ namespace Dahomey.Cbor.Tests.Issues
         }
 
         /// <summary>
-        /// A non-empty string is constructed fresh per value, so it has nothing to alias and tags in
-        /// place as before.
+        /// A non-empty string is constructed fresh per value, so it has nothing to alias. The override
+        /// is unconditional and copies it anyway — one small allocation per tagged-string read, for a
+        /// result indistinguishable from tagging in place.
         /// </summary>
         [Fact]
         public void ATaggedNonEmptyStringIsUnaffected()
