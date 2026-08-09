@@ -43,54 +43,83 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// A nullable accepts exactly what its underlying type accepts.
+        /// On an item that is not null, a nullable reads exactly what its underlying type reads.
         /// </summary>
         /// <remarks>
-        /// Two stacked tags used to read into <c>T?</c> and throw into <c>T</c>: the tag was skipped
-        /// once here and once in the underlying converter, so a nullable was accidentally one tag more
-        /// lenient. Handing the tag back leaves a single skip. Asserted against the underlying type on
-        /// the same bytes rather than against a hard-coded outcome, so the two cannot drift apart
-        /// again without this failing.
+        /// This is the invariant the change commits to, and it is asserted as one: each case reads the
+        /// same bytes as <c>T</c> and as <c>T?</c> and compares the two outcomes, rather than pinning
+        /// either to a hard-coded result. A future change that makes the underlying type accept or
+        /// reject something new keeps this passing only if the nullable follows.
+        /// <para>
+        /// Null is excluded because that is the one thing a nullable is supposed to do differently --
+        /// <see cref="ANullIsNull"/> covers it.
+        /// </para>
+        /// <para>
+        /// Stacked tags are what broke it. The tag was skipped once here and once in the underlying
+        /// converter, so <c>T?</c> was accidentally one tag more lenient than <c>T</c>: <c>C1 C1 0C</c>
+        /// read as 12 into an <c>int?</c> and threw into an <c>int</c>.
+        /// </para>
         /// </remarks>
         [Theory]
+        [InlineData("0C")]
+        [InlineData("C10C")]
         [InlineData("C1C10C")]
         [InlineData("C0C10C")]
         [InlineData("C1C1C10C")]
-        public void StackedTagsAreRejectedJustAsTheyAreForTheUnderlyingType(string hexBuffer)
+        public void ANullableReadsWhatItsUnderlyingTypeReads(string hexBuffer)
         {
-            Assert.Throws<CborException>(() => Helper.Read<int>(hexBuffer));
-            Assert.Throws<CborException>(() => Helper.Read<int?>(hexBuffer));
+            AssertSameOutcome<int>(hexBuffer);
+            AssertSameOutcome<long>(hexBuffer);
+            AssertSameOutcome<double>(hexBuffer);
+            AssertSameOutcome<decimal>(hexBuffer);
+            AssertSameOutcome<bool>(hexBuffer);
+            AssertSameOutcome<BigInteger>(hexBuffer);
         }
 
         /// <summary>
-        /// The same alignment across the nullable types that reach different converters.
+        /// The invariant is behavioural equality, not rejection.
         /// </summary>
-        [Theory]
-        [InlineData(typeof(long), typeof(long?))]
-        [InlineData(typeof(double), typeof(double?))]
-        [InlineData(typeof(decimal), typeof(decimal?))]
-        [InlineData(typeof(bool), typeof(bool?))]
-        public void ANullableRejectsStackedTagsForEveryUnderlyingType(Type underlying, Type nullable)
+        /// <remarks>
+        /// <see cref="DateTime"/> is the case that shows the difference: two stacked tags over an
+        /// RFC 3339 string are not rejected, they are read as a value that is not the one encoded --
+        /// the same wrong value for <c>DateTime</c> and <c>DateTime?</c> alike. That defect is in
+        /// <c>DateTimeConverter</c>, predates this change and is unaffected by it, but it is the reason
+        /// the tests above compare the two rather than assert that stacked tags throw. Nothing here
+        /// pins the wrong value, so fixing that converter will not fail this.
+        /// </remarks>
+        [Fact]
+        public void ANullableMatchesItsUnderlyingTypeEvenWhereBothAreWrong()
         {
-            Assert.NotNull(underlying);
-            Assert.NotNull(nullable);
+            // c0 c0 74 "2020-01-02T03:04:05Z" -- tag(0) tag(0) over an RFC 3339 string.
+            const string hexBuffer = "C0C074323032302D30312D30325430333A30343A30355A";
 
-            Assert.Throws<CborException>(() => Read(underlying));
-            Assert.Throws<CborException>(() => Read(nullable));
+            Assert.Equal(Helper.Read<DateTime>(hexBuffer), Helper.Read<DateTime?>(hexBuffer));
+        }
 
-            static object Read(Type type)
+        /// <summary>
+        /// Reads <paramref name="hexBuffer"/> as both <typeparamref name="T"/> and
+        /// <c>T?</c> and asserts the two agree, treating a thrown <see cref="CborException"/> as an
+        /// outcome like any other so that rejection and acceptance are compared the same way.
+        /// </summary>
+        private static void AssertSameOutcome<T>(string hexBuffer) where T : struct
+        {
+            Assert.Equal(
+                Outcome(() => Helper.Read<T>(hexBuffer)),
+                Outcome(() => Helper.Read<T?>(hexBuffer)));
+        }
+
+        private static string Outcome<TValue>(Func<TValue> read)
+        {
+            try
             {
-                try
-                {
-                    return typeof(Helper)
-                        .GetMethod(nameof(Helper.Read), new[] { typeof(string), typeof(CborOptions) })!
-                        .MakeGenericMethod(type)
-                        .Invoke(null, new object?[] { "C1C10C", null });
-                }
-                catch (System.Reflection.TargetInvocationException exception)
-                {
-                    throw exception.InnerException!;
-                }
+                // Not typeof(TValue): that is int for T and int? for T?, so every comparison would
+                // fail. The prefix is here to keep a null apart from a value that renders as nothing.
+                TValue value = read();
+                return value is null ? "null" : $"value {value}";
+            }
+            catch (CborException)
+            {
+                return nameof(CborException);
             }
         }
     }
