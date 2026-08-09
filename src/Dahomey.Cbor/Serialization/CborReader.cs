@@ -195,7 +195,13 @@ namespace Dahomey.Cbor.Serialization
                     return CborDataItemType.Map;
 
                 case CborMajorType.SemanticTag:
-                    Advance(1);
+                    // Unreachable: SkipSemanticTag above consumes the whole stack. Kept consuming the
+                    // tag by reading its argument rather than by byte count, because the byte count is
+                    // what this arm used to get wrong - Advance(1) skipped the head of the tagged item
+                    // on top of the tag head GetHeader had already taken, and could not have been
+                    // right anyway for a multi-byte tag head such as D8 64.
+                    ReadInteger();
+                    _state = CborReaderState.Data;
                     return GetCurrentDataItemType();
 
                 case CborMajorType.Primitive:
@@ -1022,14 +1028,35 @@ namespace Dahomey.Cbor.Serialization
             return majorType;
         }
 
+        /// <summary>
+        /// Steps over every semantic tag in front of the next data item, leaving the reader on the
+        /// item's own header.
+        /// </summary>
+        /// <remarks>
+        /// A loop rather than a single skip because RFC 8949 §3.4 lets tags stack - tag 1 over a
+        /// bignum is <c>C1 C2 ...</c> - and a caller that does not care about tags cares even less
+        /// about how many there were. Stopping after one left the second tag standing where the item's
+        /// header was expected, which every caller then misread in its own way: the integer reads
+        /// rejected it as a major type, and <see cref="SkipDataItem"/> treated the item as already
+        /// skipped and returned with it still in the buffer, desynchronising everything after it.
+        /// <para>
+        /// The tag is consumed by reading its argument, not by advancing a fixed number of bytes, so
+        /// a multi-byte tag head such as <c>D8 64</c> is stepped over whole.
+        /// </para>
+        /// <para>
+        /// Every tag but the outermost is lost, since nothing here has anywhere to put it - a
+        /// converter that wants its tag reads it with <see cref="TryReadSemanticTag"/> before the
+        /// value, and <see cref="ObjectModel.CborValue.SemanticTag"/> holds one tag. A lost tag is the
+        /// intended shortfall; a value decoded from the wrong bytes was not.
+        /// </para>
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void SkipSemanticTag()
         {
-            if (Accept(CborMajorType.SemanticTag))
+            while (Accept(CborMajorType.SemanticTag))
             {
                 ReadInteger();
                 _state = CborReaderState.Data;
-                return;
             }
         }
 
@@ -1061,7 +1088,9 @@ namespace Dahomey.Cbor.Serialization
                     break;
 
                 case CborMajorType.SemanticTag:
-                    // Impossible - already skipped
+                    // Impossible - SkipSemanticTag above takes the whole stack. It used to take one,
+                    // which made this arm reachable for a nested tag and this method return with the
+                    // tagged item unread, leaving the buffer one item out of step.
                     break;
 
                 case CborMajorType.Primitive:

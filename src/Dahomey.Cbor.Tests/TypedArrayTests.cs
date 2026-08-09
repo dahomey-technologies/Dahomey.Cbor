@@ -739,19 +739,19 @@ namespace Dahomey.Cbor.Tests
         public void ATypedArrayConverterIsNoMoreLenientAboutNestedTagsThanAnArrayConverter()
         {
             // int[] goes through TypedArrayConverter and string[] through ArrayConverter. What matters
-            // is that they agree: reading an array skips a tag twice, once in ReadNull and once in
-            // ReadBeginArray, so two stacked tags are accepted and three are not. Consuming the tag in
-            // TypedArrayConverter.Read as well would let the typed path take a third, accepting a
-            // nesting the plain path rejects.
+            // is that they agree, whatever the depth: ReadBeginArray skips the whole stack of tags in
+            // front of the array, so neither path has a nesting limit for the other to disagree with.
+            // Consuming a tag in TypedArrayConverter.Read as well would take one the plain path leaves
+            // for the array's own converter, which is the disagreement this pins.
             CborOptions options = TypedArrayOptions();
 
             // D827 tag(39) C1 tag(1) 820102 [1, 2]
             Assert.Equal(new[] { 1, 2 }, Helper.Read<int[]>("D827C1820102", options));
             Assert.Equal(new[] { "a", "b" }, Helper.Read<string[]>("D827C18261616162", options));
 
-            // D827 tag(39) C1 tag(1) C1 tag(1) 820102 [1, 2] -- one tag too many for either
-            AssertThrowsCborException(() => Helper.Read<int[]>("D827C1C1820102", options));
-            AssertThrowsCborException(() => Helper.Read<string[]>("D827C1C18261616162", options));
+            // D827 tag(39) C1 tag(1) C1 tag(1) 820102 [1, 2] -- deeper, and still the same on both
+            Assert.Equal(new[] { 1, 2 }, Helper.Read<int[]>("D827C1C1820102", options));
+            Assert.Equal(new[] { "a", "b" }, Helper.Read<string[]>("D827C1C18261616162", options));
         }
 
         [Fact]
