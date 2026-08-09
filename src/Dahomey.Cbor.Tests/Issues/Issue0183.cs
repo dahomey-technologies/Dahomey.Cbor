@@ -190,6 +190,33 @@ namespace Dahomey.Cbor.Tests.Issues
             Assert.Equal(1, holder.B);
         }
 
+        /// <summary>
+        /// The depth of the stack is not a limit on correctness, and reading it does not grow the call
+        /// stack with it.
+        /// </summary>
+        /// <remarks>
+        /// <c>GetCurrentDataItemType</c> recursed once per tag, and stepping over the stack in a loop
+        /// is what removes that. The frames were the risk rather than the observed failure: at this
+        /// depth the old code returned a wrong value (1, not 300) rather than overflowing, so what this
+        /// pins is the value, with the loop as the reason it holds at any length. A tag is not nesting,
+        /// so <see cref="CborOptions.MaxDepth"/> never bounded this — only the loop does.
+        /// </remarks>
+        [Fact]
+        public void ALongStackOfTagsIsReadWithoutRecursion()
+        {
+            const int tagCount = 200_000;
+
+            byte[] buffer = new byte[tagCount + 3];
+            buffer.AsSpan(0, tagCount).Fill(0xC1);
+            Value300.HexToBytes().CopyTo(buffer.AsSpan(tagCount));
+
+            CborReader reader = new CborReader(buffer.AsSpan());
+
+            Assert.Equal(CborDataItemType.Unsigned, reader.GetCurrentDataItemType());
+            Assert.Equal(300ul, reader.ReadUInt64());
+            Assert.False(reader.DataAvailable);
+        }
+
         private delegate void ReaderProbe(ref CborReader reader);
 
         /// <summary>

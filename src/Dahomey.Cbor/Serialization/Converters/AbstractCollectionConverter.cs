@@ -65,8 +65,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                     }
                 }
 
-                // Some other tag, which CBOR says to ignore. Hand it back so the ReadNull below skips
-                // exactly one, as it did before typed arrays existed.
+                // Some other tag, which CBOR says to ignore. Hand it back so this converter takes only
+                // the tag it claims. It used to matter to the result - the ReadNull below skipped one
+                // tag, and this one had to be among them - but SkipSemanticTag now steps over the
+                // whole stack, so the restore no longer changes what is read. See
+                // TypedArrayConverter.Read.
                 reader.ReturnToBookmark(bookmark);
             }
 

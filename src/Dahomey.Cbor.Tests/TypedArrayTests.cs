@@ -738,11 +738,16 @@ namespace Dahomey.Cbor.Tests
         [Fact]
         public void ATypedArrayConverterIsNoMoreLenientAboutNestedTagsThanAnArrayConverter()
         {
-            // int[] goes through TypedArrayConverter and string[] through ArrayConverter. What matters
-            // is that they agree, whatever the depth: ReadBeginArray skips the whole stack of tags in
-            // front of the array, so neither path has a nesting limit for the other to disagree with.
-            // Consuming a tag in TypedArrayConverter.Read as well would take one the plain path leaves
-            // for the array's own converter, which is the disagreement this pins.
+            // int[] goes through TypedArrayConverter and string[] through ArrayConverter, and what
+            // matters is that they agree at every depth.
+            //
+            // This used to be a tripwire on TypedArrayConverter's ReturnToBookmark: skipping was
+            // limited to one tag, so a typed path that kept a declined tag consumed accepted a nesting
+            // the plain path rejected, and dropping the restore failed this test. It no longer does -
+            // SkipSemanticTag steps over the whole stack, so the restore cannot change what either
+            // path reads and nothing here can detect its removal. Measured, not assumed: with both
+            // ReturnToBookmark calls commented out the suite is green on this branch and red on the
+            // commit before it. What remains pinned is the agreement itself.
             CborOptions options = TypedArrayOptions();
 
             // D827 tag(39) C1 tag(1) 820102 [1, 2]
