@@ -16,6 +16,18 @@ namespace Dahomey.Cbor.Serialization.Converters
         public struct MapReaderContext
         {
             public CborObject obj;
+
+            /// <summary>
+            /// <see cref="CborOptions.DuplicateKeyMode"/> as it stood when this map started, so that
+            /// one map is read under one policy.
+            /// </summary>
+            /// <remarks>
+            /// The option is settable at any time, including on the process-wide
+            /// <see cref="CborOptions.Default"/>, so reading it per entry would let a change made
+            /// while a document is being read - by a custom converter, or by another thread - refuse
+            /// one repeated key in a map and overwrite on the next.
+            /// </remarks>
+            public bool lastWins;
         }
 
         public struct MapWriterContext
@@ -190,12 +202,21 @@ namespace Dahomey.Cbor.Serialization.Converters
         void ICborMapReader<MapReaderContext>.ReadBeginMap(int size, ref MapReaderContext context)
         {
             context.obj = new CborObject();
+            context.lastWins = _options.DuplicateKeyMode == DuplicateKeyMode.LastWins;
         }
 
         void ICborMapReader<MapReaderContext>.ReadMapItem(ref CborReader reader, ref MapReaderContext context)
         {
             CborValue key = Read(ref reader);
             CborValue value = Read(ref reader);
+
+            if (context.lastWins)
+            {
+                // An indexer assignment rather than Add: under LastWins a repeated key overwrites
+                // instead of throwing, and Add has no overwriting form.
+                context.obj[key] = value;
+                return;
+            }
 
             // Caught rather than pre-checked with ContainsKey: a duplicate is malformed input, so the
             // cost belongs on that path and not on the lookup every well-formed pair would pay. The

@@ -31,6 +31,9 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             /// <inheritdoc cref="index"/>
             public bool hasKey;
+
+            /// <inheritdoc cref="CborValueConverter.MapReaderContext.lastWins"/>
+            public bool lastWins;
         }
 
         public struct WriterContext
@@ -130,6 +133,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         public void ReadBeginMap(int size, ref ReaderContext context)
         {
             context.dict = InstantiateTempCollection();
+            context.lastWins = _options.DuplicateKeyMode == DuplicateKeyMode.LastWins;
         }
 
         public void ReadMapItem(ref CborReader reader, ref ReaderContext context)
@@ -143,6 +147,24 @@ namespace Dahomey.Cbor.Serialization.Converters
             context.hasKey = true;
 
             TV value = ValueConverter.Read(ref reader);
+
+            if (context.lastWins)
+            {
+                // An indexer assignment rather than Add, so a repeated key overwrites. Still guarded:
+                // the dictionary is the caller's in the IDictionary case and may refuse an entry for
+                // reasons of its own, and a null key is refused whatever the mode -- it is not a
+                // duplicate, and there is no last occurrence of it to win.
+                try
+                {
+                    context.dict[key] = value;
+                }
+                catch (ArgumentException exception)
+                {
+                    throw reader.BuildException(DescribeSetFailure(key, exception));
+                }
+
+                return;
+            }
 
             // See CborValueConverter.ReadMapItem: these are malformed input, and were already refused
             // -- as an ArgumentException that escapes the CborException contract.
@@ -194,6 +216,18 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             return dictionary.ContainsKey(key)
                 ? MapKeyErrors.Duplicate(key)
+                : MapKeyErrors.Rejected(key, exception.Message);
+        }
+
+        /// <summary>
+        /// Which failure occurred on the <see cref="DuplicateKeyMode.LastWins"/> path, where an
+        /// assignment cannot fail for being a repeat. A key already present is exactly what that mode
+        /// asks the dictionary to accept, so the reason is never a duplicate and is not probed for.
+        /// </summary>
+        private static string DescribeSetFailure(TK key, ArgumentException exception)
+        {
+            return key is null
+                ? MapKeyErrors.NullKey()
                 : MapKeyErrors.Rejected(key, exception.Message);
         }
 

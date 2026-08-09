@@ -25,6 +25,38 @@ namespace Dahomey.Cbor
     }
 
     /// <summary>
+    /// What reading a map does when the same key appears twice.
+    /// </summary>
+    /// <remarks>
+    /// RFC 8949 §5.6 declines to settle this: it requires a protocol to define what happens on
+    /// repeated keys and leaves rejecting, first-wins and last-wins all open to the decoder. So this
+    /// is a library policy rather than a conformance question, and it is one setting for every decode
+    /// target - the object model, dictionaries, and mapped classes with or without a creator mapping -
+    /// because a mode that applied to only some of them would recreate the target-dependence it exists
+    /// to remove.
+    /// <para>
+    /// First-wins is deliberately absent. It is a different operation from the other two - skipping a
+    /// value already read rather than declining to keep it - and no protocol has yet asked for it here.
+    /// </para>
+    /// </remarks>
+    public enum DuplicateKeyMode
+    {
+        /// <summary>
+        /// A repeated key is a <see cref="CborException"/>, naming the key and the position it was
+        /// read at. The default: silently keeping one of two values for the same key is the failure
+        /// mode nobody notices, which is the wrong default for anything decoding untrusted frames.
+        /// </summary>
+        Reject = 0,
+
+        /// <summary>
+        /// The last occurrence of a key wins and earlier ones are discarded, for every target. For
+        /// protocols that define last-wins - which §5.6 explicitly contemplates - and for upgrading
+        /// from a version where mapped classes with settable members behaved this way unconditionally.
+        /// </summary>
+        LastWins = 1,
+    }
+
+    /// <summary>
     /// https://tools.ietf.org/html/rfc7049#section-2.2
     /// </summary>
     public enum LengthMode
@@ -192,6 +224,18 @@ namespace Dahomey.Cbor
         /// deep nesting. Raise it if the data is genuinely deeper than 64 levels.
         /// </remarks>
         public int MaxDepth { get; set; } = Serialization.CborWriter.DefaultMaxDepth;
+
+        /// <summary>
+        /// What reading a map does when the same key appears twice. Default
+        /// <see cref="DuplicateKeyMode.Reject"/>, uniformly across every decode target.
+        /// </summary>
+        /// <remarks>
+        /// Read once when a map or an object starts, not per key, and each read then runs to the end
+        /// on the value it took. Settable at any point in an options object's life, including on the
+        /// long-lived <see cref="Default"/>; a change made while a document is being read applies to
+        /// the maps that start after it, so no single map is read half one way and half the other.
+        /// </remarks>
+        public DuplicateKeyMode DuplicateKeyMode { get; set; }
 
         /// <summary>
         /// The default naming convention to use when no naming convention is specified.

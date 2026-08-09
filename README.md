@@ -31,6 +31,7 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Support for dynamics
 * Support for structs
 * Support for RFC 8746 typed arrays, opt-in per direction (CborOptions.TypedArrayMode)
+* Duplicate map keys rejected on every decode target, with a last-wins opt-out (CborOptions.DuplicateKeyMode)
 
 ## Installation
 ### NuGet
@@ -405,3 +406,60 @@ being configured in the wrong order.
 drops members this version doesn't know about, and re-encoding then produces different — and
 differently hashing — bytes than what was received. Hash the wire bytes directly.
 
+
+### Duplicate map keys (RFC 8949 §5.6)
+
+A CBOR map carrying the same key twice is rejected with a ``CborException`` naming the key, the byte
+it was read at, and the path it sits at:
+
+```
+[6] Duplicate map key: A. Failed to deserialize from "$.A".
+```
+
+The object model is the one target that reports no path segment for it — ``CborValue``/``CborObject``
+maps are not members, so the path of a duplicate at the root of one stays ``$``. The offset and the
+key are given whatever the target.
+
+This applies to every decode target — the ``CborValue`` object model, ``Dictionary<K,V>`` and the
+other dictionary types, and mapped classes with or without a creator mapping. §5.6 requires a
+protocol to define what happens on repeated keys and leaves rejecting, first-wins and last-wins all
+open to the decoder, so this is a library policy rather than a conformance result. Rejecting is the
+default because silently keeping one of two values for the same key is the failure mode nobody
+notices, which is the wrong default for anything decoding untrusted frames.
+
+For a protocol that does define last-wins, ask for it:
+
+```csharp
+CborOptions options = new CborOptions { DuplicateKeyMode = DuplicateKeyMode.LastWins };
+```
+
+That applies to every target too. A mode that reached only some of them would leave the policy
+depending on what a document is being read into, which is the problem it exists to remove. First-wins
+is not offered.
+
+> **Behaviour change.** A mapped class **whose members are assigned** — anything without a creator
+> mapping, which is most classes — used to take the last occurrence of a repeated member silently, and
+> now throws. Dictionaries, the object model, and classes with a non-default constructor already
+> rejected, so this is the row that changes. If your producers emit duplicates, a deserialize that
+> worked will now throw with nothing in your own code having changed; set
+> ``DuplicateKeyMode.LastWins`` to keep the old behaviour.
+>
+> What made this worth breaking is that the old behaviour was not a choice anyone made: values for a
+> type with a non-default constructor are collected in a dictionary until the constructor can be
+> called, so they hit ``Add`` and were refused, while a type with a default constructor has its
+> members assigned, so a repeat overwrote. The same class changed behaviour when someone added or
+> removed a constructor.
+
+A repeated key that matches no member is not a duplicate member — what happens to an unknown name is
+``UnhandledNameMode``'s question, and repeating one does not change the answer. Neither is a null map
+key, which is refused in both modes: there is no earlier occurrence for a later one to win over.
+
+The **discriminator** is refused when repeated, even though it is a key of the map rather than a
+member of the type: two readers disagreeing about which occurrence names the type is how one document
+comes to mean two things.
+
+One case the policy does not reach: **a type mapping two members to the same CBOR name** — two
+``[CborProperty("X")]``, say — writes a document with a repeated key that it then cannot read back.
+The mapping is ambiguous in both directions, since only one of the two members can ever be read from
+key ``X``, so it is worth removing rather than working around; ``DuplicateKeyMode.LastWins`` will read
+such a document if you have one already.
