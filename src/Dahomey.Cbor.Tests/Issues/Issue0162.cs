@@ -160,7 +160,8 @@ namespace Dahomey.Cbor.Tests.Issues
         /// <see cref="CborPositive"/> and <see cref="CborNegative"/> hand out shared instances for
         /// small integers, as <see cref="CborSingle"/>, <see cref="CborDouble"/> and
         /// <see cref="CborDecimal"/> do for small whole numbers, <see cref="CborBoolean"/> for both
-        /// values and <see cref="CborValue.Null"/> for null. Assigning <c>SemanticTag</c> to one of
+        /// values, <see cref="CborString"/> for the empty string (missed here and fixed by #172) and
+        /// <see cref="CborValue.Null"/> for null. Assigning <c>SemanticTag</c> to one of
         /// those attaches the tag to every occurrence of that value in the process — including
         /// documents that never carried a tag, and values built in code that were never read at all.
         /// <para>

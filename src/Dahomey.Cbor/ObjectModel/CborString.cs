@@ -15,6 +15,16 @@ namespace Dahomey.Cbor.ObjectModel
             _value = value ?? throw new ArgumentOutOfRangeException(nameof(value));
         }
 
+        /// <summary>
+        /// Copies before tagging: CborString hands out a shared instance for the empty string, so
+        /// tagging in place would attach the tag to every empty string in the process. See
+        /// <see cref="CborValue.WithSemanticTag"/>.
+        /// </summary>
+        internal override CborValue WithSemanticTag(ulong semanticTag)
+        {
+            return new CborString(_value) { SemanticTag = semanticTag };
+        }
+
         public override T Value<T>()
         {
             return Primitive<string, T>.Converter(_value);

@@ -23,7 +23,8 @@ namespace Dahomey.Cbor.ObjectModel
         /// Several value types hand out shared instances — <see cref="CborPositive"/> and
         /// <see cref="CborNegative"/> for small integers, <see cref="CborSingle"/>,
         /// <see cref="CborDouble"/> and <see cref="CborDecimal"/> for small whole numbers,
-        /// <see cref="CborBoolean"/> for both values, and <see cref="Null"/>. Assigning
+        /// <see cref="CborBoolean"/> for both values, <see cref="CborString"/> for the empty string,
+        /// and <see cref="Null"/>. Assigning
         /// <see cref="SemanticTag"/> to one of those would attach the tag to every occurrence of that
         /// value in the process, in documents that never carried it and in values built in code. Those
         /// types override this to copy first; the rest, which are constructed fresh per value, tag in
