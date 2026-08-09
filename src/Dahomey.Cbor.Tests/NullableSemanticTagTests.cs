@@ -77,22 +77,33 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// The invariant is behavioural equality, not rejection.
+        /// The invariant is behavioural equality, not rejection -- including where the shared outcome
+        /// is wrong.
         /// </summary>
         /// <remarks>
-        /// <see cref="DateTime"/> is the case that shows the difference: two stacked tags over an
-        /// RFC 3339 string are not rejected, they are read as a value that is not the one encoded --
-        /// the same wrong value for <c>DateTime</c> and <c>DateTime?</c> alike. That defect is in
-        /// <c>DateTimeConverter</c>, predates this change and is unaffected by it, but it is the reason
-        /// the tests above compare the two rather than assert that stacked tags throw. Nothing here
-        /// pins the wrong value, so fixing that converter will not fail this.
+        /// <see cref="DateTime"/> is the case that shows the difference: a stacked tag over an RFC 3339
+        /// string is not rejected, it is read as a value that is not the one encoded, for
+        /// <c>DateTime</c> and <c>DateTime?</c> alike. That is why the tests above compare the two
+        /// rather than assert that stacked tags throw.
+        /// <para>
+        /// The second shape is where handing the tag back costs something real. On <c>C1 C0 74 ...</c>
+        /// a <c>DateTime?</c> used to decode correctly, because skipping the outer tag here left the
+        /// converter a singly-tagged item it handles; it now meets both tags and produces the same
+        /// wrong value the non-nullable always produced. The underlying defect is not in
+        /// <see cref="DateTime"/> handling at all -- <c>CborReader.GetCurrentDataItemType</c>
+        /// over-consumes a byte on a stacked tag, tracked as
+        /// https://github.com/dahomey-technologies/Dahomey.Cbor/issues/183. Nothing here pins the wrong
+        /// value, so fixing that will leave these passing, with both sides correct instead of both
+        /// sides wrong.
+        /// </para>
         /// </remarks>
-        [Fact]
-        public void ANullableMatchesItsUnderlyingTypeEvenWhereBothAreWrong()
+        [Theory]
+        // c0 c0 74 "2020-01-02T03:04:05Z" -- both wrong before and after.
+        [InlineData("C0C074323032302D30312D30325430333A30343A30355A")]
+        // c1 c0 74 "2020-01-02T03:04:05Z" -- the nullable was right before, and is wrong now.
+        [InlineData("C1C074323032302D30312D30325430333A30343A30355A")]
+        public void ANullableMatchesItsUnderlyingTypeEvenWhereBothAreWrong(string hexBuffer)
         {
-            // c0 c0 74 "2020-01-02T03:04:05Z" -- tag(0) tag(0) over an RFC 3339 string.
-            const string hexBuffer = "C0C074323032302D30312D30325430333A30343A30355A";
-
             Assert.Equal(Helper.Read<DateTime>(hexBuffer), Helper.Read<DateTime?>(hexBuffer));
         }
 
