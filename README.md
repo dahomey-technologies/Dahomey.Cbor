@@ -31,6 +31,7 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Support for dynamics
 * Support for structs
 * Support for RFC 8746 typed arrays, opt-in per direction (CborOptions.TypedArrayMode)
+* Support for RFC 8949 §3.4.3 bignums (tags 2 and 3) as System.Numerics.BigInteger
 * Duplicate map keys rejected on every decode target, with a last-wins opt-out (CborOptions.DuplicateKeyMode)
 
 ## Installation
@@ -210,6 +211,40 @@ The object model does not model typed arrays. A `CborValue` holding one is a `By
 serializing it again drops the tag, turning the typed array into a plain byte string. That is true of
 every semantic tag, not just these, but typed arrays are the easiest way to meet it. Tracked as
 https://github.com/dahomey-technologies/Dahomey.Cbor/issues/162.
+
+### Bignums (RFC 8949 §3.4.3)
+
+A member typed `System.Numerics.BigInteger` reads and writes integers of any width. Values that fit in 64
+bits use a basic integer, which §3.4.3 makes the preferred serialization; anything larger uses tag 2
+(unsigned) or tag 3 (negative) over a big-endian magnitude.
+
+```csharp
+public class Account
+{
+    public BigInteger Balance { get; set; }
+}
+```
+
+```csharp
+// 12                    -> 0C                      (basic integer)
+// 18446744073709551616  -> C2 49 010000000000000000 (tag 2, 2^64)
+// -18446744073709551617 -> C3 49 010000000000000000 (tag 3)
+```
+
+Because the tag appears only where it carries information, a `BigInteger` member is byte-identical to the
+same value typed as an `int` or a `ulong` for every value those types can hold — swapping one for the other
+does not change the documents a service already emits.
+
+Reading accepts either form, so a `BigInteger` member reads a document whose producer always tags. It also
+reads major type 1 exactly: CBOR negative integers reach -2^64, which the `long`-based readers overflow.
+
+Two limits worth knowing. A text string is rejected rather than parsed — there is no span overload of
+`BigInteger.Parse` on netstandard2.0, so accepting one would mean picking an encoding on a path nothing
+asks for. And a bignum nested under another tag (`C1 C2 …`) is rejected: every reader on `CborReader` skips
+a single tag, so this is the library's existing limit rather than one bignums add.
+
+Tags 4 and 5 (decimal fraction and bigfloat) are not decoded semantically and still surface as a
+two-element array. Tracked as https://github.com/dahomey-technologies/Dahomey.Cbor/issues/170.
 
 ### Custom converters
 

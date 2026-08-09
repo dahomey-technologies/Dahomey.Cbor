@@ -3,6 +3,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Buffers.Text;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -75,6 +76,10 @@ namespace Dahomey.Cbor.Serialization
         private const int CHUNK_SIZE = 1024;
         private const byte INDEFINITE_LENGTH = 31;
         private const int SCRATCH_BUFFER_SIZE = 16; // This is enough for storing decimal bytes
+
+        // RFC 8949 §3.4.3.
+        private const ulong UNSIGNED_BIGNUM_TAG = 2;
+        private const ulong NEGATIVE_BIGNUM_TAG = 3;
 
         private ReadOnlySpan<byte> _buffer;
         private ReadOnlySequence<byte>? _sequence;
@@ -667,6 +672,82 @@ namespace Dahomey.Cbor.Serialization
                     ThrowCbor($"Invalid major type {header.MajorType}");
                     return default; // Unreachable
             }
+        }
+
+        /// <summary>
+        /// Reads an RFC 8949 §3.4.3 bignum - tag 2 (unsigned) or tag 3 (negative) over a byte string -
+        /// or any basic integer, which the preferred serialization uses for values that fit in 64 bits.
+        /// </summary>
+        /// <remarks>
+        /// Unlike <see cref="ReadDecimal"/> and its neighbours this does not accept a text string. There
+        /// is no span overload of <see cref="BigInteger.Parse(string)"/> on netstandard2.0, so accepting
+        /// one would mean decoding to a <see cref="string"/> first and picking an encoding on a path
+        /// nothing asks for; a text string is rejected rather than parsed on a guess.
+        ///
+        /// A negative bignum is exactly <c>-1 - n</c>, computed in <see cref="BigInteger"/> rather than
+        /// in <see cref="long"/>. That also makes the basic-integer arm exact where the other readers
+        /// are not: major type 1 reaches -2^64, which <c>-1L - (long)ReadInteger()</c> overflows.
+        /// </remarks>
+        public BigInteger ReadBigInteger()
+        {
+            if (IsSemanticTag())
+            {
+                CborReaderBookmark bookmark = GetBookmark();
+
+                if (TryReadSemanticTag(out ulong tag)
+                    && (tag == UNSIGNED_BIGNUM_TAG || tag == NEGATIVE_BIGNUM_TAG))
+                {
+                    Expect(CborMajorType.ByteString);
+
+                    // Big-endian, unsigned, and allowed to be empty - an empty magnitude is 0, so tag 2
+                    // reads as 0 and tag 3 as -1.
+                    BigInteger magnitude = BigIntegerFromBigEndianBytes(ReadSizeAndBytes(allowScratchBuffer: false));
+
+                    return tag == NEGATIVE_BIGNUM_TAG ? BigInteger.MinusOne - magnitude : magnitude;
+                }
+
+                // Some other tag. Hand it back and fall through to the untagged path below, which skips
+                // exactly one tag - the same leniency every other reader on this type has.
+                ReturnToBookmark(bookmark);
+            }
+
+            SkipSemanticTag();
+            CborReaderHeader header = GetHeader();
+
+            switch (header.MajorType)
+            {
+                case CborMajorType.PositiveInteger:
+                    return ReadInteger();
+
+                case CborMajorType.NegativeInteger:
+                    return BigInteger.MinusOne - ReadInteger();
+
+                default:
+                    ThrowCbor($"Invalid major type {header.MajorType}");
+                    return default; // Unreachable
+            }
+        }
+
+        /// <summary>
+        /// Rebuilds a non-negative <see cref="BigInteger"/> from a big-endian magnitude.
+        /// </summary>
+        private static BigInteger BigIntegerFromBigEndianBytes(ReadOnlySpan<byte> bytes)
+        {
+#if NET8_0_OR_GREATER
+            return new BigInteger(bytes, isUnsigned: true, isBigEndian: true);
+#else
+            // The netstandard2.0 constructor takes little-endian two's complement, so the bytes are
+            // reversed and a zero appended: without that high byte a magnitude whose top bit is set -
+            // 0x80 and up - would be read back as a negative number.
+            byte[] littleEndian = new byte[bytes.Length + 1];
+
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                littleEndian[i] = bytes[bytes.Length - 1 - i];
+            }
+
+            return new BigInteger(littleEndian);
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

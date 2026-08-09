@@ -9,8 +9,32 @@
             this._cborConverter = options.Registry.ConverterRegistry.Lookup<T>();
         }
 
+        /// <summary>
+        /// Reads the underlying value, or <c>null</c>.
+        /// </summary>
+        /// <remarks>
+        /// <c>ReadNull</c> skips a semantic tag before looking at the item, which loses the tag for an
+        /// underlying converter that dispatches on it -- <see cref="BigIntegerConverter"/> reading a
+        /// bignum saw a bare byte string and rejected it. So on a tagged item the tag is taken under a
+        /// bookmark and handed back when the item turns out not to be null. A tagged null still reads
+        /// as null, which is what it did before. Only a tagged item pays for the bookmark; the common
+        /// untagged case is the same two branches it always was.
+        /// </remarks>
         public override T? Read(ref CborReader reader)
-        { 
+        {
+            if (reader.IsSemanticTag())
+            {
+                CborReaderBookmark bookmark = reader.GetBookmark();
+
+                if (reader.ReadNull())
+                {
+                    return default;
+                }
+
+                reader.ReturnToBookmark(bookmark);
+                return this._cborConverter.Read(ref reader);
+            }
+
             if (reader.ReadNull())
             {
                 return default;
