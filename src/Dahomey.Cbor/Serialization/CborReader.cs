@@ -685,8 +685,9 @@ namespace Dahomey.Cbor.Serialization
         /// nothing asks for; a text string is rejected rather than parsed on a guess.
         ///
         /// A negative bignum is exactly <c>-1 - n</c>, computed in <see cref="BigInteger"/> rather than
-        /// in <see cref="long"/>. That also makes the basic-integer arm exact where the other readers
-        /// are not: major type 1 reaches -2^64, which <c>-1L - (long)ReadInteger()</c> overflows.
+        /// in <see cref="long"/>. That also widens the basic-integer arm: major type 1 reaches -2^64,
+        /// which no <see cref="long"/> holds, so <see cref="ReadInt64"/> rejects it as an invalid
+        /// signed integer rather than reading it. Here it decodes.
         /// </remarks>
         public BigInteger ReadBigInteger()
         {

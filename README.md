@@ -236,7 +236,8 @@ same value typed as an `int` or a `ulong` for every value those types can hold â
 does not change the documents a service already emits.
 
 Reading accepts either form, so a `BigInteger` member reads a document whose producer always tags. It also
-reads major type 1 exactly: CBOR negative integers reach -2^64, which the `long`-based readers overflow.
+reads the whole of major type 1, which reaches -2^64: no `long` holds that, so `ReadInt64` rejects it as an
+invalid signed integer where a `BigInteger` member decodes it.
 
 Two limits worth knowing. A text string is rejected rather than parsed â€” there is no span overload of
 `BigInteger.Parse` on netstandard2.0, so accepting one would mean picking an encoding on a path nothing
