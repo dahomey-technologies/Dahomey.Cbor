@@ -75,8 +75,15 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
 
                 // Some other tag, which CBOR says to ignore. Hand it back rather than keeping it
-                // consumed: base.Read skips exactly one tag, so returning it here leaves this converter
-                // exactly as lenient about nesting as ArrayConverter, no more.
+                // consumed, so this converter takes only the tag it claims and leaves the rest to the
+                // reader.
+                //
+                // This no longer changes what is decoded. It did when SkipSemanticTag stepped over one
+                // tag: keeping this one consumed spent the single skip base.Read had, so the typed
+                // path accepted one more level of nesting than ArrayConverter. SkipSemanticTag now
+                // steps over the whole stack, so both paths read the same document at any depth with
+                // or without this restore, and no test can tell it is here. Kept because a converter
+                // that declines a tag should not have eaten it.
                 reader.ReturnToBookmark(bookmark);
             }
 
