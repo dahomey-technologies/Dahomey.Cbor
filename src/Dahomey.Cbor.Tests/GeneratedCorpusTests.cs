@@ -138,6 +138,13 @@ namespace Dahomey.Cbor.Tests
                 {
                     Value = BigInteger.Parse("18446744073709551616"),
                     Optional = BigInteger.Parse("-18446744073709551617"),
+                    // Keys on both sides of the basic-integer boundary, so the comparison covers a
+                    // BigInteger reached as a dictionary key rather than only as a member.
+                    Keyed = new Dictionary<BigInteger, string>
+                    {
+                        [12] = "small",
+                        [BigInteger.Parse("18446744073709551616")] = "big",
+                    },
                 };
             }
 

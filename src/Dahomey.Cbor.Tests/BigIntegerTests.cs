@@ -2,6 +2,7 @@ using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Tests.Extensions;
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using Xunit;
 
@@ -11,6 +12,13 @@ namespace Dahomey.Cbor.Tests
     {
         public BigInteger Value { get; set; }
         public BigInteger? Optional { get; set; }
+
+        /// <summary>
+        /// A dictionary keyed by <see cref="BigInteger"/>, which reaches the converter through
+        /// <c>AbstractDictionaryConverter.KeyConverter</c> rather than as a member, and reaches the
+        /// generator as a type argument rather than as a property type.
+        /// </summary>
+        public Dictionary<BigInteger, string> Keyed { get; set; }
     }
 
     /// <summary>
@@ -217,6 +225,11 @@ namespace Dahomey.Cbor.Tests
             {
                 Value = BigInteger.Parse("18446744073709551616"),
                 Optional = BigInteger.Parse("-18446744073709551617"),
+                Keyed = new Dictionary<BigInteger, string>
+                {
+                    [12] = "small",
+                    [BigInteger.Parse("18446744073709551616")] = "big",
+                },
             };
 
             string hexBuffer = Helper.Write(holder, context.Options);
@@ -226,6 +239,62 @@ namespace Dahomey.Cbor.Tests
 
             Assert.Equal(holder.Value, rehydrated.Value);
             Assert.Equal(holder.Optional, rehydrated.Optional);
+            Assert.Equal("small", rehydrated.Keyed[12]);
+            Assert.Equal("big", rehydrated.Keyed[BigInteger.Parse("18446744073709551616")]);
+        }
+
+        /// <summary>
+        /// A <see cref="BigInteger"/> key reaches the converter through
+        /// <c>AbstractDictionaryConverter.KeyConverter</c>, which resolves it from the registry like
+        /// any other type, so a key spanning both encodings works without a case of its own.
+        /// </summary>
+        [Fact]
+        public void ADictionaryCanBeKeyedByBigInteger()
+        {
+            // a2                          map(2)
+            //    0c                       12                       -- basic integer key
+            //    65 736D616C6C            "small"
+            //    c2 49 010000000000000000 tag(2) 2^64              -- bignum key
+            //    63 626967                "big"
+            const string hexBuffer = "A20C65736D616C6CC24901000000000000000063626967";
+
+            Dictionary<BigInteger, string> value = new Dictionary<BigInteger, string>
+            {
+                [12] = "small",
+                [BigInteger.Parse("18446744073709551616")] = "big",
+            };
+
+            Helper.TestWrite(value, hexBuffer);
+
+            Dictionary<BigInteger, string> read = Helper.Read<Dictionary<BigInteger, string>>(hexBuffer);
+
+            Assert.Equal("small", read[12]);
+            Assert.Equal("big", read[BigInteger.Parse("18446744073709551616")]);
+        }
+
+        /// <summary>
+        /// Deterministic mode orders map keys by the bytes of their encoded form (RFC 8949 §4.2.1), and
+        /// <c>DeterministicKeyOrder</c> gets those bytes from the key's own converter rather than from a
+        /// switch over CLR types. So a key set mixing both encodings orders on what is actually
+        /// written: <c>0C</c> before <c>1B…</c> before <c>C2…</c>, whatever order it was built in.
+        /// </summary>
+        [Fact]
+        public void BigIntegerKeysSortByTheirEncodedBytes()
+        {
+            CborOptions options = new CborOptions { Deterministic = true };
+
+            Dictionary<BigInteger, int> value = new Dictionary<BigInteger, int>
+            {
+                [BigInteger.Parse("18446744073709551616")] = 3,
+                [12] = 1,
+                [BigInteger.Parse("18446744073709551615")] = 2,
+            };
+
+            // a3
+            //    0c                       12                  -> 1
+            //    1b ffffffffffffffff      2^64-1              -> 2
+            //    c2 49 010000000000000000 tag(2) 2^64         -> 3
+            Helper.TestWrite(value, "A30C011BFFFFFFFFFFFFFFFF02C24901000000000000000003", options: options);
         }
     }
 }
