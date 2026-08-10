@@ -18,10 +18,11 @@ namespace Dahomey.Cbor.Tests.Issues
     /// already, but it is a way to live with the mapping rather than an answer to it.
     /// <para>
     /// Refusing at build time is a new failure at first use for a type that "worked" before, which is
-    /// the point: the alternative is a document that silently drops a member. The check covers every
-    /// route to the collision, since the attribute is only the most visible one — a naming convention
-    /// that folds two member names into one, or a mapping API call that maps a member twice, arrives
-    /// at the same place with nothing in the source looking wrong.
+    /// the point: the alternative is a document that silently drops a member. The check is on the
+    /// mapped name, so it covers every route to the collision rather than the attribute alone: a
+    /// naming convention that folds two member names into one, a mapping API call that maps a member
+    /// twice, and a member that hides a base member of the same name all arrive at the same place with
+    /// nothing in the source looking wrong.
     /// </para>
     /// </remarks>
     public class Issue0177
@@ -51,6 +52,27 @@ namespace Dahomey.Cbor.Tests.Issues
         {
             [CborProperty(0)] public int First { get; set; }
             [CborProperty(0)] public int Second { get; set; }
+        }
+
+        /// <summary>The type <see cref="TwoMembersOneName"/> becomes once the collision is removed.</summary>
+        public class OneMemberOneName
+        {
+            [CborProperty("X")] public int First { get; set; }
+        }
+
+        public class BaseWithAField { public int Value; }
+        public class HidesAField : BaseWithAField { public new int Value; }
+
+        public class BaseWithAProperty { public object Value { get; set; } }
+        public class HidesAProperty : BaseWithAProperty { public new string Value { get; set; } }
+
+        public class BaseWithAnInt { public int Value { get; set; } }
+        public class HidesWithTheSameSignature : BaseWithAnInt { public new int Value { get; set; } }
+
+        [CborDiscriminator("collides")]
+        public class CollidesWithDiscriminator
+        {
+            [CborProperty("_t")] public int NotTheDiscriminator { get; set; }
         }
 
         /// <summary>
@@ -137,6 +159,97 @@ namespace Dahomey.Cbor.Tests.Issues
                 () => Helper.Write(new DistinctNames(), options));
 
             Assert.Contains("'X'", ex.Message);
+        }
+
+        /// <summary>
+        /// A member that hides a base member of the same name — <c>new</c> rather than
+        /// <c>override</c> — is a fourth route, and the one with nothing attribute-shaped in the
+        /// source at all.
+        /// </summary>
+        /// <remarks>
+        /// Reflection returns both declarations whenever their signatures differ, so both are mapped,
+        /// under the one name. Only a hiding member whose signature matches the hidden one exactly is
+        /// filtered out by reflection itself, which is why <see cref="HidesWithTheSameSignature"/>
+        /// maps once and is written normally. Refusing is what the other two shapes wrote before:
+        /// the key twice, the hidden member unreadable.
+        /// </remarks>
+        [Fact]
+        public void AMemberHidingABaseMemberIsRefused()
+        {
+            CborException field = AssertThrowsCborException(() => Helper.Write(new HidesAField()));
+            CborException property = AssertThrowsCborException(() => Helper.Write(new HidesAProperty()));
+
+            Assert.Contains("'Value'", field.Message);
+            Assert.Contains("'Value'", property.Message);
+        }
+
+        /// <summary>The signature-preserving case reflection folds for us, mapped once and written.</summary>
+        [Fact]
+        public void HidingWithTheSameSignatureIsUnaffected()
+        {
+            HidesWithTheSameSignature obj = new HidesWithTheSameSignature { Value = 1 };
+
+            // a1 65 56616c7565 01  -- {"Value": 1}
+            Helper.TestWrite(obj, "A16556616C756501");
+        }
+
+        /// <summary>
+        /// A member added to the mapping after something has already initialized it arrives past the
+        /// check, at the read lookup, which refuses the key on its own terms. It reports the same way:
+        /// the library's own exception type and the same sentence, not the raw
+        /// <see cref="System.ArgumentException"/> of the container that caught it.
+        /// </summary>
+        [Fact]
+        public void ACollisionAddedAfterValidationReportsTheSameWay()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ObjectMappingRegistry.Register<DistinctNames>(objectMapping =>
+            {
+                objectMapping.AutoMap();
+
+                // reading the mappings initializes them, so the validation has already run
+                _ = objectMapping.MemberMappings.Count;
+
+                objectMapping.MapMember(o => o.First);
+            });
+
+            CborException ex = AssertThrowsCborException(
+                () => Helper.Write(new DistinctNames(), options));
+
+            Assert.Contains(nameof(DistinctNames), ex.Message);
+            Assert.Contains("'X'", ex.Message);
+        }
+
+        /// <summary>
+        /// The discriminator is a key of the map rather than a member of the type, and a member mapped
+        /// onto its name collides with it exactly as two members collide with each other.
+        /// </summary>
+        [Fact]
+        public void AMemberMappedOntoTheDiscriminatorNameIsRefused()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<CollidesWithDiscriminator>();
+
+            CborException ex = AssertThrowsCborException(
+                () => Helper.Write(new CollidesWithDiscriminator(), options));
+
+            Assert.Contains("'_t'", ex.Message);
+        }
+
+        /// <summary>
+        /// The migration path the documentation offers: a document one of these mappings already wrote
+        /// still reads with <see cref="DuplicateKeyMode.LastWins"/>, against a type whose mapping no
+        /// longer collides. Last occurrence wins, which is what the assign path did before #169.
+        /// </summary>
+        [Fact]
+        public void ALegacyDocumentStillReadsWithLastWins()
+        {
+            CborOptions options = new CborOptions { DuplicateKeyMode = DuplicateKeyMode.LastWins };
+
+            // a2 6158 01 6158 02  -- {"X": 1, "X": 2}, written before the mapping was untangled
+            OneMemberOneName obj = Helper.Read<OneMemberOneName>("A2615801615802", options);
+
+            Assert.Equal(2, obj.First);
         }
 
         /// <summary>

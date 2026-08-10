@@ -470,10 +470,21 @@ class/struct Aliased maps several fields/properties to the member name 'X'
 
 The mapping is ambiguous in both directions — only one of the two members can ever be read from key
 ``X``, and writing both is not representable — so there is nothing for ``DuplicateKeyMode`` to decide.
-``[CborProperty("X")]`` twice is the visible way in; a naming convention that folds two member names
-into one, or a mapping API call that maps a member the conventions already covered, arrives at the
-same place with nothing in the source looking wrong. Whichever route, the fix is to give the two
-members distinct names or to drop one of them.
+``[CborProperty("X")]`` twice is the visible way in. Three others reach the same place with nothing in
+the source looking wrong:
+
+* a **naming convention** that folds two member names into one — ``Id`` and ``ID`` under
+  ``LowerCaseNamingConvention``;
+* a **mapping API call** over a member the conventions already covered — ``MapMember`` after
+  ``AutoMap`` without a ``ClearMemberMappings`` between them, or without a new name;
+* a member that **hides a base member** of the same name with ``new`` rather than ``override``.
+  Reflection reports both declarations whenever their signatures differ, so both are mapped. Hiding
+  that keeps the signature exactly — ``int`` over ``int`` — is folded by reflection itself and maps
+  once, so only a hide that changes the type or turns a property into a field collides.
+
+Give the two members distinct names, or drop one. Where the collision comes from a base type you do
+not own, ``[CborIgnore]`` on the member you do own removes it from the mapping, and
+``ClearMemberMappings()`` followed by explicit ``MapMember`` calls decides the whole mapping by hand.
 
 > **Behaviour change.** Such a type used to serialize, so this is a new exception at first use for a
 > type that "worked". What it wrote was a document whose second member was unreadable — silently

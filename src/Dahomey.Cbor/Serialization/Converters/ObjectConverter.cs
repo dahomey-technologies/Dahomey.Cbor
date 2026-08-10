@@ -218,20 +218,36 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 if (memberMapping.CanBeDeserialized || isCreatorMember)
                 {
-                    switch (_objectMapping.ObjectFormat)
+                    // Both lookups refuse a key they already hold, and the mapping was validated for
+                    // exactly that before this loop began. A collision reaching here is therefore a
+                    // member added to the mapping after its validation ran - mapping over a member
+                    // AutoMap already covered, once something has read MemberMappings - which is the
+                    // same mistake arriving late. It gets the same exception type and the same
+                    // sentence rather than the raw ArgumentException of the container that caught it.
+                    try
                     {
-                        case CborObjectFormat.StringKeyMap:
-                            _memberConvertersForRead.Add(
-                                memberConverter.MemberName, new MemberReadEntry(memberConverter, _nextReadOrdinal++));
-                            break;
-                        case CborObjectFormat.IntKeyMap:
-                        case CborObjectFormat.Array:
-                            if (memberConverter.MemberIndex.HasValue)
-                            {
-                                _memberConvertersForReadByIndex.Add(
-                                    memberConverter.MemberIndex.Value, new MemberReadEntry(memberConverter, _nextReadOrdinal++));
-                            }
-                            break;
+                        switch (_objectMapping.ObjectFormat)
+                        {
+                            case CborObjectFormat.StringKeyMap:
+                                _memberConvertersForRead.Add(
+                                    memberConverter.MemberName, new MemberReadEntry(memberConverter, _nextReadOrdinal++));
+                                break;
+                            case CborObjectFormat.IntKeyMap:
+                            case CborObjectFormat.Array:
+                                if (memberConverter.MemberIndex.HasValue)
+                                {
+                                    _memberConvertersForReadByIndex.Add(
+                                        memberConverter.MemberIndex.Value, new MemberReadEntry(memberConverter, _nextReadOrdinal++));
+                                }
+                                break;
+                        }
+                    }
+                    catch (ArgumentException)
+                    {
+                        throw new CborException(
+                            _objectMapping.ObjectFormat == CborObjectFormat.StringKeyMap
+                                ? $"class/struct {typeof(T).Name} maps several fields/properties to the member name '{memberMapping.MemberName}'"
+                                : $"class/struct {typeof(T).Name} holds duplicated MemberIndex fields/properties");
                     }
 
                     if (memberConverter.RequirementPolicy == RequirementPolicy.AllowNull

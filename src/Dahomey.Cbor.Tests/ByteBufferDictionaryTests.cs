@@ -79,20 +79,27 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// A key that merely passes through the nodes of a longer one is not a duplicate of it: the
-        /// segments it shares are the way to an entry, not an entry.
+        /// Sharing segments with an existing key is not being a duplicate of it, in either direction:
+        /// a key laid down through the nodes of an entry already there, and an entry already there
+        /// lying on the way to a longer key.
         /// </summary>
+        /// <remarks>
+        /// The longer-then-shorter order is the one <see cref="APrefixThatIsAlsoAKeyIsFound"/> covers.
+        /// Shorter first is what puts an entry on the path the longer key must extend, so it is the
+        /// order that would trip a duplicate check looking at the nodes it passes rather than the one
+        /// it lands on.
+        /// </remarks>
         [Fact]
-        public void AddingAPrefixOfAnExistingKeyIsNotADuplicate()
+        public void SharingSegmentsWithAnExistingKeyIsNotADuplicate()
         {
             ByteBufferDictionary<int> dictionary = new ByteBufferDictionary<int>();
-            dictionary.Add(Encoding.UTF8.GetBytes("PropertyAlpha"), 12);
             dictionary.Add(Encoding.UTF8.GetBytes("Property"), 13);
+            dictionary.Add(Encoding.UTF8.GetBytes("PropertyAlpha"), 12);
 
-            Assert.True(dictionary.TryGetValue(Encoding.UTF8.GetBytes("PropertyAlpha"), out int alpha));
-            Assert.Equal(12, alpha);
             Assert.True(dictionary.TryGetValue(Encoding.UTF8.GetBytes("Property"), out int property));
             Assert.Equal(13, property);
+            Assert.True(dictionary.TryGetValue(Encoding.UTF8.GetBytes("PropertyAlpha"), out int alpha));
+            Assert.Equal(12, alpha);
         }
 
         /// <summary>And a prefix that was itself added is found, being an entry in its own right.</summary>
