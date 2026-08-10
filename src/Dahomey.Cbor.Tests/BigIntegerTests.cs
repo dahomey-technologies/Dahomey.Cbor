@@ -130,7 +130,29 @@ namespace Dahomey.Cbor.Tests
         [Theory]
         [InlineData("C00C", "12")]
         [InlineData("D8640C", "12")]
+        // A whole stack of them, which is what every reader on CborReader skips since #183.
+        [InlineData("C0C10C", "12")]
+        [InlineData("C0C1D8640C", "12")]
         public void ReadSkipsForeignTag(string hexBuffer, string expectedValue)
+        {
+            Helper.TestRead(hexBuffer, BigInteger.Parse(expectedValue));
+        }
+
+        /// <summary>
+        /// A bignum under an outer tag is still a bignum.
+        /// </summary>
+        /// <remarks>
+        /// Tag 1 over tag 2 is a natural construction, and before #183 no reader here saw past the
+        /// first tag, so this shape was rejected. Now that the rest of the reader reads through a whole
+        /// stack, refusing it would make this the one type that does not. The innermost bignum tag
+        /// decides, so a foreign tag outside it does not change the value.
+        /// </remarks>
+        [Theory]
+        [InlineData("C1C249010000000000000000", "18446744073709551616")]
+        [InlineData("C1C349010000000000000000", "-18446744073709551617")]
+        [InlineData("D864C24101", "1")]
+        [InlineData("C0C1C24180", "128")]
+        public void ReadABignumUnderAForeignTag(string hexBuffer, string expectedValue)
         {
             Helper.TestRead(hexBuffer, BigInteger.Parse(expectedValue));
         }
@@ -143,13 +165,10 @@ namespace Dahomey.Cbor.Tests
         [InlineData("F5")]
         [InlineData("80")]
         [InlineData("A0")]
-        // Tag 2 and tag 3 have to be followed by a byte string.
+        // Tag 2 and tag 3 have to be followed by a byte string, however many tags precede them.
         [InlineData("C20C")]
         [InlineData("C363616263")]
-        // One tag, not a chain: a bignum nested under another tag is rejected rather than unwrapped.
-        // Every reader on CborReader skips a single tag, so this is the library's existing limit rather
-        // than one this type adds - the same limit CborValue.SemanticTag has.
-        [InlineData("C1C249010000000000000000")]
+        [InlineData("C1C20C")]
         public void ReadInvalid(string hexBuffer)
         {
             Assert.Throws<CborException>(() => Helper.Read<BigInteger>(hexBuffer));

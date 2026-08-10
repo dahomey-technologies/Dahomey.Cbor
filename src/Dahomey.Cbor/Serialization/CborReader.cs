@@ -697,28 +697,36 @@ namespace Dahomey.Cbor.Serialization
         /// </remarks>
         public BigInteger ReadBigInteger()
         {
-            if (IsSemanticTag())
+            bool isBignum = false;
+            bool isNegativeBignum = false;
+
+            // The whole tag stack, not one tag: since #183 every reader on this type reads through a
+            // stack rather than stopping at the first, and a bignum under an outer tag would otherwise
+            // be the one shape this reader alone refused. Foreign tags are skipped as they are
+            // everywhere else, and the innermost bignum tag decides -- the tag nearest the data is the
+            // one describing it.
+            while (IsSemanticTag())
             {
-                CborReaderBookmark bookmark = GetBookmark();
+                TryReadSemanticTag(out ulong tag);
 
-                if (TryReadSemanticTag(out ulong tag)
-                    && (tag == UNSIGNED_BIGNUM_TAG || tag == NEGATIVE_BIGNUM_TAG))
+                if (tag == UNSIGNED_BIGNUM_TAG || tag == NEGATIVE_BIGNUM_TAG)
                 {
-                    Expect(CborMajorType.ByteString);
-
-                    // Big-endian, unsigned, and allowed to be empty - an empty magnitude is 0, so tag 2
-                    // reads as 0 and tag 3 as -1.
-                    BigInteger magnitude = BigIntegerFromBigEndianBytes(ReadSizeAndBytes(allowScratchBuffer: false));
-
-                    return tag == NEGATIVE_BIGNUM_TAG ? BigInteger.MinusOne - magnitude : magnitude;
+                    isBignum = true;
+                    isNegativeBignum = tag == NEGATIVE_BIGNUM_TAG;
                 }
-
-                // Some other tag. Hand it back and fall through to the untagged path below, which skips
-                // exactly one tag - the same leniency every other reader on this type has.
-                ReturnToBookmark(bookmark);
             }
 
-            SkipSemanticTag();
+            if (isBignum)
+            {
+                Expect(CborMajorType.ByteString);
+
+                // Big-endian, unsigned, and allowed to be empty - an empty magnitude is 0, so tag 2
+                // reads as 0 and tag 3 as -1.
+                BigInteger magnitude = BigIntegerFromBigEndianBytes(ReadSizeAndBytes(allowScratchBuffer: false));
+
+                return isNegativeBignum ? BigInteger.MinusOne - magnitude : magnitude;
+            }
+
             CborReaderHeader header = GetHeader();
 
             switch (header.MajorType)

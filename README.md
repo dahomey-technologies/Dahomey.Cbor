@@ -239,10 +239,10 @@ Reading accepts either form, so a `BigInteger` member reads a document whose pro
 reads the whole of major type 1, which reaches -2^64: no `long` holds that, so `ReadInt64` rejects it as an
 invalid signed integer where a `BigInteger` member decodes it.
 
-Two limits worth knowing. A text string is rejected rather than parsed — there is no span overload of
-`BigInteger.Parse` on netstandard2.0, so accepting one would mean picking an encoding on a path nothing
-asks for. And a bignum nested under another tag (`C1 C2 …`) is rejected: every reader on `CborReader` skips
-a single tag, so this is the library's existing limit rather than one bignums add.
+A bignum under an outer tag (`C1 C2 …`) decodes, as does one under a whole stack of them: the reader reads
+through the stack and the innermost bignum tag decides. A text string, on the other hand, is rejected
+rather than parsed — there is no span overload of `BigInteger.Parse` on netstandard2.0, so accepting one
+would mean picking an encoding on a path nothing asks for.
 
 Tags 4 and 5 (decimal fraction and bigfloat) are not decoded semantically and still surface as a
 two-element array. Tracked as https://github.com/dahomey-technologies/Dahomey.Cbor/issues/170.

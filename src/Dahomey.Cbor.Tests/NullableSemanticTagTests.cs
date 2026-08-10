@@ -57,7 +57,10 @@ namespace Dahomey.Cbor.Tests
         /// <para>
         /// Stacked tags are what broke it. The tag was skipped once here and once in the underlying
         /// converter, so <c>T?</c> was accidentally one tag more lenient than <c>T</c>: <c>C1 C1 0C</c>
-        /// read as 12 into an <c>int?</c> and threw into an <c>int</c>.
+        /// read as 12 into an <c>int?</c> and threw into an <c>int</c>. Since #183 both read 12 --
+        /// <c>SkipSemanticTag</c> consumes the whole stack, so the leniency is now the rule rather than
+        /// an artefact of counting skips. What this asserts is unchanged either way: whatever the
+        /// underlying type does with these bytes, the nullable does the same.
         /// </para>
         /// </remarks>
         [Theory]
@@ -77,33 +80,29 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// The invariant is behavioural equality, not rejection -- including where the shared outcome
-        /// is wrong.
+        /// The same for a stacked tag over a datetime, which is where handing the tag back briefly cost
+        /// correctness.
         /// </summary>
         /// <remarks>
-        /// <see cref="DateTime"/> is the case that shows the difference: a stacked tag over an RFC 3339
-        /// string is not rejected, it is read as a value that is not the one encoded, for
-        /// <c>DateTime</c> and <c>DateTime?</c> alike. That is why the tests above compare the two
-        /// rather than assert that stacked tags throw.
-        /// <para>
-        /// The second shape is where handing the tag back costs something real. On <c>C1 C0 74 ...</c>
-        /// a <c>DateTime?</c> used to decode correctly, because skipping the outer tag here left the
-        /// converter a singly-tagged item it handles; it now meets both tags and produces the same
-        /// wrong value the non-nullable always produced. The underlying defect is not in
-        /// <see cref="DateTime"/> handling at all -- <c>CborReader.GetCurrentDataItemType</c>
-        /// over-consumes a byte on a stacked tag, tracked as
-        /// https://github.com/dahomey-technologies/Dahomey.Cbor/issues/183. Nothing here pins the wrong
-        /// value, so fixing that will leave these passing, with both sides correct instead of both
-        /// sides wrong.
-        /// </para>
+        /// These shapes decode correctly now. They did not while this change sat on top of the tag
+        /// handling that preceded #183: skipping the outer tag here used to leave
+        /// <c>DateTimeConverter</c> a singly-tagged item it handles, so a <c>DateTime?</c> read
+        /// <c>C1 C0 74 ...</c> correctly while a <c>DateTime</c> read it as 1969-12-31 23:59:41.
+        /// Handing the tag back aligned the two on the wrong answer, which is what made the underlying
+        /// defect visible: <c>CborReader.GetCurrentDataItemType</c> over-consumed a byte on a stacked
+        /// tag. #183 fixed that, so both sides are now correct rather than both wrong, and these
+        /// assertions did not have to change to follow -- they never pinned the wrong value.
         /// </remarks>
         [Theory]
-        // c0 c0 74 "2020-01-02T03:04:05Z" -- both wrong before and after.
+        [InlineData("C074323032302D30312D30325430333A30343A30355A")]
         [InlineData("C0C074323032302D30312D30325430333A30343A30355A")]
-        // c1 c0 74 "2020-01-02T03:04:05Z" -- the nullable was right before, and is wrong now.
         [InlineData("C1C074323032302D30312D30325430333A30343A30355A")]
-        public void ANullableMatchesItsUnderlyingTypeEvenWhereBothAreWrong(string hexBuffer)
+        [InlineData("C1C1C074323032302D30312D30325430333A30343A30355A")]
+        public void ANullableMatchesItsUnderlyingTypeOnAStackedTag(string hexBuffer)
         {
+            DateTime expected = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+
+            Assert.Equal(expected, Helper.Read<DateTime>(hexBuffer));
             Assert.Equal(Helper.Read<DateTime>(hexBuffer), Helper.Read<DateTime?>(hexBuffer));
         }
 
