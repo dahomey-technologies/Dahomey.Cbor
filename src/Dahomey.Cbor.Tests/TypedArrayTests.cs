@@ -738,20 +738,25 @@ namespace Dahomey.Cbor.Tests
         [Fact]
         public void ATypedArrayConverterIsNoMoreLenientAboutNestedTagsThanAnArrayConverter()
         {
-            // int[] goes through TypedArrayConverter and string[] through ArrayConverter. What matters
-            // is that they agree: reading an array skips a tag twice, once in ReadNull and once in
-            // ReadBeginArray, so two stacked tags are accepted and three are not. Consuming the tag in
-            // TypedArrayConverter.Read as well would let the typed path take a third, accepting a
-            // nesting the plain path rejects.
+            // int[] goes through TypedArrayConverter and string[] through ArrayConverter, and what
+            // matters is that they agree at every depth.
+            //
+            // This used to be a tripwire on TypedArrayConverter's ReturnToBookmark: skipping was
+            // limited to one tag, so a typed path that kept a declined tag consumed accepted a nesting
+            // the plain path rejected, and dropping the restore failed this test. It no longer does -
+            // SkipSemanticTag steps over the whole stack, so the restore cannot change what either
+            // path reads and nothing here can detect its removal. Measured, not assumed: with both
+            // ReturnToBookmark calls commented out the suite is green on this branch and red on the
+            // commit before it. What remains pinned is the agreement itself.
             CborOptions options = TypedArrayOptions();
 
             // D827 tag(39) C1 tag(1) 820102 [1, 2]
             Assert.Equal(new[] { 1, 2 }, Helper.Read<int[]>("D827C1820102", options));
             Assert.Equal(new[] { "a", "b" }, Helper.Read<string[]>("D827C18261616162", options));
 
-            // D827 tag(39) C1 tag(1) C1 tag(1) 820102 [1, 2] -- one tag too many for either
-            AssertThrowsCborException(() => Helper.Read<int[]>("D827C1C1820102", options));
-            AssertThrowsCborException(() => Helper.Read<string[]>("D827C1C18261616162", options));
+            // D827 tag(39) C1 tag(1) C1 tag(1) 820102 [1, 2] -- deeper, and still the same on both
+            Assert.Equal(new[] { 1, 2 }, Helper.Read<int[]>("D827C1C1820102", options));
+            Assert.Equal(new[] { "a", "b" }, Helper.Read<string[]>("D827C1C18261616162", options));
         }
 
         [Fact]

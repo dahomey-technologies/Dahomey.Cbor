@@ -381,26 +381,40 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// Nested semantic tags do not work, on this branch or on master, and this change neither
-        /// fixes nor worsens them.
+        /// Nested semantic tags read the value they tag. Every tag but the outermost is dropped, since
+        /// only a converter that reads its own tag has anywhere to put one.
         /// </summary>
         /// <remarks>
-        /// A read entry point opens with a single <c>SkipSemanticTag()</c>, so the second tag arrives
-        /// where a data item is expected. The message is asserted rather than just the type: it is
-        /// what says the failure is the second tag being met as a value, so a future change that makes
-        /// nested tags work, or that breaks the first tag instead, cannot leave this test green.
+        /// A read entry point opens with <c>SkipSemanticTag()</c>, which steps over the whole stack.
+        /// It used to step over one, so the second tag arrived where a data item was expected and this
+        /// threw <c>Invalid major type SemanticTag</c> — the tolerable half of issue #183, whose other
+        /// half returned a wrong value in silence. See <see cref="Issues.Issue0183"/>.
         /// </remarks>
         [Fact]
-        public void NestedSemanticTagsAreNotSupported()
+        public void NestedSemanticTagsReadTheValueTheyTag()
         {
             // a1                  map(1)
             //    65 56616c7565    "Value"
             //    c1 c0            tag(1) tag(0)
             //    01               1
-            CborException exception = Assert.Throws<CborException>(
-                () => Cbor.Deserialize<IntHolder>("A16556616C7565C1C001".HexToBytes()));
+            IntHolder holder = Cbor.Deserialize<IntHolder>("A16556616C7565C1C001".HexToBytes());
 
-            Assert.Equal("[9] Invalid major type SemanticTag. Failed to deserialize from \"$.Value\".", exception.Message);
+            Assert.Equal(1, holder.Value);
+        }
+
+        /// <summary>
+        /// A converter reading its own tag still gets the outermost one, and the tags behind it do not
+        /// disturb the value. This is the one place where "the stack is skipped" and "the tag reaches
+        /// its converter" have to hold at once.
+        /// </summary>
+        [Fact]
+        public void AConverterReadingItsOwnTagGetsTheOutermostOfANestedStack()
+        {
+            // c1 c0 01  -- tag(1) tag(0) 1
+            Tagged tagged = Cbor.Deserialize<Tagged>("C1C001".HexToBytes());
+
+            Assert.Equal(1ul, tagged.Tag);
+            Assert.Equal(1, tagged.Value);
         }
     }
 }

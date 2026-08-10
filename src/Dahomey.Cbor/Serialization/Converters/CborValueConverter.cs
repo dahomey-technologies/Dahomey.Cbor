@@ -63,8 +63,8 @@ namespace Dahomey.Cbor.Serialization.Converters
             CborValue cborValue = ReadCborValue(ref reader);
 
             // WithSemanticTag rather than assigning SemanticTag: small integers, common floats, both
-            // booleans and null are shared instances, and stamping a tag on one of those would tag
-            // every occurrence of that value in the process.
+            // booleans, the empty string and null are shared instances, and stamping a tag on one of
+            // those would tag every occurrence of that value in the process.
             return hasSemanticTag ? cborValue.WithSemanticTag(semanticTag) : cborValue;
         }
 
