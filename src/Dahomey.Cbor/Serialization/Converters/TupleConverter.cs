@@ -40,9 +40,14 @@
         public override (T1, T2) Read(ref CborReader reader)
         {
             // ReadSize does not skip a semantic tag, and this is the only converter that reaches
-            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
-            // stays readable; the tag itself carries no information this converter needs.
-            reader.TryReadSemanticTag(out _);
+            // the reader below its tag-skipping entry points. Skip them here so a tagged tuple
+            // stays readable; the tags themselves carry no information this converter needs.
+            // A loop rather than one skip: since #183 SkipSemanticTag consumes a whole stack, and
+            // stopping at the first would leave this the one converter that does not - a tag 4
+            // decimal fraction under an outer tag reads as a two-element array everywhere else.
+            while (reader.TryReadSemanticTag(out _))
+            {
+            }
 
             int size = reader.ReadSize();
 
@@ -96,9 +101,14 @@
         public override (T1, T2, T3) Read(ref CborReader reader)
         {
             // ReadSize does not skip a semantic tag, and this is the only converter that reaches
-            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
-            // stays readable; the tag itself carries no information this converter needs.
-            reader.TryReadSemanticTag(out _);
+            // the reader below its tag-skipping entry points. Skip them here so a tagged tuple
+            // stays readable; the tags themselves carry no information this converter needs.
+            // A loop rather than one skip: since #183 SkipSemanticTag consumes a whole stack, and
+            // stopping at the first would leave this the one converter that does not - a tag 4
+            // decimal fraction under an outer tag reads as a two-element array everywhere else.
+            while (reader.TryReadSemanticTag(out _))
+            {
+            }
 
             int size = reader.ReadSize();
 
@@ -161,9 +171,14 @@
         public override (T1, T2, T3, T4) Read(ref CborReader reader)
         {
             // ReadSize does not skip a semantic tag, and this is the only converter that reaches
-            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
-            // stays readable; the tag itself carries no information this converter needs.
-            reader.TryReadSemanticTag(out _);
+            // the reader below its tag-skipping entry points. Skip them here so a tagged tuple
+            // stays readable; the tags themselves carry no information this converter needs.
+            // A loop rather than one skip: since #183 SkipSemanticTag consumes a whole stack, and
+            // stopping at the first would leave this the one converter that does not - a tag 4
+            // decimal fraction under an outer tag reads as a two-element array everywhere else.
+            while (reader.TryReadSemanticTag(out _))
+            {
+            }
 
             int size = reader.ReadSize();
 
@@ -235,9 +250,14 @@
         public override (T1, T2, T3, T4, T5) Read(ref CborReader reader)
         {
             // ReadSize does not skip a semantic tag, and this is the only converter that reaches
-            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
-            // stays readable; the tag itself carries no information this converter needs.
-            reader.TryReadSemanticTag(out _);
+            // the reader below its tag-skipping entry points. Skip them here so a tagged tuple
+            // stays readable; the tags themselves carry no information this converter needs.
+            // A loop rather than one skip: since #183 SkipSemanticTag consumes a whole stack, and
+            // stopping at the first would leave this the one converter that does not - a tag 4
+            // decimal fraction under an outer tag reads as a two-element array everywhere else.
+            while (reader.TryReadSemanticTag(out _))
+            {
+            }
 
             int size = reader.ReadSize();
 
@@ -318,9 +338,14 @@
         public override (T1, T2, T3, T4, T5, T6) Read(ref CborReader reader)
         {
             // ReadSize does not skip a semantic tag, and this is the only converter that reaches
-            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
-            // stays readable; the tag itself carries no information this converter needs.
-            reader.TryReadSemanticTag(out _);
+            // the reader below its tag-skipping entry points. Skip them here so a tagged tuple
+            // stays readable; the tags themselves carry no information this converter needs.
+            // A loop rather than one skip: since #183 SkipSemanticTag consumes a whole stack, and
+            // stopping at the first would leave this the one converter that does not - a tag 4
+            // decimal fraction under an outer tag reads as a two-element array everywhere else.
+            while (reader.TryReadSemanticTag(out _))
+            {
+            }
 
             int size = reader.ReadSize();
 
@@ -410,9 +435,14 @@
         public override (T1, T2, T3, T4, T5, T6, T7) Read(ref CborReader reader)
         {
             // ReadSize does not skip a semantic tag, and this is the only converter that reaches
-            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
-            // stays readable; the tag itself carries no information this converter needs.
-            reader.TryReadSemanticTag(out _);
+            // the reader below its tag-skipping entry points. Skip them here so a tagged tuple
+            // stays readable; the tags themselves carry no information this converter needs.
+            // A loop rather than one skip: since #183 SkipSemanticTag consumes a whole stack, and
+            // stopping at the first would leave this the one converter that does not - a tag 4
+            // decimal fraction under an outer tag reads as a two-element array everywhere else.
+            while (reader.TryReadSemanticTag(out _))
+            {
+            }
 
             int size = reader.ReadSize();
 
@@ -510,9 +540,14 @@
         public override (T1, T2, T3, T4, T5, T6, T7, T8) Read(ref CborReader reader)
         {
             // ReadSize does not skip a semantic tag, and this is the only converter that reaches
-            // the reader below its tag-skipping entry points. Skip it here so a tagged tuple
-            // stays readable; the tag itself carries no information this converter needs.
-            reader.TryReadSemanticTag(out _);
+            // the reader below its tag-skipping entry points. Skip them here so a tagged tuple
+            // stays readable; the tags themselves carry no information this converter needs.
+            // A loop rather than one skip: since #183 SkipSemanticTag consumes a whole stack, and
+            // stopping at the first would leave this the one converter that does not - a tag 4
+            // decimal fraction under an outer tag reads as a two-element array everywhere else.
+            while (reader.TryReadSemanticTag(out _))
+            {
+            }
 
             int size = reader.ReadSize();
 
