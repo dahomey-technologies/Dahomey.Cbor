@@ -227,6 +227,17 @@ namespace Dahomey.Cbor.Tests
             public static int WhatEver = 12;
         }
 
+        /// <summary>
+        /// <see cref="ObjectMapping{T}.AutoMap"/> takes the members the conventions reach — here the
+        /// readonly instance field — and the explicit calls add the ones they skip: a const and a
+        /// static field.
+        /// </summary>
+        /// <remarks>
+        /// <c>Name</c> is deliberately not mapped a second time. It used to be, and the expected
+        /// document carried the key twice as a result; a mapping that puts two members under one name
+        /// is now refused when it is built (issue #177), so mapping over what AutoMap already covered
+        /// throws rather than writing a document this type cannot read back.
+        /// </remarks>
         [Fact]
         public void TestWriteByApi()
         {
@@ -238,12 +249,11 @@ namespace Dahomey.Cbor.Tests
                     typeof(Tree)
                         .GetField(nameof(Tree.Id), BindingFlags.Public | BindingFlags.Static),
                     typeof(string));
-                objectMapping.MapMember(tree => tree.Name);
                 objectMapping.MapMember(tree => Tree.WhatEver);
             });
 
             Tree obj = new Tree();
-            const string hexBuffer = "A4644E616D65694C656D6F6E547265656249646A547265652E636C617373644E616D65694C656D6F6E547265656857686174457665720C";
+            const string hexBuffer = "A3644E616D65694C656D6F6E547265656249646A547265652E636C6173736857686174457665720C";
             Helper.TestWrite(obj, hexBuffer, null, options);
         }
     }

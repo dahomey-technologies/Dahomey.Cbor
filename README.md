@@ -32,6 +32,7 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Support for structs
 * Support for RFC 8746 typed arrays, opt-in per direction (CborOptions.TypedArrayMode)
 * Duplicate map keys rejected on every decode target, with a last-wins opt-out (CborOptions.DuplicateKeyMode)
+* Ambiguous mappings — two members of a type under one CBOR name — refused when the mapping is built
 
 ## Installation
 ### NuGet
@@ -458,8 +459,25 @@ The **discriminator** is refused when repeated, even though it is a key of the m
 member of the type: two readers disagreeing about which occurrence names the type is how one document
 comes to mean two things.
 
-One case the policy does not reach: **a type mapping two members to the same CBOR name** — two
-``[CborProperty("X")]``, say — writes a document with a repeated key that it then cannot read back.
-The mapping is ambiguous in both directions, since only one of the two members can ever be read from
-key ``X``, so it is worth removing rather than working around; ``DuplicateKeyMode.LastWins`` will read
-such a document if you have one already.
+One case is settled earlier than the decode, because no answer at decode time is right: **a type
+mapping two members to the same CBOR name** used to write a document with a repeated key that it then
+could not read back. The mapping itself is now refused, the first time the type is serialized or
+deserialized, naming the type and the colliding name:
+
+```
+class/struct Aliased maps several fields/properties to the member name 'X'
+```
+
+The mapping is ambiguous in both directions — only one of the two members can ever be read from key
+``X``, and writing both is not representable — so there is nothing for ``DuplicateKeyMode`` to decide.
+``[CborProperty("X")]`` twice is the visible way in; a naming convention that folds two member names
+into one, or a mapping API call that maps a member the conventions already covered, arrives at the
+same place with nothing in the source looking wrong. Whichever route, the fix is to give the two
+members distinct names or to drop one of them.
+
+> **Behaviour change.** Such a type used to serialize, so this is a new exception at first use for a
+> type that "worked". What it wrote was a document whose second member was unreadable — silently
+> discarded before #169, refused as a duplicate key after it — so the type never round-tripped; the
+> exception names the mapping instead of leaving it to be found in the bytes. A document already
+> written by one of these mappings still reads with ``DuplicateKeyMode.LastWins``, against a type
+> whose mapping no longer collides.

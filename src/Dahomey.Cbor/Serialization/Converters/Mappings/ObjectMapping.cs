@@ -347,6 +347,20 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                         {
                             throw new CborException($"expecting all fields/properties to get a member name in class/struct {ObjectType.Name}");
                         }
+
+                        // Two members under one name is ambiguous in both directions: the write emits
+                        // the key twice, producing a document this very type refuses to read back,
+                        // and the read can only ever reach one of the two members. Refusing the
+                        // mapping names the type and the name; letting it build names neither, and
+                        // shows up as a duplicate key in a document nobody wrote by hand.
+                        string? duplicatedName = _memberMappings
+                            .GroupBy(m => converter is null ? m.MemberName : m.GetMemberNameForConverter(converter), StringComparer.Ordinal)
+                            .FirstOrDefault(g => g.Count() > 1)?.Key;
+
+                        if (duplicatedName != null)
+                        {
+                            throw new CborException($"class/struct {ObjectType.Name} maps several fields/properties to the member name '{duplicatedName}'");
+                        }
                     }
                     break;
                 case CborObjectFormat.IntKeyMap:

@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.Util;
+using System;
 using System.Text;
 using Xunit;
 
@@ -48,6 +49,50 @@ namespace Dahomey.Cbor.Tests
             Assert.False(dictionary.TryGetValue(Encoding.UTF8.GetBytes("Property"), out int _));
             Assert.True(dictionary.TryGetValue(Encoding.UTF8.GetBytes("PropertyAlpha"), out int found));
             Assert.Equal(12, found);
+        }
+
+        /// <summary>
+        /// Adding a key twice is refused rather than silently replacing the first entry.
+        /// </summary>
+        /// <remarks>
+        /// Every caller builds a lookup once from keys it believes distinct, so a repeat is a mistake
+        /// upstream — two members mapped to one CBOR name, issue #177 — and the entry it overwrote was
+        /// a member that could then never be read.
+        /// </remarks>
+        [Theory]
+        [InlineData("short1")]
+        [InlineData("eightchr")]
+        [InlineData("longervaluethaneightbytes")]
+        public void AddingTheSameKeyTwiceThrows(string key)
+        {
+            ByteBufferDictionary<int> dictionary = new ByteBufferDictionary<int>();
+            dictionary.Add(Encoding.UTF8.GetBytes(key), 12);
+
+            ArgumentException ex = Assert.Throws<ArgumentException>(
+                () => dictionary.Add(Encoding.UTF8.GetBytes(key), 13));
+
+            Assert.Contains(key, ex.Message);
+
+            // and the entry that was there is the one that is still there
+            Assert.True(dictionary.TryGetValue(Encoding.UTF8.GetBytes(key), out int found));
+            Assert.Equal(12, found);
+        }
+
+        /// <summary>
+        /// A key that merely passes through the nodes of a longer one is not a duplicate of it: the
+        /// segments it shares are the way to an entry, not an entry.
+        /// </summary>
+        [Fact]
+        public void AddingAPrefixOfAnExistingKeyIsNotADuplicate()
+        {
+            ByteBufferDictionary<int> dictionary = new ByteBufferDictionary<int>();
+            dictionary.Add(Encoding.UTF8.GetBytes("PropertyAlpha"), 12);
+            dictionary.Add(Encoding.UTF8.GetBytes("Property"), 13);
+
+            Assert.True(dictionary.TryGetValue(Encoding.UTF8.GetBytes("PropertyAlpha"), out int alpha));
+            Assert.Equal(12, alpha);
+            Assert.True(dictionary.TryGetValue(Encoding.UTF8.GetBytes("Property"), out int property));
+            Assert.Equal(13, property);
         }
 
         /// <summary>And a prefix that was itself added is found, being an entry in its own right.</summary>
