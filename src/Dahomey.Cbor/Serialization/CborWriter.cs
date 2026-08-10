@@ -3,6 +3,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.ComponentModel;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -24,6 +25,10 @@ namespace Dahomey.Cbor.Serialization
     public ref struct CborWriter
     {
         private const byte INDEFINITE_LENGTH = 31;
+
+        // RFC 8949 §3.4.3.
+        private const ulong UNSIGNED_BIGNUM_TAG = 2;
+        private const ulong NEGATIVE_BIGNUM_TAG = 3;
 
         /// <summary>
         /// Default nesting limit, matching <see cref="CborOptions.MaxDepth"/> and
@@ -224,6 +229,79 @@ namespace Dahomey.Cbor.Serialization
         public void WriteDecimal(decimal value)
         {
             InternalWriteDecimal(value);
+        }
+
+        /// <summary>
+        /// Writes an integer of any width, as a basic integer when it fits in one and as an RFC 8949
+        /// §3.4.3 bignum - tag 2 or tag 3 over a big-endian magnitude - when it does not.
+        /// </summary>
+        /// <remarks>
+        /// §3.4.3 makes the basic integer the preferred serialization for a value that fits in 64 bits,
+        /// so the tag appears only where it carries information. That keeps a <see cref="BigInteger"/>
+        /// member byte-identical to the same value written as an integer, which is what lets one be
+        /// swapped for the other without changing the documents a service already emits.
+        /// </remarks>
+        public void WriteBigInteger(BigInteger value)
+        {
+            if (value.Sign >= 0)
+            {
+                if (value <= ulong.MaxValue)
+                {
+                    WriteUnsigned((ulong)value);
+                    return;
+                }
+
+                WriteSemanticTag(UNSIGNED_BIGNUM_TAG);
+                WriteByteString(BigIntegerToBigEndianBytes(value));
+                return;
+            }
+
+            // Both encodings of a negative value store -1 - value, so the magnitude is computed once
+            // here and then either fits the header or becomes the tag 3 payload. Note that this reaches
+            // one value WriteSigned cannot: -2^64 has a magnitude of ulong.MaxValue, which is a basic
+            // integer, but long.MinValue is as low as WriteSigned goes.
+            BigInteger magnitude = BigInteger.MinusOne - value;
+
+            if (magnitude <= ulong.MaxValue)
+            {
+                WriteInteger(CborMajorType.NegativeInteger, (ulong)magnitude);
+                return;
+            }
+
+            WriteSemanticTag(NEGATIVE_BIGNUM_TAG);
+            WriteByteString(BigIntegerToBigEndianBytes(magnitude));
+        }
+
+        /// <summary>
+        /// Renders a non-negative <see cref="BigInteger"/> as a big-endian magnitude with no leading
+        /// zero byte, which is what both bignum tags carry.
+        /// </summary>
+        private static byte[] BigIntegerToBigEndianBytes(BigInteger value)
+        {
+#if NET8_0_OR_GREATER
+            return value.ToByteArray(isUnsigned: true, isBigEndian: true);
+#else
+            // netstandard2.0 only has the little-endian two's complement form, which carries a leading
+            // zero byte whenever the top bit of the magnitude is set - reversed, that is a leading zero
+            // the encoding should not have.
+            byte[] littleEndian = value.ToByteArray();
+
+            int length = littleEndian.Length;
+
+            while (length > 1 && littleEndian[length - 1] == 0)
+            {
+                length--;
+            }
+
+            byte[] bigEndian = new byte[length];
+
+            for (int i = 0; i < length; i++)
+            {
+                bigEndian[i] = littleEndian[length - 1 - i];
+            }
+
+            return bigEndian;
+#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

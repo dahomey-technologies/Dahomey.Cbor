@@ -591,6 +591,14 @@ namespace Dahomey.Cbor.Generator
                     return true;
             }
 
+            // BigInteger has no SpecialType, but PrimitiveConverterProvider does resolve it to a
+            // concrete BigIntegerConverter, so it belongs with the cases above rather than with the
+            // unsupported types below.
+            if (type.ToDisplayString() == "System.Numerics.BigInteger")
+            {
+                return true;
+            }
+
             // System.Half, System.Guid, System.DateTimeOffset and System.Object are deliberately absent.
             // PrimitiveConverterProvider has no case for any of them, so at run time they fall through
             // to ObjectConverterProvider and reach MakeGenericType -- the exact failure a generated

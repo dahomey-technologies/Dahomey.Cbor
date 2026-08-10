@@ -14,6 +14,49 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(2023, intValue);
         }
 
+        /// <summary>
+        /// A tuple behind a stack of semantic tags.
+        /// </summary>
+        /// <remarks>
+        /// This converter reaches the reader below its tag-skipping entry points -- <c>ReadSize</c>
+        /// skips no tag -- so it skips them itself, and it used to skip exactly one. Since #183 made
+        /// <c>SkipSemanticTag</c> consume a whole stack, one skip left this the only converter that
+        /// stops at the first tag, and a tuple behind two of them was rejected.
+        /// <para>
+        /// Asserted for the nullable alongside the underlying type, because that is where the gap was
+        /// found: <c>NullableConverter</c> skipped a tag of its own before delegating, so a
+        /// <c>(int, int)?</c> read these while a <c>(int, int)</c> did not.
+        /// </para>
+        /// </remarks>
+        [Theory]
+        [InlineData("820102")]
+        [InlineData("C1820102")]
+        [InlineData("C1C1820102")]
+        [InlineData("C0C1D864820102")]
+        // Indefinite-length, which takes the other arm of the size check.
+        [InlineData("C1C19F0102FF")]
+        public void ReadTupleThroughATagStack(string hexBuffer)
+        {
+            Assert.Equal((1, 2), Helper.Read<(int, int)>(hexBuffer));
+            Assert.Equal(Helper.Read<(int, int)>(hexBuffer), Helper.Read<(int, int)?>(hexBuffer));
+        }
+
+        /// <summary>
+        /// The shape that makes the above more than theoretical: an RFC 8949 §3.4.4 decimal fraction,
+        /// which this library does not decode semantically and so surfaces as the two-element array it
+        /// is encoded as. Under an outer tag it used to be rejected.
+        /// </summary>
+        [Theory]
+        [InlineData("C48221196AB3")]
+        [InlineData("C1C48221196AB3")]
+        [InlineData("D864C48221196AB3")]
+        public void ReadADecimalFractionAsATupleThroughATagStack(string hexBuffer)
+        {
+            // 273.15 as [-2, 27315]
+            Assert.Equal((-2, 27315), Helper.Read<(int, int)>(hexBuffer));
+            Assert.Equal(Helper.Read<(int, int)>(hexBuffer), Helper.Read<(int, int)?>(hexBuffer));
+        }
+
         [Fact]
         public void WriteTuple()
         {

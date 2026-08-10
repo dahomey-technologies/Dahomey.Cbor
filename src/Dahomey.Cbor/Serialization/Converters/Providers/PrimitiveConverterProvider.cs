@@ -1,5 +1,6 @@
 ﻿using Dahomey.Cbor.ObjectModel;
 using System;
+using System.Numerics;
 
 namespace Dahomey.Cbor.Serialization.Converters.Providers
 {
@@ -44,6 +45,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                     return new UInt32Converter();
                 case TypeCode.UInt64:
                     return new UInt64Converter();
+            }
+
+            // Not a TypeCode, so it cannot join the switch above.
+            if (type == typeof(BigInteger))
+            {
+                return new BigIntegerConverter();
             }
 
             if (type == typeof(ReadOnlyMemory<byte>))
