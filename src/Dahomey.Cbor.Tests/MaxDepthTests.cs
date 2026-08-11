@@ -292,5 +292,140 @@ namespace Dahomey.Cbor.Tests
             // 500 siblings, each 2 deep, inside one array: nowhere near the limit of 8.
             Helper.Write(manySiblings, new CborOptions { MaxDepth = 8 });
         }
+
+        // ---- the skip path ----
+
+        public class Holder
+        {
+            public int B { get; set; }
+        }
+
+        /// <summary>
+        /// A map of two members: <c>"A"</c>, whose value is <paramref name="depth"/> nested arrays, and
+        /// <c>"B"</c>, whose value is 1.
+        /// </summary>
+        private static byte[] UnmappedNesting(int depth)
+        {
+            byte[] nested = NestedArrays(depth);
+            byte[] buffer = new byte[4 + nested.Length + 3];
+
+            buffer[0] = 0xA2;                       // map(2)
+            buffer[1] = 0x61; buffer[2] = 0x41;     // "A"
+            nested.CopyTo(buffer, 3);
+            buffer[3 + nested.Length] = 0x61;       // "B"
+            buffer[4 + nested.Length] = 0x42;
+            buffer[5 + nested.Length] = 0x01;       // 1
+
+            return buffer;
+        }
+
+        /// <summary>
+        /// Nesting reached through a member the target type does not declare is bounded too.
+        /// </summary>
+        /// <remarks>
+        /// <c>ObjectConverter</c> hands an unhandled name's value to <c>CborReader.SkipDataItem</c>,
+        /// which recurses through the same arrays and maps a read would — so a document that is refused
+        /// as a value has to be refused as a skip, or the bound is a bound on the shape of the target
+        /// type rather than on the document. At 100 000 levels this took the process down with an
+        /// uncatchable <c>StackOverflowException</c>, which is why the modest depth below is the case
+        /// that can be asserted at all: a test cannot survive the one that mattered.
+        /// </remarks>
+        [Fact]
+        public void NestingInsideASkippedMemberIsBounded()
+        {
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Holder>(UnmappedNesting(100)));
+
+            Assert.Contains("nesting depth", exception.Message);
+        }
+
+        [Fact]
+        public void RaisingMaxDepthAllowsADeeperSkippedMember()
+        {
+            byte[] buffer = UnmappedNesting(100);
+
+            Assert.Throws<CborException>(() => Cbor.Deserialize<Holder>(buffer));
+
+            Holder holder = Cbor.Deserialize<Holder>(buffer, new CborOptions { MaxDepth = 500 });
+
+            Assert.Equal(1, holder.B);
+        }
+
+        /// <summary>An unmapped member within the limit is skipped, and the read carries on past it.</summary>
+        [Fact]
+        public void AShallowSkippedMemberIsUnaffected()
+        {
+            Holder holder = Cbor.Deserialize<Holder>(UnmappedNesting(8));
+
+            Assert.Equal(1, holder.B);
+        }
+
+        /// <summary>
+        /// The skip path releases depth like the read path, or a document with enough unmapped members
+        /// would trip the limit on the tenth shallow one rather than on anything deep.
+        /// </summary>
+        [Fact]
+        public void SkippedSiblingsDoNotAccumulateDepth()
+        {
+            using ByteBufferWriter bufferWriter = new ByteBufferWriter();
+            CborWriter writer = new CborWriter(bufferWriter);
+
+            writer.WriteBeginMap(201);
+
+            for (int i = 0; i < 200; i++)
+            {
+                writer.WriteString($"unmapped{i}");
+                writer.WriteBeginArray(1);
+                writer.WriteBeginArray(1);
+                writer.WriteInt32(0);
+            }
+
+            writer.WriteString("B");
+            writer.WriteInt32(1);
+
+            // 200 unmapped members, each 2 deep, inside one map: 3 levels against a limit of 8.
+            Holder holder = Cbor.Deserialize<Holder>(
+                bufferWriter.WrittenSpan.ToArray(), new CborOptions { MaxDepth = 8 });
+
+            Assert.Equal(1, holder.B);
+        }
+
+        /// <summary>
+        /// Read depth and skip depth are one budget, not two. A skipped member nested inside mapped
+        /// objects starts from the depth already spent getting to it.
+        /// </summary>
+        [Fact]
+        public void SkipDepthContinuesFromTheDepthAlreadyRead()
+        {
+            // A ref struct cannot be captured, so no Assert.Throws lambda.
+            CborException? thrown = null;
+
+            try
+            {
+                CborReader reader = new CborReader(NestedArrays(20), maxDepth: 8);
+                reader.SkipDataItem();
+            }
+            catch (CborException exception)
+            {
+                thrown = exception;
+            }
+
+            Assert.NotNull(thrown);
+            Assert.Contains("nesting depth", thrown!.Message);
+        }
+
+        [Fact]
+        public void SkippingWithinTheLimitConsumesTheWholeItem()
+        {
+            byte[] buffer = new byte[NestedArrays(4).Length + 1];
+            NestedArrays(4).CopyTo(buffer, 0);
+            buffer[buffer.Length - 1] = 0x01;   // a second item, after the nested one
+
+            CborReader reader = new CborReader(buffer, maxDepth: 8);
+
+            reader.SkipDataItem();
+
+            Assert.Equal(1, reader.ReadInt32());
+        }
     }
 }
