@@ -26,7 +26,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// because the required check compares against another converter's member list, and it is
         /// populated whatever <see cref="DuplicateKeyMode"/> is in force.
         /// </summary>
-        private readonly HashSet<IMemberConverter>? _requiredMembersRead;
+        private HashSet<IMemberConverter>? _requiredMembersRead;
 
         private readonly bool _rejectDuplicates;
 
@@ -63,6 +63,25 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         /// <summary>Whether required members are being tracked at all.</summary>
         public readonly bool TracksRequiredMembers => _requiredMembersRead != null;
+
+        /// <summary>
+        /// Turns tracking on for a read that started without it.
+        /// </summary>
+        /// <remarks>
+        /// The constructor can only consult the <em>declared</em> type's required members, and on a
+        /// polymorphic read the list that is checked is the resolved type's - a type deriving from a
+        /// base that requires nothing may require something of its own. Called once the discriminator
+        /// has settled which converter this object is being read by, which is before its first member
+        /// is read, so nothing can already have been missed.
+        /// <para>
+        /// Idempotent, and never turns tracking off: a declared type's requirements are the derived
+        /// type's as well, so the set only ever needs to start existing.
+        /// </para>
+        /// </remarks>
+        public void TrackRequiredMembers()
+        {
+            _requiredMembersRead ??= new HashSet<IMemberConverter>();
+        }
 
         public readonly bool WasRead(IMemberConverter memberConverter)
         {

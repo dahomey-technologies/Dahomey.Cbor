@@ -684,6 +684,17 @@ namespace Dahomey.Cbor.Serialization.Converters
                     {
                         context.converter = this;
                     }
+
+                    // The read state was built from this converter's required members, which on a
+                    // polymorphic read is the declared type's - so a member required only by the
+                    // resolved type had nothing tracking it, and the check at the end of Read, which
+                    // iterates the resolved converter's list, was skipped entirely. Enabled here
+                    // because this is the point the converter is settled and no member has been read
+                    // yet.
+                    if (context.converter.RequiredMemberConvertersForRead.Count != 0)
+                    {
+                        context.readState.TrackRequiredMembers();
+                    }
                 }
 
                 // Settled once, on the first item, and not revisited: every member of this object is
