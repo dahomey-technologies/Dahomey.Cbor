@@ -1,5 +1,6 @@
 ﻿using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization.Conventions;
+using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
@@ -359,7 +360,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                         if (duplicatedName != null)
                         {
-                            throw new CborException($"class/struct {ObjectType.Name} maps several fields/properties to the member name '{duplicatedName}'");
+                            throw new CborException(MemberMappingErrors.DuplicateMemberName(ObjectType, duplicatedName));
                         }
                     }
                     break;
@@ -376,7 +377,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                         if (indexDuplicates)
                         {
-                            throw new CborException($"class/struct {ObjectType.Name} holds duplicated MemberIndex fields/properties");
+                            throw new CborException(MemberMappingErrors.DuplicateMemberIndex(ObjectType));
                         }
 
                         _memberMappings = _memberMappings
@@ -397,7 +398,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                         if (indexDuplicates)
                         {
-                            throw new CborException($"class/struct {ObjectType.Name} holds duplicated MemberIndex fields/properties");
+                            throw new CborException(MemberMappingErrors.DuplicateMemberIndex(ObjectType));
                         }
 
                         _memberMappings = _memberMappings

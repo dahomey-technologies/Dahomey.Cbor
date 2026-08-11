@@ -1,5 +1,6 @@
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization.Conventions;
+using Dahomey.Cbor.Serialization.Converters;
 using System;
 using Xunit;
 
@@ -83,6 +84,15 @@ namespace Dahomey.Cbor.Tests.Issues
         public class BaseWithAnInt { public int Value { get; set; } }
         public class HidesWithTheSameSignature : BaseWithAnInt { public new int Value { get; set; } }
 
+        public class GenericBase<T> { public T Value { get; set; } }
+
+        /// <summary>
+        /// Identical to the hidden property at the source — <c>int</c> over a <c>GenericBase&lt;int&gt;</c>
+        /// — and still two members, because the folding compares the declarations rather than what the
+        /// type arguments make of them.
+        /// </summary>
+        public class HidesAGenericBaseMember : GenericBase<int> { public new int Value { get; set; } }
+
         [CborDiscriminator("collides")]
         public class CollidesWithDiscriminator
         {
@@ -120,11 +130,17 @@ namespace Dahomey.Cbor.Tests.Issues
         /// members that can be deserialized, so it cannot see a collision between members that are
         /// only written. Every test below that names a route into the collision pins the validation
         /// through this, leaving the two late-arrival tests to pin the other.
+        /// <para>
+        /// The clause is taken from the production constant rather than repeated here. An assertion
+        /// that a message lacks a literal can only fail open: reword the message alone and this keeps
+        /// passing while no longer distinguishing anything, with the two positive tests going red as
+        /// the only hint — and repairing those would leave this permanently vacuous.
+        /// </para>
         /// </remarks>
         private static CborException AssertRefusedByValidation(Action action)
         {
             CborException exception = AssertThrowsCborException(action);
-            Assert.DoesNotContain("after it was validated", exception.Message);
+            Assert.DoesNotContain(MemberMappingErrors.AddedAfterValidation, exception.Message);
             return exception;
         }
 
@@ -217,6 +233,24 @@ namespace Dahomey.Cbor.Tests.Issues
             Assert.Contains("'Value'", property.Message);
         }
 
+        /// <summary>
+        /// A property hiding one declared with a type parameter is not folded, however identical the
+        /// two look once the type argument is substituted.
+        /// </summary>
+        /// <remarks>
+        /// This is the shape that makes the folding rule worth stating precisely rather than as
+        /// "same signature": <c>int</c> over <c>GenericBase&lt;int&gt;.Value</c> reads as a hide that
+        /// keeps the signature, and is not one — the base declares <c>T</c>.
+        /// </remarks>
+        [Fact]
+        public void HidingAGenericBaseMemberIsRefused()
+        {
+            CborException ex = AssertRefusedByValidation(() => Helper.Write(new HidesAGenericBaseMember()));
+
+            Assert.Contains(nameof(HidesAGenericBaseMember), ex.Message);
+            Assert.Contains("'Value'", ex.Message);
+        }
+
         /// <summary>The signature-preserving case reflection folds for us, mapped once and written.</summary>
         [Fact]
         public void HidingWithTheSameSignatureIsUnaffected()
@@ -273,7 +307,7 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Assert.Contains(nameof(DistinctNames), ex.Message);
             Assert.Contains("'X'", ex.Message);
-            Assert.Contains("after it was validated", ex.Message);
+            Assert.Contains(MemberMappingErrors.AddedAfterValidation, ex.Message);
         }
 
         /// <summary>
@@ -295,7 +329,7 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Assert.Contains(nameof(DistinctIndexes), ex.Message);
             Assert.Contains("MemberIndex", ex.Message);
-            Assert.Contains("after it was validated", ex.Message);
+            Assert.Contains(MemberMappingErrors.AddedAfterValidation, ex.Message);
         }
 
         /// <summary>

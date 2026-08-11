@@ -478,11 +478,13 @@ the source looking wrong:
 * a **mapping API call** over a member the conventions already covered — ``MapMember`` after
   ``AutoMap`` without a ``ClearMemberMappings`` between them, or without a new name;
 * a member that **hides a base member** of the same name with ``new`` rather than ``override``, which
-  reports both declarations and so maps both, under the one name. A hidden **field** always collides,
-  whatever its type: field lookup does no folding at all, so ``int`` over ``int`` is two members.
-  A hidden **property** collides only where the two signatures differ — ``string`` over ``object``, or
-  a property over a field — since property lookup folds a hide that keeps the signature exactly.
-  ``override`` never collides.
+  reports both declarations and so maps both, under the one name. Where the hiding member is a
+  **field** this always happens, whatever the two types are: field lookup folds nothing, so ``int``
+  over ``int`` is two members. Where it is a **property**, the pair is folded only when the two are
+  identical *as declared* — which is narrower than it sounds, since a generic base declares
+  ``T Value`` and a derived ``new int Value`` over a ``Base<int>`` differs from it as declared and so
+  collides, despite reading as the same type at the source. ``override`` never collides, and neither
+  does a hierarchy of interfaces, whose members are reported one interface at a time.
 
 Give the two members distinct names, or drop one. Where the collision comes from a base type you do
 not own, ``[CborIgnore]`` on the member you do own removes it from the mapping, and

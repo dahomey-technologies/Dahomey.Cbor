@@ -247,8 +247,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                                 catch (ArgumentException)
                                 {
                                     throw new CborException(
-                                        $"class/struct {typeof(T).Name} maps several fields/properties to the member name "
-                                        + $"'{memberMapping.MemberName}', added to the mapping after it was validated");
+                                        MemberMappingErrors.DuplicateMemberName(typeof(T), memberMapping.MemberName)
+                                        + MemberMappingErrors.AddedAfterValidation);
                                 }
 
                                 _nextReadOrdinal++;
@@ -268,8 +268,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                                 catch (ArgumentException)
                                 {
                                     throw new CborException(
-                                        $"class/struct {typeof(T).Name} holds duplicated MemberIndex fields/properties, "
-                                        + "added to the mapping after it was validated");
+                                        MemberMappingErrors.DuplicateMemberIndex(typeof(T))
+                                        + MemberMappingErrors.AddedAfterValidation);
                                 }
 
                                 _nextReadOrdinal++;
