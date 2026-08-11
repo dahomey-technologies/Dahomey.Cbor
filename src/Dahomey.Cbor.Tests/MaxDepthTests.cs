@@ -306,15 +306,77 @@ namespace Dahomey.Cbor.Tests
         /// </summary>
         private static byte[] UnmappedNesting(int depth)
         {
-            byte[] nested = NestedArrays(depth);
-            byte[] buffer = new byte[4 + nested.Length + 3];
+            return UnmappedNesting(NestedArrays(depth));
+        }
+
+        /// <summary>
+        /// A map of two members: <c>"A"</c>, whose value is <paramref name="nested"/>, and <c>"B"</c>,
+        /// whose value is 1. <see cref="Holder"/> declares only <c>B</c>, so whatever shape
+        /// <paramref name="nested"/> takes is reached by the skip path rather than by a converter.
+        /// </summary>
+        private static byte[] UnmappedNesting(ReadOnlySpan<byte> nested)
+        {
+            byte[] buffer = new byte[3 + nested.Length + 3];
 
             buffer[0] = 0xA2;                       // map(2)
             buffer[1] = 0x61; buffer[2] = 0x41;     // "A"
-            nested.CopyTo(buffer, 3);
+            nested.CopyTo(buffer.AsSpan(3));
             buffer[3 + nested.Length] = 0x61;       // "B"
             buffer[4 + nested.Length] = 0x42;
             buffer[5 + nested.Length] = 0x01;       // 1
+
+            return buffer;
+        }
+
+        /// <summary>
+        /// <paramref name="depth"/> nested definite-length single-entry maps, innermost value 0. Each
+        /// <c>0xA1 0x00</c> is "map(1)" keyed 0 — two bytes per level against a nested array's one, and
+        /// the same recursion, through <c>SkipMap</c> rather than <c>SkipArray</c>.
+        /// </summary>
+        private static byte[] NestedMaps(int depth)
+        {
+            byte[] buffer = new byte[2 * depth + 1];
+
+            for (int i = 0; i < depth; i++)
+            {
+                buffer[2 * i] = 0xA1;               // map(1)
+                buffer[2 * i + 1] = 0x00;           // key 0
+            }
+
+            buffer[2 * depth] = 0x00;               // innermost value
+            return buffer;
+        }
+
+        /// <summary>
+        /// <paramref name="depth"/> nested indefinite-length arrays, innermost value 0, closed by as
+        /// many breaks as there are opens.
+        /// </summary>
+        private static byte[] NestedIndefiniteArrays(int depth)
+        {
+            byte[] buffer = new byte[2 * depth + 1];
+
+            for (int i = 0; i < depth; i++)
+            {
+                buffer[i] = 0x9F;                       // start of indefinite-length array
+                buffer[buffer.Length - 1 - i] = 0xFF;   // break
+            }
+
+            buffer[depth] = 0x00;                       // innermost value
+            return buffer;
+        }
+
+        /// <summary>
+        /// <see cref="UnmappedNesting(ReadOnlySpan{byte})"/> inside two arrays, so that a read has
+        /// already spent three levels — array, array, map — by the time the skipped member begins.
+        /// </summary>
+        private static byte[] UnmappedNestingUnderTwoArrays(int depth)
+        {
+            byte[] inner = UnmappedNesting(NestedArrays(depth));
+            byte[] buffer = new byte[2 + inner.Length];
+
+            buffer[0] = 0x81;   // array(1)
+            buffer[1] = 0x81;   // array(1)
+            inner.CopyTo(buffer, 2);
 
             return buffer;
         }
@@ -335,6 +397,45 @@ namespace Dahomey.Cbor.Tests
         {
             CborException exception = Assert.Throws<CborException>(
                 () => Cbor.Deserialize<Holder>(UnmappedNesting(100)));
+
+            Assert.Contains("nesting depth", exception.Message);
+        }
+
+        /// <summary>
+        /// Nested maps reach the same recursion through <c>SkipMap</c> that nested arrays reach through
+        /// <c>SkipArray</c>.
+        /// </summary>
+        /// <remarks>
+        /// Its own case because the two guards are independent: with every other test on this path
+        /// written against arrays, <c>SkipMap</c>'s guard could be dropped and the suite would stay
+        /// green, leaving a map-shaped document with exactly the stack the array-shaped one no longer
+        /// has.
+        /// </remarks>
+        [Fact]
+        public void NestedMapsInsideASkippedMemberAreBounded()
+        {
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Holder>(UnmappedNesting(NestedMaps(100))));
+
+            Assert.Contains("nesting depth", exception.Message);
+        }
+
+        /// <summary>
+        /// Indefinite-length nesting is the cheaper attack on the skip path for the reason it is on the
+        /// read path — see <see cref="DeeplyNestedIndefiniteArraysAreBoundedOnRead"/>.
+        /// </summary>
+        /// <remarks>
+        /// A second byte shape rather than a second property: the guard runs before <c>ReadSize</c>,
+        /// but nothing here pins that order, and nothing could — <c>ReadSize</c> returns -1 for
+        /// <c>0x9F</c> without recursing, so entering the guard after it behaves identically. This
+        /// covers the <c>size &lt; 0</c> arm of the skip loop, which the definite-length cases never
+        /// reach.
+        /// </remarks>
+        [Fact]
+        public void IndefiniteNestingInsideASkippedMemberIsBounded()
+        {
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Holder>(UnmappedNesting(NestedIndefiniteArrays(100))));
 
             Assert.Contains("nesting depth", exception.Message);
         }
@@ -364,6 +465,12 @@ namespace Dahomey.Cbor.Tests
         /// The skip path releases depth like the read path, or a document with enough unmapped members
         /// would trip the limit on the tenth shallow one rather than on anything deep.
         /// </summary>
+        /// <remarks>
+        /// Half the members are map-valued and half array-valued, because the release is per method
+        /// just as the guard is: with every member array-valued, <c>SkipMap</c>'s <c>_depth--</c> could
+        /// be dropped and this — the one test that would notice — would stay green, leaving
+        /// map-valued siblings accumulating the depth that array-valued ones give back.
+        /// </remarks>
         [Fact]
         public void SkippedSiblingsDoNotAccumulateDepth()
         {
@@ -375,9 +482,21 @@ namespace Dahomey.Cbor.Tests
             for (int i = 0; i < 200; i++)
             {
                 writer.WriteString($"unmapped{i}");
-                writer.WriteBeginArray(1);
-                writer.WriteBeginArray(1);
-                writer.WriteInt32(0);
+
+                if (i % 2 == 0)
+                {
+                    writer.WriteBeginArray(1);
+                    writer.WriteBeginArray(1);
+                    writer.WriteInt32(0);
+                }
+                else
+                {
+                    writer.WriteBeginMap(1);
+                    writer.WriteInt32(0);
+                    writer.WriteBeginMap(1);
+                    writer.WriteInt32(0);
+                    writer.WriteInt32(0);
+                }
             }
 
             writer.WriteString("B");
@@ -391,11 +510,39 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// Read depth and skip depth are one budget, not two. A skipped member nested inside mapped
-        /// objects starts from the depth already spent getting to it.
+        /// Read depth and skip depth are one budget, not two: a skipped member nested inside mapped
+        /// objects starts from the depth already spent reaching it. Reading gets three levels in —
+        /// array, array, map — so nine levels below the skipped member exceed a limit of ten that the
+        /// same nine levels, reached from the root, sit within.
         /// </summary>
+        /// <remarks>
+        /// This is the case that separates the shared counter from one private to the skip path. A
+        /// private counter would let a document spend <c>MaxDepth</c> on the read path and
+        /// <c>MaxDepth</c> again below a member the type does not declare, on the same stack — and
+        /// would satisfy every other test here, which all begin their skip at the depth the bound
+        /// assumes.
+        /// </remarks>
         [Fact]
         public void SkipDepthContinuesFromTheDepthAlreadyRead()
+        {
+            CborOptions options = new CborOptions { MaxDepth = 10 };
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<List<List<Holder>>>(UnmappedNestingUnderTwoArrays(9), options));
+
+            Assert.Contains("nesting depth", exception.Message);
+
+            // The same nine levels, this time reached from the root, are within the same limit.
+            Assert.Equal(1, Cbor.Deserialize<Holder>(UnmappedNesting(9), options).B);
+        }
+
+        /// <summary>
+        /// <see cref="CborReader.SkipDataItem"/> is bounded when called directly, with no converter
+        /// above it — the bound belongs to the reader rather than to anything <c>ObjectConverter</c>
+        /// arranges around it.
+        /// </summary>
+        [Fact]
+        public void SkipDataItemIsBoundedOnItsOwn()
         {
             // A ref struct cannot be captured, so no Assert.Throws lambda.
             CborException? thrown = null;
@@ -417,8 +564,10 @@ namespace Dahomey.Cbor.Tests
         [Fact]
         public void SkippingWithinTheLimitConsumesTheWholeItem()
         {
-            byte[] buffer = new byte[NestedArrays(4).Length + 1];
-            NestedArrays(4).CopyTo(buffer, 0);
+            byte[] nested = NestedArrays(4);
+            byte[] buffer = new byte[nested.Length + 1];
+
+            nested.CopyTo(buffer, 0);
             buffer[buffer.Length - 1] = 0x01;   // a second item, after the nested one
 
             CborReader reader = new CborReader(buffer, maxDepth: 8);
