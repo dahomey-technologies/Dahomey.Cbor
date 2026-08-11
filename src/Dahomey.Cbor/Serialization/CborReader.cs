@@ -1229,9 +1229,18 @@ namespace Dahomey.Cbor.Serialization
             Advance(size);
         }
 
+        /// <remarks>
+        /// Guarded by <see cref="EnterNestedItem"/> for the same reason <see cref="ReadArray"/> is, and
+        /// against the same budget: skipping recurses through <see cref="SkipDataItem"/> exactly as
+        /// reading does, so nesting reached by way of a member the target type does not declare costs
+        /// the same stack as nesting the type asks for. Counting the two separately would let a
+        /// document spend <see cref="MaxDepth"/> twice.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void SkipArray()
         {
+            EnterNestedItem();
+
             int size = ReadSize();
 
             while (size > 0 || size < 0 && !IsBreak())
@@ -1241,11 +1250,15 @@ namespace Dahomey.Cbor.Serialization
             }
 
             _state = CborReaderState.Start;
+            _depth--;
         }
 
+        /// <inheritdoc cref="SkipArray"/>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void SkipMap()
         {
+            EnterNestedItem();
+
             int size = ReadSize();
 
             while (size > 0 || size < 0 && !IsBreak())
@@ -1256,6 +1269,7 @@ namespace Dahomey.Cbor.Serialization
             }
 
             _state = CborReaderState.Start;
+            _depth--;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
