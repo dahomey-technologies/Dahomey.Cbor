@@ -62,16 +62,30 @@ namespace Dahomey.Cbor.Tests
         /// the encoding, and the only one that hands back a <see cref="ReadOnlySequence{T}"/>. The
         /// chunks are not contiguous in the input, so it returns the joined copy rather than a slice.
         /// </summary>
-        [Fact]
-        public void AChunkedByteStringReadsAsASequence()
+        /// <remarks>
+        /// Run over a span reader and over a fragmented one. There is no converter registered for
+        /// <see cref="ReadOnlySequence{T}"/>, so <c>Helper.Read</c> cannot reach this entry point and
+        /// the reader has to be built directly; a sequence-backed reader is the only shape in which
+        /// the scratch buffer this path declines exists at all.
+        /// <para>
+        /// The three-single-byte-chunk case is the one that binds the window: the accumulator grows by
+        /// doubling, so three bytes arrive in a four-byte array, and handing the array back whole would
+        /// append a trailing zero.
+        /// </para>
+        /// </remarks>
+        [Theory]
+        // 5f 42 0102 43 030405 ff -- two chunks, and the accumulator happens to end up exactly sized
+        [InlineData("5F42010243030405FF", new byte[] { 1, 2, 3, 4, 5 })]
+        // 5f 41 01 41 02 41 03 ff -- three one-byte chunks: 1 -> 2 -> 4, so the last resize overshoots
+        [InlineData("5F410141024103FF", new byte[] { 1, 2, 3 })]
+        // 5f ff -- zero chunks
+        [InlineData("5FFF", new byte[0])]
+        public void AChunkedByteStringReadsAsASequence(string hexBuffer, byte[] expected)
         {
-            // 5f 42 0102 43 030405 ff
-            byte[] buffer = "5F42010243030405FF".HexToBytes();
-            CborReader reader = new CborReader(buffer);
+            byte[] buffer = hexBuffer.HexToBytes();
 
-            ReadOnlySequence<byte> sequence = reader.ReadByteStringSequence();
-
-            Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, sequence.ToArray());
+            Assert.Equal(expected, new CborReader(buffer).ReadByteStringSequence().ToArray());
+            Assert.Equal(expected, new CborReader(Helper.Fragmentize(buffer)).ReadByteStringSequence().ToArray());
         }
 
         /// <summary>

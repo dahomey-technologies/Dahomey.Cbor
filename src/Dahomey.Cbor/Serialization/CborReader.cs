@@ -1038,20 +1038,28 @@ namespace Dahomey.Cbor.Serialization
         /// </remarks>
         private ReadOnlySpan<byte> ReadChunks(CborMajorType majorType)
         {
-            return ReadChunksArray(majorType);
+            byte[] joined = ReadChunksArray(majorType, out int length);
+
+            return new ReadOnlySpan<byte>(joined, 0, length);
         }
 
         /// <inheritdoc cref="ReadChunks"/>
         /// <remarks>
+        /// The buffer grows by doubling, so it is usually longer than the value; the caller is handed
+        /// the length and takes a window over it rather than an exactly sized array. Trimming here
+        /// instead would copy the whole value again on every overshoot, on the two paths that read a
+        /// string rather than the one that reads a sequence.
+        /// <para>
         /// A plain array rather than <c>ByteBufferWriter</c>, which is the obvious tool and the wrong
         /// one: it rents from <see cref="System.Buffers.ArrayPool{T}"/>, and the result outlives this
         /// call, so a pooled buffer would be returned and handed to another caller underneath the one
         /// holding it.
+        /// </para>
         /// </remarks>
-        private byte[] ReadChunksArray(CborMajorType majorType)
+        private byte[] ReadChunksArray(CborMajorType majorType, out int length)
         {
             byte[] joined = Array.Empty<byte>();
-            int length = 0;
+            length = 0;
 
             while (!IsBreak())
             {
@@ -1068,14 +1076,7 @@ namespace Dahomey.Cbor.Serialization
 
             ConsumeBreak();
 
-            return length == joined.Length ? joined : Trim(joined, length);
-        }
-
-        private static byte[] Trim(byte[] buffer, int length)
-        {
-            byte[] exact = new byte[length];
-            Array.Copy(buffer, exact, length);
-            return exact;
+            return joined;
         }
 
         /// <summary>
@@ -1151,8 +1152,10 @@ namespace Dahomey.Cbor.Serialization
             if (size == -1)
             {
                 // The chunks are not contiguous in the input, so there is no slice of it to hand back;
-                // the joined copy becomes the sequence.
-                return new ReadOnlySequence<byte>(ReadChunksArray(majorType));
+                // the joined copy becomes the sequence, windowed to the length actually read.
+                byte[] joined = ReadChunksArray(majorType, out int length);
+
+                return new ReadOnlySequence<byte>(joined, 0, length);
             }
 
             ExpectLength(size);
