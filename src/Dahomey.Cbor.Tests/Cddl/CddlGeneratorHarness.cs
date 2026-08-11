@@ -64,15 +64,7 @@ namespace Dahomey.Cbor.Tests.Cddl
         /// </remarks>
         public static string RunAndGetCddlSchema(string source)
         {
-            GeneratorDriver driver = CSharpGeneratorDriver
-                .Create(new CborSourceGenerator())
-                .RunGenerators(Compile(source));
-
-            string generated = driver.GetRunResult().Results
-                .SelectMany(result => result.GeneratedSources)
-                .Where(candidate => candidate.HintName.EndsWith(".CddlSchema.g.cs", StringComparison.Ordinal))
-                .Select(candidate => candidate.SourceText.ToString())
-                .Single();
+            string generated = RunAndGetCddlSource(source);
 
             // EmitSource writes `public const string CddlSchema =` followed by a verbatim string and
             // nothing else after it, so the last `";` in that one file closes the schema. Doubled
@@ -81,6 +73,51 @@ namespace Dahomey.Cbor.Tests.Cddl
             int end = generated.LastIndexOf("\";", StringComparison.Ordinal);
 
             return generated.Substring(start, end - start).Replace("\"\"", "\"").Replace("\r\n", "\n");
+        }
+
+        /// <summary>
+        /// The C# of the schema file alone -- the <c>.CddlSchema.g.cs</c> the CDDL emitter adds, not
+        /// the converter half <see cref="Emitter"/> adds beside it.
+        /// </summary>
+        /// <remarks>
+        /// Which file the text came from is the whole assertion for anything about how the context is
+        /// reopened: the converter half already reopens containing types correctly, so a test that
+        /// searched the concatenation of every generated source would pass on its output alone and say
+        /// nothing about this one.
+        /// </remarks>
+        public static string RunAndGetCddlSource(string source)
+        {
+            GeneratorDriver driver = CSharpGeneratorDriver
+                .Create(new CborSourceGenerator())
+                .RunGenerators(Compile(source));
+
+            return driver.GetRunResult().Results
+                .SelectMany(result => result.GeneratedSources)
+                .Where(candidate => candidate.HintName.EndsWith(".CddlSchema.g.cs", StringComparison.Ordinal))
+                .Select(candidate => candidate.SourceText.ToString())
+                .Single();
+        }
+
+        /// <summary>
+        /// Runs the generator and hands back the errors the C# compiler raises over the source
+        /// <em>plus</em> everything the generator added.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="Run"/> reports what the generator itself says, which is silent about the
+        /// failure mode where the emitted code is well-formed on its own but does not agree with the
+        /// user's declaration -- a partial reopened with the wrong accessibility (CS0262) or without
+        /// its type parameters (CS0264). Those only surface once the two halves are compiled
+        /// together, which is what this does.
+        /// </remarks>
+        public static ImmutableArray<Diagnostic> RunAndGetCompilationErrors(string source)
+        {
+            CSharpGeneratorDriver
+                .Create(new CborSourceGenerator())
+                .RunGeneratorsAndUpdateCompilation(Compile(source), out Compilation updated, out _);
+
+            return updated.GetDiagnostics()
+                .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                .ToImmutableArray();
         }
 
         private static CSharpCompilation Compile(string source)

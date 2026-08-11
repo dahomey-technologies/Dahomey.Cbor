@@ -65,6 +65,35 @@ namespace Dahomey.Cbor.Tests.Cddl
     {
     }
 
+    /// <summary>
+    /// A <c>[Flags]</c> enum with no declared members: legal C#, and the one shape where the flags
+    /// branch's choice of names has no arms to render. It has to reach the memberless fallback ahead
+    /// of the flags branch, because <c>E =  / uint</c> is not parseable CDDL -- and an unparseable
+    /// schema is the one defect gem validation cannot report, since it never gets past the parse.
+    /// </summary>
+    [Flags]
+    public enum CddlEmptyFlags
+    {
+    }
+
+    public class CddlEmptyFlagsHolder
+    {
+        public CddlEmptyFlags Value { get; set; }
+    }
+
+    [CborSerializable(typeof(CddlEmptyFlagsHolder))]
+    [CborCddlSchema]
+    public partial class CddlEmptyFlagsContext : CborSerializerContext
+    {
+    }
+
+    [CborSerializable(typeof(CddlEmptyFlagsHolder))]
+    [CborCddlSchema]
+    [CborSourceGenerationOptions(EnumFormat = ValueFormat.WriteToString)]
+    public partial class CddlEmptyFlagsStringContext : CborSerializerContext
+    {
+    }
+
     public class CddlFlagsEnumTests
     {
         private static readonly CddlFlagsContext IntContext =
@@ -92,6 +121,35 @@ namespace Dahomey.Cbor.Tests.Cddl
         public void FlagsEnumWithANegativeMemberRendersTheSignedIntegerForm()
         {
             Assert.Contains("CddlSignedFlags = int", CddlSignedFlagsContext.CddlSchema);
+        }
+
+        /// <summary>
+        /// Both formats, because only the WriteToString one used to render an empty choice arm --
+        /// and the assertion is the same either way, since a memberless enum has nothing to name.
+        /// </summary>
+        [Fact]
+        public void MemberlessFlagsEnumRendersTheSignedIntegerFormInBothFormats()
+        {
+            Assert.Contains("CddlEmptyFlags = int", CddlEmptyFlagsContext.CddlSchema);
+            Assert.Contains("CddlEmptyFlags = int", CddlEmptyFlagsStringContext.CddlSchema);
+        }
+
+        /// <summary>
+        /// The point of the fix: the emitted text has to survive the gem's parser at all. A cast is
+        /// the only way to give a memberless enum a value, and it is written as a plain integer.
+        /// </summary>
+        [CddlFact]
+        public void MemberlessFlagsEnumSchemaParsesAndAdmitsACastValue()
+        {
+            CddlEmptyFlagsHolder value = new CddlEmptyFlagsHolder { Value = (CddlEmptyFlags)3 };
+
+            byte[] cbor = Helper.Write(
+                value, CborSerializerContext.Default<CddlEmptyFlagsContext>().Options).HexToBytes();
+
+            CddlResult result = CddlTool.Validate(
+                CddlEmptyFlagsContext.CddlSchema, "CddlEmptyFlagsHolder", cbor);
+
+            Assert.True(result.Ok, result.Output);
         }
 
         [CddlFact]

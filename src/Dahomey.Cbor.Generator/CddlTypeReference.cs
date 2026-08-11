@@ -248,6 +248,11 @@ namespace Dahomey.Cbor.Generator
                 case SpecialType.System_String:
                     return "tstr";
 
+                // CharConverter writes a char through CborWriter.WriteChar, which UTF-8 encodes the
+                // single character and writes it as a text string -- not as an integer code point.
+                case SpecialType.System_Char:
+                    return "tstr";
+
                 case SpecialType.System_Object:
                     return "any";
 
@@ -263,10 +268,23 @@ namespace Dahomey.Cbor.Generator
                     };
             }
 
+            // BigInteger has no SpecialType, so it is matched by name -- as TypeCollector.IsPrimitive
+            // does, which is what lets it reach this method at all. CborWriter.WriteBigInteger emits a
+            // basic integer whenever the value fits the ulong-bounded header (which reaches -2^64 on
+            // the negative side) and only falls back to the RFC 8949 section 3.4.3 bignum tags beyond
+            // it, so all three forms belong in the choice. The parentheses matter: RFC 8610's
+            // memberkey production takes a type1, not a type, so a bare `/` choice cannot appear
+            // there -- `{* int / #6.2(bstr) => tstr}` is a parse error, while a parenthesised type is
+            // a type2 and is legal in every position this rendering can land in.
+            if (type.ToDisplayString() == "System.Numerics.BigInteger")
+            {
+                return "(int / #6.2(bstr) / #6.3(bstr))";
+            }
+
             // System.Decimal is deliberately absent: it is written as 0xFC plus 16 bytes, and
             // additional information 28 is reserved and ill-formed under RFC 8949 section 3, so no
-            // conforming decoder can read it and no CDDL can describe it. Guid, DateTimeOffset and
-            // char have no scalar converter either. Nor does System.Half: the only place the library
+            // conforming decoder can read it and no CDDL can describe it. Guid and DateTimeOffset
+            // have no scalar converter either. Nor does System.Half: the only place the library
             // references it is the RFC 8746 typed-array element path, which writes `#6.84(bstr)` --
             // a different representation entirely, not this method's concern. Each falls through to
             // CBOR1011 rather than asserting a row no converter backs.

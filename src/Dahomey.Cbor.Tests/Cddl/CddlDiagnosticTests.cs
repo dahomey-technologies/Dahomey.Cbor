@@ -135,22 +135,9 @@ namespace Harness
             Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
         }
 
-        /// <summary>char has no scalar CBOR converter either.</summary>
-        [Fact]
-        public void CharHasNoCddlRepresentation()
-        {
-            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
-    public class Letter { public char Value { get; set; } }
-
-    [CborSerializable(typeof(Letter))]
-    [CborCddlSchema]
-    public partial class HarnessContext : CborSerializerContext { }
-}
-");
-
-            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1011");
-            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
-        }
+        // char and BigInteger are deliberately absent from this file: both have concrete converters
+        // (CharConverter and BigIntegerConverter), so both render rather than raising CBOR1011.
+        // CddlScalarMappingTests pins what they render as.
 
         /// <summary>
         /// DateTimeOffset has no scalar converter either -- only System.DateTime does, via
