@@ -218,18 +218,61 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 if (memberMapping.CanBeDeserialized || isCreatorMember)
                 {
+                    // Both lookups refuse a key they already hold, and the mapping was validated for
+                    // exactly that before this loop began. A collision reaching here is therefore a
+                    // member added to the mapping after its validation ran - mapping over a member
+                    // AutoMap already covered, once something has read MemberMappings - which is the
+                    // same mistake arriving late, and is reported as the same kind of failure rather
+                    // than as the raw ArgumentException of the container that caught it. The clause
+                    // naming the lateness is what tells the two apart: the validator sees the whole
+                    // mapping and refuses any collision in it, while this sees only the members that
+                    // can be read, so a collision between members that are written but never read
+                    // reaches the validator alone.
+                    //
+                    // Only the Add is guarded. IMemberConverter is a public interface an implementer
+                    // outside this library can supply, and an ArgumentException out of one of its
+                    // getters is not this failure - naming it a duplicate key would be a diagnosis
+                    // the catch has no grounds for.
                     switch (_objectMapping.ObjectFormat)
                     {
                         case CborObjectFormat.StringKeyMap:
-                            _memberConvertersForRead.Add(
-                                memberConverter.MemberName, new MemberReadEntry(memberConverter, _nextReadOrdinal++));
+                            {
+                                ReadOnlySpan<byte> memberName = memberConverter.MemberName;
+                                MemberReadEntry entry = new MemberReadEntry(memberConverter, _nextReadOrdinal);
+
+                                try
+                                {
+                                    _memberConvertersForRead.Add(memberName, entry);
+                                }
+                                catch (ArgumentException)
+                                {
+                                    throw new CborException(
+                                        MemberMappingErrors.DuplicateMemberName(typeof(T), memberMapping.MemberName)
+                                        + MemberMappingErrors.AddedAfterValidation);
+                                }
+
+                                _nextReadOrdinal++;
+                            }
                             break;
                         case CborObjectFormat.IntKeyMap:
                         case CborObjectFormat.Array:
                             if (memberConverter.MemberIndex.HasValue)
                             {
-                                _memberConvertersForReadByIndex.Add(
-                                    memberConverter.MemberIndex.Value, new MemberReadEntry(memberConverter, _nextReadOrdinal++));
+                                int memberIndex = memberConverter.MemberIndex.Value;
+                                MemberReadEntry entry = new MemberReadEntry(memberConverter, _nextReadOrdinal);
+
+                                try
+                                {
+                                    _memberConvertersForReadByIndex.Add(memberIndex, entry);
+                                }
+                                catch (ArgumentException)
+                                {
+                                    throw new CborException(
+                                        MemberMappingErrors.DuplicateMemberIndex(typeof(T))
+                                        + MemberMappingErrors.AddedAfterValidation);
+                                }
+
+                                _nextReadOrdinal++;
                             }
                             break;
                     }

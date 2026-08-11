@@ -34,6 +34,7 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Support for RFC 8949 §3.4.3 bignums (tags 2 and 3) as System.Numerics.BigInteger
 * Duplicate map keys rejected on every decode target, with a last-wins opt-out (CborOptions.DuplicateKeyMode)
 * Reads RFC 8949 indefinite-length (chunked) byte and text strings; writes definite-length only
+* Ambiguous mappings — two members of a type under one CBOR name — refused when the mapping is built
 
 ## Installation
 ### NuGet
@@ -512,8 +513,46 @@ The **discriminator** is refused when repeated, even though it is a key of the m
 member of the type: two readers disagreeing about which occurrence names the type is how one document
 comes to mean two things.
 
-One case the policy does not reach: **a type mapping two members to the same CBOR name** — two
-``[CborProperty("X")]``, say — writes a document with a repeated key that it then cannot read back.
-The mapping is ambiguous in both directions, since only one of the two members can ever be read from
-key ``X``, so it is worth removing rather than working around; ``DuplicateKeyMode.LastWins`` will read
-such a document if you have one already.
+One case is settled earlier than the decode, because no answer at decode time is right: **a type
+mapping two members to the same CBOR name** used to write a document with a repeated key that it then
+could not read back. The mapping itself is now refused, the first time the type is serialized or
+deserialized, naming the type and the colliding name:
+
+```
+class/struct Aliased maps several fields/properties to the member name 'X'
+```
+
+The mapping is ambiguous in both directions — only one of the two members can ever be read from key
+``X``, and writing both is not representable — so there is nothing for ``DuplicateKeyMode`` to decide.
+``[CborProperty("X")]`` twice is the visible way in. Three others reach the same place with nothing in
+the source looking wrong:
+
+* a **naming convention** that folds two member names into one — ``Id`` and ``ID`` under
+  ``LowerCaseNamingConvention``;
+* a **mapping API call** over a member the conventions already covered — ``MapMember`` after
+  ``AutoMap`` without a ``ClearMemberMappings`` between them, or without a new name;
+* a member that **hides a base member** of the same name with ``new`` rather than ``override``, which
+  reports both declarations and so maps both, under the one name. Where the hiding member is a
+  **field** this always happens, whatever the two types are: field lookup folds nothing, so ``int``
+  over ``int`` is two members. Where it is a **property**, the pair is folded only when the two are
+  identical *as declared* — which is narrower than it sounds, since a generic base declares
+  ``T Value`` and a derived ``new int Value`` over a ``Base<int>`` differs from it as declared and so
+  collides, despite reading as the same type at the source. ``override`` never collides, and neither
+  does a hierarchy of interfaces, whose members are reported one interface at a time.
+
+Give the two members distinct names, or drop one. Where the collision comes from a base type you do
+not own, ``[CborIgnore]`` on the member you do own removes it from the mapping, and
+``ClearMemberMappings()`` followed by explicit ``MapMember`` calls decides the whole mapping by hand.
+
+> **Behaviour change.** Such a type used to serialize, so this is a new exception at first use for a
+> type that "worked". What it wrote was a document whose second member was unreadable — silently
+> discarded before #169, refused as a duplicate key after it — so the type never round-tripped; the
+> exception names the mapping instead of leaving it to be found in the bytes. A document already
+> written by one of these mappings still reads with ``DuplicateKeyMode.LastWins``, against a type
+> whose mapping no longer collides.
+>
+> The utility type behind the member lookup, ``Dahomey.Cbor.Util.ByteBufferDictionary<T>``, is public,
+> and its ``Add`` changed with it: a key already present is now refused with an ``ArgumentException``
+> rather than silently replacing the entry, as ``Dictionary<TKey, TValue>.Add`` does. The type has
+> neither an indexer nor a removal, so code of your own that relied on ``Add`` overwriting has to keep
+> the keys it has added and build a fresh dictionary instead.
