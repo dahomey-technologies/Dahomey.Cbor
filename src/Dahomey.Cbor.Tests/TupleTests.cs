@@ -1,3 +1,4 @@
+using Dahomey.Cbor.Tests.Extensions;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -55,6 +56,63 @@ namespace Dahomey.Cbor.Tests
             // 273.15 as [-2, 27315]
             Assert.Equal((-2, 27315), Helper.Read<(int, int)>(hexBuffer));
             Assert.Equal(Helper.Read<(int, int)>(hexBuffer), Helper.Read<(int, int)?>(hexBuffer));
+        }
+
+        /// <summary>
+        /// A tuple is an array, and nothing else decodes as one.
+        /// </summary>
+        /// <remarks>
+        /// <c>ReadSize</c> takes the additional value off whatever header is current and does not ask
+        /// which major type it belongs to, so every one of these used to yield an arity of 3 and read
+        /// as <c>(1, 2, 3)</c>. The last three are the clearest: there is no container at all, just a
+        /// head whose additional value happens to be 3, and the three bytes after it are the next data
+        /// items in the document rather than anything belonging to this one.
+        /// </remarks>
+        [Theory]
+        [InlineData("43010203")]    // bytes(3)
+        [InlineData("63010203")]    // text(3)
+        [InlineData("A3010203")]    // map(3)
+        [InlineData("03010203")]    // unsigned 3
+        [InlineData("23010203")]    // negative -4
+        [InlineData("E3010203")]    // simple value 3
+        // A tag in front changes nothing: the tags are stepped over and the item beneath is still
+        // not an array.
+        [InlineData("C143010203")]
+        [InlineData("C1C1A3010203")]
+        public void ANonArrayIsNotReadAsATuple(string hexBuffer)
+        {
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<(int, int, int)>(hexBuffer.HexToBytes()));
+
+            Assert.Contains("Expected major type Array", exception.Message);
+        }
+
+        /// <summary>The check is in every arity, not only the one the report used.</summary>
+        /// <remarks>
+        /// Arities 2 to 7. <c>Tuple8Converter</c> carries the same change and cannot be reached
+        /// through the public API to assert it: the provider hands it the <c>Rest</c> field's type as
+        /// <c>T8</c>, while the converter declares <c>CborConverterBase&lt;(T1, …, T8)&gt;</c>, which
+        /// C# expands to <c>ValueTuple&lt;T1, …, T7, ValueTuple&lt;T8&gt;&gt;</c> - a different type.
+        /// So an 8-element tuple fails while building the converter for a one-element <c>Rest</c>, and
+        /// a 9-element one fails casting the converter it did build.
+        /// </remarks>
+        [Fact]
+        public void ANonArrayIsNotReadAsATupleOfAnyArity()
+        {
+            // 42 0102 -- bytes(2), against the arity-2 converter, and so on up
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int)>("420102".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int)>("43010203".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int)>("4401020304".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int)>("450102030405".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int, int)>("46010203040506".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int, int, int)>("4701020304050607".HexToBytes()));
+        }
+
+        /// <summary>The one document in the table above that is a tuple still reads as one.</summary>
+        [Fact]
+        public void AnArrayIsStillReadAsATuple()
+        {
+            Assert.Equal((1, 2, 3), Helper.Read<(int, int, int)>("83010203"));
         }
 
         [Fact]
