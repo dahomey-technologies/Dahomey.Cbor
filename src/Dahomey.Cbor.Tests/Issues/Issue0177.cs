@@ -60,6 +60,20 @@ namespace Dahomey.Cbor.Tests.Issues
             [CborProperty("X")] public int First { get; set; }
         }
 
+        /// <summary>Two members that are written and never read: the read lookup never sees either.</summary>
+        public class SerializeOnlyCollision
+        {
+            [CborProperty("X")] public int First => 1;
+            [CborProperty("X")] public int Second => 2;
+        }
+
+        [CborObjectFormat(CborObjectFormat.IntKeyMap)]
+        public class DistinctIndexes
+        {
+            [CborProperty(1)] public int First { get; set; }
+            [CborProperty(2)] public int Second { get; set; }
+        }
+
         public class BaseWithAField { public int Value; }
         public class HidesAField : BaseWithAField { public new int Value; }
 
@@ -96,12 +110,30 @@ namespace Dahomey.Cbor.Tests.Issues
                 $"Expected a {nameof(CborException)} somewhere in the exception chain, got: {exception}");
         }
 
+        /// <summary>
+        /// Asserts the refusal came from the validation of the whole mapping, rather than from the
+        /// read lookup that catches what arrives after it.
+        /// </summary>
+        /// <remarks>
+        /// The two report the same kind of failure, so without this a test cannot say which one
+        /// answered — and they are not interchangeable: the read lookup is only ever offered the
+        /// members that can be deserialized, so it cannot see a collision between members that are
+        /// only written. Every test below that names a route into the collision pins the validation
+        /// through this, leaving the two late-arrival tests to pin the other.
+        /// </remarks>
+        private static CborException AssertRefusedByValidation(Action action)
+        {
+            CborException exception = AssertThrowsCborException(action);
+            Assert.DoesNotContain("after it was validated", exception.Message);
+            return exception;
+        }
+
         [Fact]
         public void WritingRefusesTheMapping()
         {
             TwoMembersOneName obj = new TwoMembersOneName { First = 1, Second = 2 };
 
-            CborException ex = AssertThrowsCborException(() => Helper.Write(obj));
+            CborException ex = AssertRefusedByValidation(() => Helper.Write(obj));
 
             Assert.Contains(nameof(TwoMembersOneName), ex.Message);
             Assert.Contains("'X'", ex.Message);
@@ -120,9 +152,9 @@ namespace Dahomey.Cbor.Tests.Issues
 
             CborOptions options = new CborOptions();
 
-            CborException first = AssertThrowsCborException(
+            CborException first = AssertRefusedByValidation(
                 () => Helper.Read<TwoMembersOneName>(hexBuffer, options));
-            CborException second = AssertThrowsCborException(
+            CborException second = AssertRefusedByValidation(
                 () => Helper.Read<TwoMembersOneName>(hexBuffer, options));
 
             Assert.Contains("'X'", first.Message);
@@ -138,7 +170,7 @@ namespace Dahomey.Cbor.Tests.Issues
         {
             FoldedByNamingConvention obj = new FoldedByNamingConvention();
 
-            CborException ex = AssertThrowsCborException(() => Helper.Write(obj));
+            CborException ex = AssertRefusedByValidation(() => Helper.Write(obj));
 
             Assert.Contains(nameof(FoldedByNamingConvention), ex.Message);
             Assert.Contains("'id'", ex.Message);
@@ -155,7 +187,7 @@ namespace Dahomey.Cbor.Tests.Issues
                 objectMapping.MapMember(o => o.First);
             });
 
-            CborException ex = AssertThrowsCborException(
+            CborException ex = AssertRefusedByValidation(
                 () => Helper.Write(new DistinctNames(), options));
 
             Assert.Contains("'X'", ex.Message);
@@ -167,17 +199,19 @@ namespace Dahomey.Cbor.Tests.Issues
         /// source at all.
         /// </summary>
         /// <remarks>
-        /// Reflection returns both declarations whenever their signatures differ, so both are mapped,
-        /// under the one name. Only a hiding member whose signature matches the hidden one exactly is
-        /// filtered out by reflection itself, which is why <see cref="HidesWithTheSameSignature"/>
-        /// maps once and is written normally. Refusing is what the other two shapes wrote before:
-        /// the key twice, the hidden member unreadable.
+        /// Reflection reports both declarations, so both are mapped, under the one name. The two
+        /// lookups differ in how much they fold: <c>GetProperties</c> drops a hiding property whose
+        /// signature matches the hidden one exactly, which is why
+        /// <see cref="HidesWithTheSameSignature"/> maps once and is written normally, while
+        /// <c>GetFields</c> folds nothing at all — <see cref="HidesAField"/> is <c>int</c> over
+        /// <c>int</c> and still collides. Refusing is what these shapes wrote before: the key twice,
+        /// the hidden member unreadable.
         /// </remarks>
         [Fact]
         public void AMemberHidingABaseMemberIsRefused()
         {
-            CborException field = AssertThrowsCborException(() => Helper.Write(new HidesAField()));
-            CborException property = AssertThrowsCborException(() => Helper.Write(new HidesAProperty()));
+            CborException field = AssertRefusedByValidation(() => Helper.Write(new HidesAField()));
+            CborException property = AssertRefusedByValidation(() => Helper.Write(new HidesAProperty()));
 
             Assert.Contains("'Value'", field.Message);
             Assert.Contains("'Value'", property.Message);
@@ -194,10 +228,31 @@ namespace Dahomey.Cbor.Tests.Issues
         }
 
         /// <summary>
+        /// A collision between members that are written but never read is seen by the validation and
+        /// by nothing else, so it is the shape that says the validation is load-bearing.
+        /// </summary>
+        /// <remarks>
+        /// The read lookup refuses a key it already holds, which catches a collision that arrives too
+        /// late for the validation — but it is only ever offered the members that can be deserialized.
+        /// Get-only properties, readonly fields, consts and statics are written and never read, so
+        /// they never reach it. Without the validation this writes <c>{"X": 1, "X": 2}</c> and says
+        /// nothing, which is the bug the issue opened on.
+        /// </remarks>
+        [Fact]
+        public void ASerializeOnlyCollisionIsRefused()
+        {
+            CborException ex = AssertRefusedByValidation(() => Helper.Write(new SerializeOnlyCollision()));
+
+            Assert.Contains(nameof(SerializeOnlyCollision), ex.Message);
+            Assert.Contains("'X'", ex.Message);
+        }
+
+        /// <summary>
         /// A member added to the mapping after something has already initialized it arrives past the
-        /// check, at the read lookup, which refuses the key on its own terms. It reports the same way:
-        /// the library's own exception type and the same sentence, not the raw
-        /// <see cref="System.ArgumentException"/> of the container that caught it.
+        /// check, at the read lookup, which refuses the key on its own terms. It reports as the same
+        /// kind of failure — the library's own exception type, not the raw
+        /// <see cref="System.ArgumentException"/> of the container that caught it — and says that it
+        /// arrived late, which is what tells the two mechanisms apart.
         /// </summary>
         [Fact]
         public void ACollisionAddedAfterValidationReportsTheSameWay()
@@ -218,6 +273,29 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Assert.Contains(nameof(DistinctNames), ex.Message);
             Assert.Contains("'X'", ex.Message);
+            Assert.Contains("after it was validated", ex.Message);
+        }
+
+        /// <summary>
+        /// The same, in an integer-keyed format, where it is an index that repeats rather than a name.
+        /// </summary>
+        [Fact]
+        public void ACollisionAddedAfterValidationReportsTheSameWayOnAnIndex()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ObjectMappingRegistry.Register<DistinctIndexes>(objectMapping =>
+            {
+                objectMapping.AutoMap();
+                _ = objectMapping.MemberMappings.Count;
+                objectMapping.MapMember(o => o.First);
+            });
+
+            CborException ex = AssertThrowsCborException(
+                () => Helper.Write(new DistinctIndexes(), options));
+
+            Assert.Contains(nameof(DistinctIndexes), ex.Message);
+            Assert.Contains("MemberIndex", ex.Message);
+            Assert.Contains("after it was validated", ex.Message);
         }
 
         /// <summary>
@@ -230,7 +308,7 @@ namespace Dahomey.Cbor.Tests.Issues
             CborOptions options = new CborOptions();
             options.Registry.DiscriminatorConventionRegistry.RegisterType<CollidesWithDiscriminator>();
 
-            CborException ex = AssertThrowsCborException(
+            CborException ex = AssertRefusedByValidation(
                 () => Helper.Write(new CollidesWithDiscriminator(), options));
 
             Assert.Contains("'_t'", ex.Message);
@@ -272,7 +350,7 @@ namespace Dahomey.Cbor.Tests.Issues
         [Fact]
         public void TwoMembersUnderOneIndexAreStillRefused()
         {
-            CborException ex = AssertThrowsCborException(
+            CborException ex = AssertRefusedByValidation(
                 () => Helper.Write(new TwoMembersOneIndex()));
 
             Assert.Contains(nameof(TwoMembersOneIndex), ex.Message);

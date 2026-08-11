@@ -477,10 +477,12 @@ the source looking wrong:
   ``LowerCaseNamingConvention``;
 * a **mapping API call** over a member the conventions already covered — ``MapMember`` after
   ``AutoMap`` without a ``ClearMemberMappings`` between them, or without a new name;
-* a member that **hides a base member** of the same name with ``new`` rather than ``override``.
-  Reflection reports both declarations whenever their signatures differ, so both are mapped. Hiding
-  that keeps the signature exactly — ``int`` over ``int`` — is folded by reflection itself and maps
-  once, so only a hide that changes the type or turns a property into a field collides.
+* a member that **hides a base member** of the same name with ``new`` rather than ``override``, which
+  reports both declarations and so maps both, under the one name. A hidden **field** always collides,
+  whatever its type: field lookup does no folding at all, so ``int`` over ``int`` is two members.
+  A hidden **property** collides only where the two signatures differ — ``string`` over ``object``, or
+  a property over a field — since property lookup folds a hide that keeps the signature exactly.
+  ``override`` never collides.
 
 Give the two members distinct names, or drop one. Where the collision comes from a base type you do
 not own, ``[CborIgnore]`` on the member you do own removes it from the mapping, and
@@ -492,3 +494,9 @@ not own, ``[CborIgnore]`` on the member you do own removes it from the mapping, 
 > exception names the mapping instead of leaving it to be found in the bytes. A document already
 > written by one of these mappings still reads with ``DuplicateKeyMode.LastWins``, against a type
 > whose mapping no longer collides.
+>
+> The utility type behind the member lookup, ``Dahomey.Cbor.Util.ByteBufferDictionary<T>``, is public,
+> and its ``Add`` changed with it: a key already present is now refused with an ``ArgumentException``
+> rather than silently replacing the entry, as ``Dictionary<TKey, TValue>.Add`` does. The type has
+> neither an indexer nor a removal, so code of your own that relied on ``Add`` overwriting has to keep
+> the keys it has added and build a fresh dictionary instead.
