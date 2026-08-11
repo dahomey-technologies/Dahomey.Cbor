@@ -34,11 +34,25 @@ jobs:
             9.0.x
             10.0.x
 
+      # The emitted CDDL is checked by parsing and validating it with the reference cddl gem, rather
+      # than by comparing it against strings this repository also wrote. Without the gem the schema
+      # tests skip themselves, so CDDL_REQUIRED below turns a missing binary into a failure instead
+      # of a quietly smaller run.
+      - name: setup Ruby and the cddl gem
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: install cddl
+        run: gem install cddl
+
       - name: build
         run: dotnet build -c Release src/Dahomey.Cbor
 
       - name: test
         run: dotnet test -c Release src/Dahomey.Cbor.Tests
+        env:
+          CDDL_REQUIRED: "1"
 
       - name: test generator
         run: dotnet test -c Release src/Dahomey.Cbor.Generator.Tests

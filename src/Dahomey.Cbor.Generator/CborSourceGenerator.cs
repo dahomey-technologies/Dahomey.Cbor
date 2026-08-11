@@ -34,6 +34,7 @@ namespace Dahomey.Cbor.Generator
         private const string SerializableAttributeName = "Dahomey.Cbor.Attributes.CborSerializableAttribute";
         private const string DiscriminatorAttributeName = "Dahomey.Cbor.Attributes.CborDiscriminatorAttribute";
         private const string IntDiscriminatorAttributeName = "Dahomey.Cbor.Attributes.CborIntDiscriminatorAttribute";
+        private const string CddlSchemaAttributeName = "Dahomey.Cbor.Attributes.CborCddlSchemaAttribute";
 
         /// <summary>Step names, so a test can assert what the pipeline reused.</summary>
         internal const string DiscriminatedTypesStep = "CborDiscriminatedTypes";
@@ -85,6 +86,11 @@ namespace Dahomey.Cbor.Generator
                 if (result.HintName is not null && result.Source is not null)
                 {
                     spc.AddSource(result.HintName, result.Source);
+                }
+
+                if (result.SchemaHintName is not null && result.SchemaSource is not null)
+                {
+                    spc.AddSource(result.SchemaHintName, result.SchemaSource);
                 }
             });
         }
@@ -214,10 +220,26 @@ namespace Dahomey.Cbor.Generator
 
             IReadOnlyList<TypeModel> ordered = collector.InDependencyOrder();
 
+            string? schemaHintName = null;
+            string? schemaSource = null;
+
+            // Emitted before the diagnostics are frozen below, because the schema walk reports the two
+            // failures only it can see: a type with no CDDL representation, and a polymorphic base whose
+            // subtypes are not all reachable.
+            if (contextSymbol.GetAttributes().Any(
+                    a => a.AttributeClass?.ToDisplayString() == CddlSchemaAttributeName))
+            {
+                schemaHintName = CddlEmitter.HintName(contextSymbol);
+                schemaSource = CddlEmitter.EmitSource(
+                    contextSymbol, CddlEmitter.EmitSchema(ordered, roots, options, diagnostics));
+            }
+
             return new GeneratedContext(
                 Emitter.HintName(contextSymbol),
                 Emitter.Emit(contextSymbol, options, ordered, roots),
-                new EquatableArray<DiagnosticInfo>(diagnostics));
+                new EquatableArray<DiagnosticInfo>(diagnostics),
+                schemaHintName,
+                schemaSource);
         }
 
         /// <summary>
@@ -276,14 +298,22 @@ namespace Dahomey.Cbor.Generator
         LocationInfo? IdentifierLocation);
 
     /// <summary>
-    /// What a context produced: the source to add, and what to report. Both are values, so an edit
+    /// What a context produced: the sources to add, and what to report. All are values, so an edit
     /// that leaves them unchanged stops here instead of adding a syntax tree and re-triggering
     /// everything that depends on one.
     /// </summary>
+    /// <remarks>
+    /// The CDDL schema is a second, independently-gated source rather than part of the first: it is
+    /// emitted only for a context carrying <c>[CborCddlSchema]</c>, while the registrations are emitted
+    /// for every context. Both stay nullable strings so the record compares by value, which is what
+    /// lets an unchanged context stop at this step.
+    /// </remarks>
     internal sealed record GeneratedContext(
         string? HintName,
         string? Source,
-        EquatableArray<DiagnosticInfo> Diagnostics);
+        EquatableArray<DiagnosticInfo> Diagnostics,
+        string? SchemaHintName = null,
+        string? SchemaSource = null);
 
     /// <summary>Context-wide settings read from <c>[CborSourceGenerationOptions]</c>.</summary>
     internal sealed class GenerationOptions
@@ -293,6 +323,17 @@ namespace Dahomey.Cbor.Generator
         public string? DiscriminatorPolicy { get; private set; }
         public ulong? DiscriminatorSemanticTag { get; private set; }
         public int? MaxDepth { get; private set; }
+        public string? EnumFormat { get; private set; }
+        public string? DateTimeFormat { get; private set; }
+        public string? TypedArrayMode { get; private set; }
+
+        /// <summary>
+        /// Whether this context writes RFC 8746 typed arrays, which is the only half of
+        /// <c>TypedArrayMode</c> a schema can describe: CDDL says what a written document looks like,
+        /// and a context that only reads typed arrays still writes ordinary CBOR arrays.
+        /// </summary>
+        public bool WritesTypedArrays =>
+            TypedArrayMode is "WriteLittleEndian" or "ReadWriteLittleEndian";
 
         public static GenerationOptions Read(INamedTypeSymbol contextSymbol, List<DiagnosticInfo> diagnostics)
         {
@@ -349,6 +390,37 @@ namespace Dahomey.Cbor.Generator
                         {
                             options.MaxDepth = maxDepth;
                         }
+                        break;
+
+                    case "EnumFormat":
+                        options.EnumFormat = named.Value.Value switch
+                        {
+                            1 => "WriteToString",
+                            _ => null,
+                        };
+                        break;
+
+                    case "DateTimeFormat":
+                        options.DateTimeFormat = named.Value.Value switch
+                        {
+                            1 => "Unix",
+                            2 => "UnixMilliseconds",
+                            _ => null,
+                        };
+                        break;
+
+                    // TypedArrayMode is a [Flags] enum -- Never = 0, Read = 1, WriteLittleEndian = 2,
+                    // ReadWriteLittleEndian = Read | WriteLittleEndian -- so every representable value
+                    // is named here and emitted as the member the user wrote rather than as a bitwise
+                    // expression. Never needs no assignment: it is the library default.
+                    case "TypedArrayMode":
+                        options.TypedArrayMode = named.Value.Value switch
+                        {
+                            1 => "Read",
+                            2 => "WriteLittleEndian",
+                            3 => "ReadWriteLittleEndian",
+                            _ => null,
+                        };
                         break;
                 }
             }

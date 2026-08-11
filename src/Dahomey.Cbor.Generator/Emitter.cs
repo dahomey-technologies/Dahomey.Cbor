@@ -89,14 +89,7 @@ namespace Dahomey.Cbor.Generator
         /// </summary>
         public static string HintName(INamedTypeSymbol contextSymbol)
         {
-            StringBuilder builder = new StringBuilder();
-
-            foreach (char character in contextSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
-            {
-                builder.Append(char.IsLetterOrDigit(character) || character == '_' ? character : '.');
-            }
-
-            return builder.ToString().Trim('.') + ".CborContext.g.cs";
+            return TypeNames.HintNameStem(contextSymbol) + ".CborContext.g.cs";
         }
 
         private static string Accessibility(INamedTypeSymbol symbol)
@@ -285,6 +278,26 @@ namespace Dahomey.Cbor.Generator
                 wrote = true;
             }
 
+            if (options.EnumFormat is not null)
+            {
+                builder.AppendLine($"{indent}        options.EnumFormat = ValueFormat.{options.EnumFormat};");
+                wrote = true;
+            }
+
+            if (options.DateTimeFormat is not null)
+            {
+                builder.AppendLine($"{indent}        options.DateTimeFormat = DateTimeFormat.{options.DateTimeFormat};");
+                wrote = true;
+            }
+
+            // Order-independent, like every assignment above it: TypedArrayMode is a plain setting that
+            // no other option constrains, and none of these three reads another's value.
+            if (options.TypedArrayMode is not null)
+            {
+                builder.AppendLine($"{indent}        options.TypedArrayMode = TypedArrayMode.{options.TypedArrayMode};");
+                wrote = true;
+            }
+
             if (wrote)
             {
                 builder.AppendLine();
@@ -383,7 +396,7 @@ namespace Dahomey.Cbor.Generator
             StringBuilder builder, string indent, TypeModel model, MemberModel member)
         {
             string ownerName = FullName(model.Symbol);
-            string memberTypeName = FullName(member.Type);
+            string memberTypeName = MemberTypeName(member.Type);
 
             bool isStruct = model.Symbol.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct;
             string mappingType = isStruct
@@ -416,22 +429,47 @@ namespace Dahomey.Cbor.Generator
             return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         }
 
+        /// <summary>
+        /// Like <see cref="FullName"/>, but keeps a <c>string?</c> member's own `?` in the generated
+        /// <c>DelegateMemberMapping&lt;TOwner, TMember&gt;</c>. <c>FullyQualifiedFormat</c> omits the
+        /// nullable-<em>reference</em> modifier by default; without it, a member the source annotates
+        /// <c>Annotated</c> gets a bare (non-nullable) TMember, and the generated file -- which is
+        /// unconditionally under <c>#nullable enable</c>, regardless of the declaring file's own
+        /// nullable context -- warns CS8603 on the getter lambda returning that member. <c>None</c>
+        /// needs no such handling: an unannotated member is exempt from nullable warnings by
+        /// construction, in both the declaring file and the generated one. Reference types only: for a
+        /// value type, <see cref="NullableAnnotation.Annotated"/> means <c>Nullable&lt;T&gt;</c>
+        /// (<c>int?</c>), whose "?" <see cref="FullName"/> already renders as part of the type's own
+        /// display string -- adding a second one here would emit the syntax error <c>int??</c>.
+        /// </summary>
+        private static string MemberTypeName(ITypeSymbol type)
+        {
+            string name = FullName(type);
+
+            return type.IsReferenceType && type.NullableAnnotation == NullableAnnotation.Annotated
+                ? name + "?"
+                : name;
+        }
+
         private static string XmlName(string fullName)
         {
             return fullName.Replace("global::", string.Empty).Replace('<', '{').Replace('>', '}');
         }
 
         /// <summary>
-        /// Property name for a type's accessor: <c>Person</c>, and <c>ListOfPerson</c> for
-        /// <c>List&lt;Person&gt;</c>, so closed generics get a legal, predictable identifier.
-        /// </summary>
-        /// <summary>
         /// Qualifies with the containing namespace only when the simple name is already taken, so the
         /// common case keeps the short, predictable identifier.
         /// </summary>
+        /// <remarks>
+        /// Order dependent by construction: which type keeps the short name is decided by which is seen
+        /// first. That is correct for accessors, whose names only have to be unique and stable within
+        /// one emitted file. CDDL rule names cannot be derived this way -- a schema is compared against
+        /// other copies of itself -- so <see cref="TypeNames.BuildRuleNames"/> resolves collisions from
+        /// the full type key instead. The two share <see cref="TypeNames.AccessorName"/> as their base.
+        /// </remarks>
         private static string UniqueAccessorName(ITypeSymbol type, HashSet<string> used)
         {
-            string name = AccessorName(type);
+            string name = TypeNames.AccessorName(type);
 
             if (used.Add(name))
             {
@@ -457,21 +495,5 @@ namespace Dahomey.Cbor.Generator
             }
         }
 
-        private static string AccessorName(ITypeSymbol type)
-        {
-            if (type is IArrayTypeSymbol array)
-            {
-                return "ArrayOf" + AccessorName(array.ElementType);
-            }
-
-            if (type is INamedTypeSymbol { IsGenericType: true } named)
-            {
-                string baseName = named.Name;
-                string arguments = string.Concat(named.TypeArguments.Select(AccessorName));
-                return $"{baseName}Of{arguments}";
-            }
-
-            return type.Name;
-        }
     }
 }

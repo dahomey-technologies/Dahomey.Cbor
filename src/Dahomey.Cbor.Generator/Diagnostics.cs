@@ -124,5 +124,34 @@ namespace Dahomey.Cbor.Generator
             Category,
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
+
+        /// <summary>
+        /// A schema that quietly omits a member is worse than no schema, so a type with no CDDL
+        /// representation is an error rather than a gap in the output. <c>{1}</c> is the place that
+        /// would have been omitted, already quoted and phrased by the caller, because the two callers
+        /// describe different places: a member of a type, and a declared root type with no member above
+        /// it to name.
+        /// </summary>
+        public static readonly DiagnosticDescriptor NoCddlRepresentation = new(
+            id: "CBOR1011",
+            title: "Type has no CDDL representation",
+            messageFormat: "'{0}' has no CDDL representation, so {1} cannot appear in the emitted schema",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// A type choice missing a subtype describes a narrower contract than the serializer actually
+        /// writes, which is the quiet failure the schema exists to prevent. Only reachable for a type
+        /// that cannot be instantiated at all -- an abstract class or an interface -- since a concrete
+        /// class with no subtypes is simply described by its own rule.
+        /// </summary>
+        public static readonly DiagnosticDescriptor IncompletePolymorphicSchema = new(
+            id: "CBOR1012",
+            title: "Polymorphic schema is incomplete",
+            messageFormat: "'{0}' is polymorphic but no subtype carrying a discriminator is reachable from this context; declare each subtype with [CborSerializable] and give it a [CborDiscriminator] or [CborIntDiscriminator] so the type choice can tell them apart",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
     }
 }
