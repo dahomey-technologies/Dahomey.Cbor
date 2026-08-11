@@ -395,6 +395,23 @@ namespace Dahomey.Cbor.Tests
                 return new Cddl.CddlRuleNamingOtherHolder { Value = new N.Other.Inner { Value = 2 } };
             }
 
+            if (type == typeof(Cddl.CddlScalars))
+            {
+                // A BigInteger past the ulong-bounded header, so the corpus covers the tag 2 bignum
+                // path rather than only the basic-integer one a small value would take.
+                return new Cddl.CddlScalars
+                {
+                    Initial = 'A',
+                    Big = new System.Numerics.BigInteger(ulong.MaxValue) + System.Numerics.BigInteger.One,
+                };
+            }
+
+            if (type == typeof(Cddl.CddlEmptyFlagsHolder))
+            {
+                // A memberless enum has no name to take a value from; a cast is the only way.
+                return new Cddl.CddlEmptyFlagsHolder { Value = (Cddl.CddlEmptyFlags)3 };
+            }
+
             if (type == typeof(GeneratedOptionHolder))
             {
                 return new GeneratedOptionHolder

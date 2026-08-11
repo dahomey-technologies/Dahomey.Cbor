@@ -495,17 +495,24 @@ namespace Dahomey.Cbor.Generator
                 attribute.AttributeClass?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                     == "global::System.FlagsAttribute");
 
-            if (isFlags)
+            // A memberless enum has nothing to name and nothing to enumerate, so both the choice of
+            // names and the choice of values would render empty -- and an empty choice arm (`E =  /
+            // uint`, `E = `) is not parseable CDDL, which no amount of downstream validation can
+            // recover from. Checked ahead of the flags branch, which builds a choice of its own.
+            // `int` rather than the flags branch's `uint`: with no members there is nothing to read a
+            // sign off, and only a cast can produce a value at all, so the signed prelude type is the
+            // one that cannot reject what the serializer writes.
+            if (values.Count == 0)
+            {
+                builder.Append("int");
+            }
+            else if (isFlags)
             {
                 string integerForm = hasNegative ? "int" : "uint";
 
                 builder.Append(options.EnumFormat == "WriteToString"
                     ? string.Join(" / ", names) + " / " + integerForm
                     : integerForm);
-            }
-            else if (values.Count == 0)
-            {
-                builder.Append("int");
             }
             else if (options.EnumFormat == "WriteToString")
             {
@@ -640,26 +647,16 @@ namespace Dahomey.Cbor.Generator
             builder.AppendLine("#nullable enable");
             builder.AppendLine();
 
-            bool hasNamespace = !contextSymbol.ContainingNamespace.IsGlobalNamespace;
-            string indent = hasNamespace ? "    " : string.Empty;
+            // Reopened through the same helper the converter half uses: this file is a second partial
+            // declaration of the user's own context, so an internal, nested or generic context has to
+            // be reopened exactly as it was declared.
+            string indent = Emitter.OpenContextDeclaration(builder, contextSymbol);
 
-            if (hasNamespace)
-            {
-                builder.AppendLine($"namespace {contextSymbol.ContainingNamespace.ToDisplayString()}");
-                builder.AppendLine("{");
-            }
-
-            builder.AppendLine($"{indent}public partial class {contextSymbol.Name}");
-            builder.AppendLine($"{indent}{{");
             builder.AppendLine($"{indent}    /// <summary>RFC 8610 CDDL schema for the types declared on this context.</summary>");
             builder.AppendLine($"{indent}    public const string CddlSchema =");
             builder.AppendLine($"{indent}        @\"{schema.Replace("\"", "\"\"")}\";");
-            builder.AppendLine($"{indent}}}");
 
-            if (hasNamespace)
-            {
-                builder.AppendLine("}");
-            }
+            Emitter.CloseContextDeclaration(builder, contextSymbol, indent);
 
             return builder.ToString();
         }

@@ -30,6 +30,30 @@ namespace Dahomey.Cbor.Generator
             builder.AppendLine("using Dahomey.Cbor.Serialization.Converters.Mappings;");
             builder.AppendLine();
 
+            string indent = OpenContextDeclaration(builder, contextSymbol);
+
+            EmitTypedAccessors(builder, indent, ordered, roots);
+            EmitConfigure(builder, indent, options, ordered);
+            EmitRegisterHelper(builder, indent);
+
+            CloseContextDeclaration(builder, contextSymbol, indent);
+
+            return builder.ToString();
+        }
+
+        /// <summary>
+        /// Writes the namespace, the containing-type chain and the context's own partial declaration,
+        /// and returns the indent its members belong at. <see cref="CloseContextDeclaration"/> closes
+        /// exactly what this opened.
+        /// </summary>
+        /// <remarks>
+        /// Shared with <see cref="CddlEmitter"/>, which reopens the same user type in a second file.
+        /// Both halves have to reopen it identically: a hardcoded <c>public partial class Name</c> is
+        /// CS0262 against an internal context, CS0264 against a generic one, and lands a stray
+        /// top-level type beside a nested one.
+        /// </remarks>
+        public static string OpenContextDeclaration(StringBuilder builder, INamedTypeSymbol contextSymbol)
+        {
             bool hasNamespace = !contextSymbol.ContainingNamespace.IsGlobalNamespace;
             string indent = hasNamespace ? "    " : string.Empty;
 
@@ -42,16 +66,7 @@ namespace Dahomey.Cbor.Generator
             // A nested context needs every containing type reopened as a partial, or the generated
             // half lands as a top-level type and Configure is never implemented -- which surfaces as
             // CS0534 on the user's own class, naming nothing to do with generators.
-            List<INamedTypeSymbol> containers = new List<INamedTypeSymbol>();
-
-            for (INamedTypeSymbol? container = contextSymbol.ContainingType;
-                 container is not null;
-                 container = container.ContainingType)
-            {
-                containers.Insert(0, container);
-            }
-
-            foreach (INamedTypeSymbol container in containers)
+            foreach (INamedTypeSymbol container in Containers(contextSymbol))
             {
                 builder.AppendLine($"{indent}{Accessibility(container)} partial {Keyword(container)} {NameWithTypeParameters(container)}");
                 builder.AppendLine($"{indent}{{");
@@ -63,24 +78,43 @@ namespace Dahomey.Cbor.Generator
             builder.AppendLine($"{indent}{Accessibility(contextSymbol)} partial class {NameWithTypeParameters(contextSymbol)}");
             builder.AppendLine($"{indent}{{");
 
-            EmitTypedAccessors(builder, indent, ordered, roots);
-            EmitConfigure(builder, indent, options, ordered);
-            EmitRegisterHelper(builder, indent);
+            return indent;
+        }
 
+        /// <summary>
+        /// Closes the braces <see cref="OpenContextDeclaration"/> opened, given the indent it returned.
+        /// </summary>
+        public static void CloseContextDeclaration(StringBuilder builder, INamedTypeSymbol contextSymbol, string indent)
+        {
             builder.AppendLine($"{indent}}}");
 
-            for (int i = containers.Count - 1; i >= 0; i--)
+            for (int i = Containers(contextSymbol).Count - 1; i >= 0; i--)
             {
                 indent = indent.Substring(4);
                 builder.AppendLine($"{indent}}}");
             }
 
-            if (hasNamespace)
+            if (!contextSymbol.ContainingNamespace.IsGlobalNamespace)
             {
                 builder.AppendLine("}");
             }
+        }
 
-            return builder.ToString();
+        /// <summary>
+        /// The containing-type chain, outermost first.
+        /// </summary>
+        private static List<INamedTypeSymbol> Containers(INamedTypeSymbol contextSymbol)
+        {
+            List<INamedTypeSymbol> containers = new List<INamedTypeSymbol>();
+
+            for (INamedTypeSymbol? container = contextSymbol.ContainingType;
+                 container is not null;
+                 container = container.ContainingType)
+            {
+                containers.Insert(0, container);
+            }
+
+            return containers;
         }
 
         /// <summary>
