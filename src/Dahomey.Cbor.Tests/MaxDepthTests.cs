@@ -422,9 +422,15 @@ namespace Dahomey.Cbor.Tests
 
         /// <summary>
         /// Indefinite-length nesting is the cheaper attack on the skip path for the reason it is on the
-        /// read path — see <see cref="DeeplyNestedIndefiniteArraysAreBoundedOnRead"/>. The guard is
-        /// entered before the size is read, so an absent length has nothing to slip past.
+        /// read path — see <see cref="DeeplyNestedIndefiniteArraysAreBoundedOnRead"/>.
         /// </summary>
+        /// <remarks>
+        /// A second byte shape rather than a second property: the guard runs before <c>ReadSize</c>,
+        /// but nothing here pins that order, and nothing could — <c>ReadSize</c> returns -1 for
+        /// <c>0x9F</c> without recursing, so entering the guard after it behaves identically. This
+        /// covers the <c>size &lt; 0</c> arm of the skip loop, which the definite-length cases never
+        /// reach.
+        /// </remarks>
         [Fact]
         public void IndefiniteNestingInsideASkippedMemberIsBounded()
         {
@@ -459,6 +465,12 @@ namespace Dahomey.Cbor.Tests
         /// The skip path releases depth like the read path, or a document with enough unmapped members
         /// would trip the limit on the tenth shallow one rather than on anything deep.
         /// </summary>
+        /// <remarks>
+        /// Half the members are map-valued and half array-valued, because the release is per method
+        /// just as the guard is: with every member array-valued, <c>SkipMap</c>'s <c>_depth--</c> could
+        /// be dropped and this — the one test that would notice — would stay green, leaving
+        /// map-valued siblings accumulating the depth that array-valued ones give back.
+        /// </remarks>
         [Fact]
         public void SkippedSiblingsDoNotAccumulateDepth()
         {
@@ -470,9 +482,21 @@ namespace Dahomey.Cbor.Tests
             for (int i = 0; i < 200; i++)
             {
                 writer.WriteString($"unmapped{i}");
-                writer.WriteBeginArray(1);
-                writer.WriteBeginArray(1);
-                writer.WriteInt32(0);
+
+                if (i % 2 == 0)
+                {
+                    writer.WriteBeginArray(1);
+                    writer.WriteBeginArray(1);
+                    writer.WriteInt32(0);
+                }
+                else
+                {
+                    writer.WriteBeginMap(1);
+                    writer.WriteInt32(0);
+                    writer.WriteBeginMap(1);
+                    writer.WriteInt32(0);
+                    writer.WriteInt32(0);
+                }
             }
 
             writer.WriteString("B");
