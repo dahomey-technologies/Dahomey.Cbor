@@ -96,6 +96,15 @@ namespace Dahomey.Cbor.Generator
         /// <summary>Rendered C# literal for the discriminator, or null when the type has none.</summary>
         public string? Discriminator { get; set; }
 
+        /// <summary>
+        /// The raw text of a <c>[CborDiscriminator("...")]</c> value, unescaped and unquoted, or null
+        /// when the discriminator is an integer or absent. <see cref="Discriminator"/> is a <em>C#</em>
+        /// literal, which the registration emitter pastes into generated code; C# and RFC 8610 do not
+        /// share an escape alphabet (<c>\a</c>, <c>\v</c>, <c>\0</c> and <c>\x..</c> are C# only), so
+        /// the CDDL emitter escapes this raw text for itself rather than reusing that literal.
+        /// </summary>
+        public string? DiscriminatorText { get; set; }
+
         public string? DiscriminatorPolicy { get; set; }
 
         /// <summary>

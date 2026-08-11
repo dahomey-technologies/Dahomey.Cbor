@@ -412,9 +412,26 @@ namespace Dahomey.Cbor.Generator
             if (discriminator.ConstructorArguments.Length == 1)
             {
                 TypedConstant argument = discriminator.ConstructorArguments[0];
-                model.Discriminator = stringDiscriminator is not null
-                    ? Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral((string?)argument.Value ?? string.Empty, quote: true)
-                    : ((int?)argument.Value ?? 0).ToString();
+
+                if (stringDiscriminator is not null)
+                {
+                    // Two renderings of the one value, because the two emitters need different
+                    // escaping: FormatLiteral produces C# for the registration emitter to paste into
+                    // generated code, and DiscriminatorText carries the raw string so the CDDL emitter
+                    // can apply RFC 8610's own escapes instead.
+                    string text = (string?)argument.Value ?? string.Empty;
+                    model.DiscriminatorText = text;
+                    model.Discriminator =
+                        Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(text, quote: true);
+                }
+                else
+                {
+                    // Invariant, not the compiler host's culture: a negative discriminator would
+                    // otherwise pick up NumberFormatInfo.NegativeSign, which under some ICU locales is
+                    // U+2212 rather than ASCII '-' -- neither compilable C# nor legal RFC 8610.
+                    model.Discriminator =
+                        ((int?)argument.Value ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }
             }
 
             foreach (KeyValuePair<string, TypedConstant> named in discriminator.NamedArguments)
