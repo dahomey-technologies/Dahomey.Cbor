@@ -165,6 +165,37 @@ namespace Dahomey.Cbor.Tests
             Helper.TestRead(hexBuffer, BigInteger.Parse(expectedValue));
         }
 
+        /// <summary>
+        /// A bignum whose magnitude arrives as an RFC 8949 section 3.2.3 indefinite-length byte string.
+        /// </summary>
+        /// <remarks>
+        /// Nothing here reads the chunks: <see cref="CborReader.ReadBigInteger"/> takes the magnitude
+        /// through <c>ReadSizeAndBytes</c>, which learned the encoding in #166, so this combination
+        /// started working the moment those two met and no test of either pins it. An
+        /// indefinite-length string denotes exactly the concatenation of its chunks, so the magnitude
+        /// is the same bytes it would have been in one piece and the value is unchanged -- which is
+        /// what makes it worth a test rather than a decision: a reader that got this wrong would be
+        /// silently returning a different number, not throwing.
+        /// <para>
+        /// The first pair is the shape that matters most: the accumulator joining the chunks grows by
+        /// doubling, so a two-byte chunk followed by a one-byte one leaves three bytes in a four-byte
+        /// array. A magnitude read one byte too long is a different number, not an error.
+        /// </para>
+        /// </remarks>
+        [Theory]
+        // c2 5f 42 0102 41 03 ff  -- tag 2 over the magnitude 01 02 03, in a two-byte and a one-byte chunk
+        [InlineData("C25F4201024103FF", "66051")]
+        [InlineData("C35F4201024103FF", "-66052")]
+        // A magnitude past what a basic integer reaches, split mid-value.
+        [InlineData("C25F44010000004400000000FF", "72057594037927936")]
+        // Zero chunks is an empty magnitude, which is 0 under tag 2 and -1 under tag 3.
+        [InlineData("C25FFF", "0")]
+        [InlineData("C35FFF", "-1")]
+        public void ReadAChunkedBignumMagnitude(string hexBuffer, string expectedValue)
+        {
+            Helper.TestRead(hexBuffer, BigInteger.Parse(expectedValue));
+        }
+
         [Theory]
         // A text string is rejected rather than parsed - see the remarks on ReadBigInteger.
         [InlineData("63616263")]
