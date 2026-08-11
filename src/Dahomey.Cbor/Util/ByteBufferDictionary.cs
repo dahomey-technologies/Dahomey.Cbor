@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Dahomey.Cbor.Util
 {
@@ -127,6 +128,15 @@ namespace Dahomey.Cbor.Util
             next = new NodeCollection()
         };
 
+        /// <summary>Adds an entry, refusing a key that is already present.</summary>
+        /// <exception cref="ArgumentException">An entry with the same key was already added.</exception>
+        /// <remarks>
+        /// Overwriting is what <see cref="System.Collections.Generic.Dictionary{TKey, TValue}"/>'s
+        /// indexer is for, and this type offers no indexer: every caller here builds a lookup once
+        /// from a set of keys it believes distinct, so a repeat is a mistake upstream - two members
+        /// mapped to one CBOR name, say - and the entry it silently replaced is a member that could
+        /// then never be read. Refusing names the collision where it is made instead.
+        /// </remarks>
         public void Add(ReadOnlySpan<byte> key, T value)
         {
             int len = key.Length;
@@ -151,6 +161,12 @@ namespace Dahomey.Cbor.Util
                 }
 
                 last = node;
+            }
+
+            if (last.hasValue)
+            {
+                throw new ArgumentException(
+                    $"An entry with the same key already exists: {Encoding.UTF8.GetString(key.ToArray())}", nameof(key));
             }
 
             last.value = value;

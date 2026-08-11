@@ -1,5 +1,6 @@
 ﻿using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization.Conventions;
+using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
@@ -347,6 +348,20 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                         {
                             throw new CborException($"expecting all fields/properties to get a member name in class/struct {ObjectType.Name}");
                         }
+
+                        // Two members under one name is ambiguous in both directions: the write emits
+                        // the key twice, producing a document this very type refuses to read back,
+                        // and the read can only ever reach one of the two members. Refusing the
+                        // mapping names the type and the name; letting it build names neither, and
+                        // shows up as a duplicate key in a document nobody wrote by hand.
+                        string? duplicatedName = _memberMappings
+                            .GroupBy(m => converter is null ? m.MemberName : m.GetMemberNameForConverter(converter), StringComparer.Ordinal)
+                            .FirstOrDefault(g => g.Count() > 1)?.Key;
+
+                        if (duplicatedName != null)
+                        {
+                            throw new CborException(MemberMappingErrors.DuplicateMemberName(ObjectType, duplicatedName));
+                        }
                     }
                     break;
                 case CborObjectFormat.IntKeyMap:
@@ -362,7 +377,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                         if (indexDuplicates)
                         {
-                            throw new CborException($"class/struct {ObjectType.Name} holds duplicated MemberIndex fields/properties");
+                            throw new CborException(MemberMappingErrors.DuplicateMemberIndex(ObjectType));
                         }
 
                         _memberMappings = _memberMappings
@@ -383,7 +398,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                         if (indexDuplicates)
                         {
-                            throw new CborException($"class/struct {ObjectType.Name} holds duplicated MemberIndex fields/properties");
+                            throw new CborException(MemberMappingErrors.DuplicateMemberIndex(ObjectType));
                         }
 
                         _memberMappings = _memberMappings
