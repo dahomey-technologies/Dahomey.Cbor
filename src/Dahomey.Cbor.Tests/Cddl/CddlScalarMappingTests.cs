@@ -16,6 +16,8 @@ namespace Dahomey.Cbor.Tests.Cddl
     {
         public char Initial { get; set; }
         public BigInteger Big { get; set; }
+        public CborDecimalFraction Price { get; set; }
+        public CborBigFloat Scale { get; set; }
     }
 
     [CborSerializable(typeof(CddlScalars))]
@@ -54,10 +56,32 @@ namespace Dahomey.Cbor.Tests.Cddl
                 CddlScalarsContext.CddlSchema.Replace("\r\n", "\n"));
         }
 
+        /// <summary>
+        /// Both RFC 8949 §3.4.4 types render as their tag over the two-element array they write, with
+        /// the mantissa carrying the same three-way choice <see cref="BigInteger"/> does, and for the
+        /// same reason -- it is written by the same method.
+        /// </summary>
+        [Fact]
+        public void ADecimalFractionAndABigFloatRenderAsTheirTags()
+        {
+            string schema = CddlScalarsContext.CddlSchema.Replace("\r\n", "\n");
+
+            Assert.Contains("\"Price\": #6.4([int, (int / #6.2(bstr) / #6.3(bstr))]),", schema);
+            Assert.Contains("\"Scale\": #6.5([int, (int / #6.2(bstr) / #6.3(bstr))]),", schema);
+        }
+
         [CddlFact]
         public void SerializerOutputValidatesAgainstTheSchema()
         {
-            CddlScalars value = new CddlScalars { Initial = 'A', Big = new BigInteger(42) };
+            CddlScalars value = new CddlScalars
+            {
+                Initial = 'A',
+                Big = new BigInteger(42),
+                Price = new CborDecimalFraction(27315, -2),
+                // A mantissa past a basic integer, so the instance exercises the bignum arm of the
+                // mantissa's choice rather than only the int one.
+                Scale = new CborBigFloat(BigInteger.Parse("18446744073709551616"), -1),
+            };
 
             byte[] cbor = Helper.Write(value, Context.Options).HexToBytes();
 
