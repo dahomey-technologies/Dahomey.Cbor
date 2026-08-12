@@ -46,5 +46,17 @@ namespace Dahomey.Cbor.Attributes
         /// <see cref="CborOptions.TypedArrayMode"/>.
         /// </summary>
         public TypedArrayMode TypedArrayMode { get; set; } = TypedArrayMode.Never;
+
+        /// <summary>
+        /// Which encoding a <see cref="decimal"/> is written as. Mirrors
+        /// <see cref="CborOptions.DecimalFormat"/>.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="DecimalFormat.DecimalFraction"/> is also the one setting that gives a
+        /// <see cref="decimal"/> member a CDDL representation: the default form occupies a reserved
+        /// major type 7 slot that no CDDL can describe, so a schema-generating context leaving this
+        /// alone still reports CBOR1011 for such a member.
+        /// </remarks>
+        public DecimalFormat DecimalFormat { get; set; } = DecimalFormat.DecimalFloat;
     }
 }

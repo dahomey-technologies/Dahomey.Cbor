@@ -81,6 +81,12 @@ namespace Dahomey.Cbor.Serialization
         private const ulong UNSIGNED_BIGNUM_TAG = 2;
         private const ulong NEGATIVE_BIGNUM_TAG = 3;
 
+        // RFC 8949 §3.4.4.
+        private const ulong DECIMAL_FRACTION_TAG = 4;
+
+        /// <summary>Widest scale a <see cref="decimal"/> holds.</summary>
+        private const int MAX_DECIMAL_SCALE = 28;
+
         private ReadOnlySpan<byte> _buffer;
         private ReadOnlySequence<byte>? _sequence;
         private int _currentPos;
@@ -630,10 +636,43 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        /// <summary>
+        /// Reads a <see cref="decimal"/> from either of its two encodings: the RFC 8949 §3.4.4 decimal
+        /// fraction - tag 4 over <c>[exponent, mantissa]</c>, which is what other implementations write
+        /// - or the <see cref="CborPrimitive.DecimalFloat"/> form this library writes by default. Also
+        /// accepts any basic integer and a text string, as its neighbours do.
+        /// </summary>
+        /// <remarks>
+        /// Accepting tag 4 is unconditional and is not governed by
+        /// <see cref="CborOptions.DecimalFormat"/>: that setting decides what is written, and there is
+        /// nothing to lose by reading a form that used to be a <see cref="CborException"/>.
+        /// <para>
+        /// Which is why this does not open with <c>SkipSemanticTag</c> like the rest of them. The tag
+        /// carries the meaning here, so it has to be noticed rather than stepped over. The stack walk
+        /// mirrors <see cref="ReadBigInteger"/>: foreign tags are skipped as they are everywhere else,
+        /// and a tag 4 anywhere in the stack says decimal fraction.
+        /// </para>
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public decimal ReadDecimal()
         {
-            SkipSemanticTag();
+            bool isDecimalFraction = false;
+
+            while (IsSemanticTag())
+            {
+                TryReadSemanticTag(out ulong tag);
+
+                if (tag == DECIMAL_FRACTION_TAG)
+                {
+                    isDecimalFraction = true;
+                }
+            }
+
+            if (isDecimalFraction)
+            {
+                return ReadDecimalFraction();
+            }
+
             CborReaderHeader header = GetHeader();
 
             switch (header.MajorType)
@@ -678,6 +717,153 @@ namespace Dahomey.Cbor.Serialization
                     ThrowCbor($"Invalid major type {header.MajorType}");
                     return default; // Unreachable
             }
+        }
+
+        /// <summary>
+        /// Reads the content of an RFC 8949 §3.4.4 decimal fraction, whose tag has already been
+        /// consumed: a two-element array of an integer exponent and an integer or bignum mantissa.
+        /// </summary>
+        /// <remarks>
+        /// The mantissa goes through <see cref="ReadBigInteger"/>, which accepts a basic integer or a
+        /// bignum - a 96-bit mantissa needs tag 2 or 3 past 2^64, so a decimal written by this library
+        /// can carry either - and rejects everything else, so nothing composite reaches the arithmetic
+        /// below.
+        /// <para>
+        /// An indefinite-length array is accepted too. §3.4.4 describes the content as an array of two
+        /// items and does not require a definite length, and this library reads other
+        /// indefinite-length shapes wherever they are well-formed; a producer that streams the pair
+        /// is readable rather than rejected on a detail that does not change the value.
+        /// </para>
+        /// <para>
+        /// No <see cref="EnterNestedItem"/>: the array's two items are read by the two calls below,
+        /// neither of which reads a container, so this cannot recurse and has no stack to bound.
+        /// </para>
+        /// </remarks>
+        private decimal ReadDecimalFraction()
+        {
+            Expect(CborMajorType.Array);
+
+            int size = ReadSize();
+
+            if (size != 2 && size != -1)
+            {
+                ThrowCbor($"A decimal fraction is an array of 2 items, not {size}");
+            }
+
+            int exponent = ReadInt32();
+            BigInteger mantissa = ReadBigInteger();
+
+            if (size == -1)
+            {
+                if (!IsBreak())
+                {
+                    ThrowCbor("A decimal fraction is an array of 2 items, and this one holds more");
+                }
+
+                ConsumeBreak();
+            }
+
+            return DecimalFromDecimalFraction(exponent, mantissa);
+        }
+
+        /// <summary>
+        /// Rebuilds the <see cref="decimal"/> denoted by <c>mantissa x 10^exponent</c>, or throws if
+        /// the type cannot hold it exactly.
+        /// </summary>
+        /// <remarks>
+        /// Every <see cref="decimal"/> is a decimal fraction but not every decimal fraction is a
+        /// <see cref="decimal"/>: the type holds a 96-bit mantissa at a scale of 0 to 28, and tag 4
+        /// bounds neither. What does not fit is a <see cref="CborException"/> rather than a rounded
+        /// value - a decoder that quietly loses digits of a monetary amount is worse than one that
+        /// says it cannot read the document.
+        /// <para>
+        /// A mantissa carrying trailing zeros is not out of range just because its exponent is: the
+        /// factors of ten are divided out first, so <c>[-30, 100]</c> reads as <c>1E-28</c> rather than
+        /// being refused for a scale of 30. Producers outside .NET have no reason to normalize.
+        /// </para>
+        /// </remarks>
+        private decimal DecimalFromDecimalFraction(int exponent, BigInteger mantissa)
+        {
+            bool isNegative = mantissa.Sign < 0;
+            BigInteger magnitude = BigInteger.Abs(mantissa);
+
+            // Zero at any exponent is zero, so this is in range whatever the exponent says. The scale
+            // is kept where decimal has room for it, which is what makes [-2, 0] read back as the
+            // 0.00m that wrote it.
+            if (magnitude.IsZero)
+            {
+                int zeroScale = exponent >= 0 ? 0 : (int)Math.Min(-(long)exponent, MAX_DECIMAL_SCALE);
+
+                return new decimal(0, 0, 0, false, (byte)zeroScale);
+            }
+
+            // long, because -(int.MinValue) does not fit an int - and the value is checked before it is
+            // narrowed to the byte the decimal constructor takes.
+            long scale;
+
+            if (exponent > 0)
+            {
+                // 10^29 is already past decimal.MaxValue, so a positive exponent beyond the scale limit
+                // is out of range whatever the mantissa is. Checked before the multiply rather than
+                // after: BigInteger.Pow would otherwise be handed an exponent out of a hostile document
+                // and asked for a number with billions of digits.
+                if (exponent > MAX_DECIMAL_SCALE)
+                {
+                    ThrowDecimalFractionOutOfRange(exponent, mantissa);
+                }
+
+                magnitude *= BigInteger.Pow(10, exponent);
+                scale = 0;
+            }
+            else
+            {
+                scale = -(long)exponent;
+
+                if (scale > MAX_DECIMAL_SCALE)
+                {
+                    long excess = scale - MAX_DECIMAL_SCALE;
+
+                    // A value cannot lose more factors of ten than it has digits, and Log10 bounds the
+                    // digit count without materialising anything: this keeps Pow's argument tied to the
+                    // size of the mantissa actually in the document rather than to the exponent it
+                    // claims.
+                    if (excess > (long)BigInteger.Log10(magnitude) + 1)
+                    {
+                        ThrowDecimalFractionOutOfRange(exponent, mantissa);
+                    }
+
+                    magnitude = BigInteger.DivRem(
+                        magnitude, BigInteger.Pow(10, (int)excess), out BigInteger remainder);
+
+                    if (!remainder.IsZero)
+                    {
+                        ThrowDecimalFractionOutOfRange(exponent, mantissa);
+                    }
+
+                    scale = MAX_DECIMAL_SCALE;
+                }
+            }
+
+            // 96 bits, checked after the scale reduction above rather than before it, since dividing
+            // out the trailing zeros is what brings a value such as [-30, 10^29] into range.
+            if (!(magnitude >> 96).IsZero)
+            {
+                ThrowDecimalFractionOutOfRange(exponent, mantissa);
+            }
+
+            return new decimal(
+                (int)(uint)(magnitude & uint.MaxValue),
+                (int)(uint)((magnitude >> 32) & uint.MaxValue),
+                (int)(uint)(magnitude >> 64),
+                isNegative,
+                (byte)scale);
+        }
+
+        private void ThrowDecimalFractionOutOfRange(int exponent, BigInteger mantissa)
+        {
+            ThrowCbor(
+                $"The decimal fraction [{exponent}, {mantissa}] is not exactly representable as a decimal, "
+                + $"which holds a 96-bit mantissa at a scale of 0 to {MAX_DECIMAL_SCALE}");
         }
 
         /// <summary>

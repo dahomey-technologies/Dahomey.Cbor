@@ -101,6 +101,48 @@ namespace Dahomey.Cbor
         ReadWriteLittleEndian = Read | WriteLittleEndian,
     }
 
+    /// <summary>
+    /// Which of the two encodings a <see cref="decimal"/> is written as.
+    /// </summary>
+    /// <remarks>
+    /// Reading is not affected and needs no setting: a <see cref="decimal"/> is read from either form
+    /// whatever this says, so widening a service's input costs nothing and turning this on does not
+    /// stop it reading the documents it wrote before.
+    /// <para>
+    /// Only writing has to choose, because the choice moves bytes: every <see cref="decimal"/> this
+    /// library has ever written uses <see cref="DecimalFloat"/>, so that stays the default and no
+    /// existing document changes shape underneath a caller who has not asked for it.
+    /// </para>
+    /// </remarks>
+    public enum DecimalFormat
+    {
+        /// <summary>
+        /// Major type 7 with additional information 28, followed by the sixteen raw bytes of the
+        /// value. The historical form, and the default.
+        /// </summary>
+        /// <remarks>
+        /// RFC 8949 §3.3 lists additional information 28-30 in major type 7 as reserved, so this
+        /// occupies a slot the format has not assigned: it round-trips through this library and no
+        /// other decoder reads it. Keep it for a contract whose only participants are Dahomey.Cbor,
+        /// or while documents written by an earlier version are still in circulation; choose
+        /// <see cref="DecimalFraction"/> for anything read outside this library.
+        /// </remarks>
+        DecimalFloat = 0,
+
+        /// <summary>
+        /// The RFC 8949 §3.4.4 decimal fraction: tag 4 over the two-element array
+        /// <c>[exponent, mantissa]</c>, which is what every other CBOR implementation means by a
+        /// decimal.
+        /// </summary>
+        /// <remarks>
+        /// Lossless in both directions and no wider than the type. A <see cref="decimal"/> of scale
+        /// <c>s</c> and mantissa <c>m</c> is exactly the decimal fraction <c>[-s, m]</c>, so the
+        /// scale survives the round trip - <c>0.00m</c> writes as <c>[-2, 0]</c> and <c>0m</c> as
+        /// <c>[0, 0]</c>, the same distinction <see cref="DecimalFloat"/> keeps.
+        /// </remarks>
+        DecimalFraction = 1,
+    }
+
     public class CborOptions
     {
         public static CborOptions Default { get; } = new CborOptions()
@@ -207,6 +249,23 @@ namespace Dahomey.Cbor
         /// </para>
         /// </remarks>
         public TypedArrayMode TypedArrayMode { get; set; } = TypedArrayMode.Never;
+
+        /// <summary>
+        /// Which encoding a <see cref="decimal"/> is written as. Default
+        /// <see cref="DecimalFormat.DecimalFloat"/>, the non-standard form this library has always
+        /// written, so no existing document moves.
+        /// </summary>
+        /// <remarks>
+        /// A write-side setting only. Both forms are read whatever this says, and reading tag 4 is new
+        /// capability rather than changed behaviour: it was a <see cref="CborException"/> before.
+        /// <para>
+        /// Independent of <see cref="Deterministic"/>. Either setting gives one <see cref="decimal"/>
+        /// exactly one encoding - a decimal fraction's exponent and mantissa each use the shortest-form
+        /// argument, and the mantissa reaches for a bignum tag only past 64 bits - so the bytes are
+        /// determined either way, and §4.2.1 has nothing to say about which of the two to pick.
+        /// </para>
+        /// </remarks>
+        public DecimalFormat DecimalFormat { get; set; }
 
         /// <summary>
         /// Semantic Tag to check if the discriminator is present when ObjectFormat is Array

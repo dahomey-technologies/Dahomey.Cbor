@@ -24,7 +24,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 case TypeCode.DateTime:
                     return new DateTimeConverter(options);
                 case TypeCode.Decimal:
-                    return new DecimalConverter();
+                    return new DecimalConverter(options);
                 case TypeCode.Double:
                     return new DoubleConverter();
                 case TypeCode.Int16:

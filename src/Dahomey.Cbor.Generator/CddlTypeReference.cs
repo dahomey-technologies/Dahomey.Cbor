@@ -266,6 +266,17 @@ namespace Dahomey.Cbor.Generator
                         "UnixMilliseconds" => "#6.1(float)",
                         _ => "#6.0(tstr)",
                     };
+
+                // Describable only in the RFC 8949 section 3.4.4 form. The default encoding is major
+                // type 7 with additional information 28, which section 3 reserves, so there is no CDDL
+                // for it and a context leaving DecimalFormat alone still falls through to CBOR1011
+                // below. The mantissa is the same three-way choice BigInteger renders as, and for the
+                // same reason: WriteBigInteger only reaches for a bignum tag past 64 bits, and a
+                // 96-bit mantissa does reach past it.
+                case SpecialType.System_Decimal:
+                    return options.WritesDecimalFractions
+                        ? "#6.4([int, (int / #6.2(bstr) / #6.3(bstr))])"
+                        : null;
             }
 
             // BigInteger has no SpecialType, so it is matched by name -- as TypeCollector.IsPrimitive
@@ -281,13 +292,12 @@ namespace Dahomey.Cbor.Generator
                 return "(int / #6.2(bstr) / #6.3(bstr))";
             }
 
-            // System.Decimal is deliberately absent: it is written as 0xFC plus 16 bytes, and
-            // additional information 28 is reserved and ill-formed under RFC 8949 section 3, so no
-            // conforming decoder can read it and no CDDL can describe it. Guid and DateTimeOffset
-            // have no scalar converter either. Nor does System.Half: the only place the library
-            // references it is the RFC 8746 typed-array element path, which writes `#6.84(bstr)` --
-            // a different representation entirely, not this method's concern. Each falls through to
-            // CBOR1011 rather than asserting a row no converter backs.
+            // Guid and DateTimeOffset have no scalar converter. Nor does System.Half: the only place
+            // the library references it is the RFC 8746 typed-array element path, which writes
+            // `#6.84(bstr)` -- a different representation entirely, not this method's concern.
+            // System.Decimal reaches here only in its default encoding, which is likewise
+            // indescribable. Each falls through to CBOR1011 rather than asserting a row no converter
+            // backs.
             return null;
         }
 

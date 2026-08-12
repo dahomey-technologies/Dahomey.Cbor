@@ -32,6 +32,8 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Support for structs
 * Support for RFC 8746 typed arrays, opt-in per direction (CborOptions.TypedArrayMode)
 * Support for RFC 8949 §3.4.3 bignums (tags 2 and 3) as System.Numerics.BigInteger
+* Reads RFC 8949 §3.4.4 decimal fractions (tag 4) into decimal, and writes them on request
+  (CborOptions.DecimalFormat)
 * Duplicate map keys rejected on every decode target, with a last-wins opt-out (CborOptions.DuplicateKeyMode)
 * Reads RFC 8949 indefinite-length (chunked) byte and text strings; writes definite-length only
 * Ambiguous mappings — two members of a type under one CBOR name — refused when the mapping is built
@@ -266,8 +268,56 @@ through the stack and the innermost bignum tag decides. A text string, on the ot
 rather than parsed — there is no span overload of `BigInteger.Parse` on netstandard2.0, so accepting one
 would mean picking an encoding on a path nothing asks for.
 
-Tags 4 and 5 (decimal fraction and bigfloat) are not decoded semantically and still surface as a
-two-element array. Tracked as https://github.com/dahomey-technologies/Dahomey.Cbor/issues/170.
+Tag 5 (bigfloat) is not decoded semantically and still surfaces as a two-element array. Tracked as
+https://github.com/dahomey-technologies/Dahomey.Cbor/issues/170. Tag 4 (decimal fraction) reads into a
+`decimal`, which the next section is about; it has no object-model type of its own either.
+
+### Decimals (RFC 8949 §3.4.4)
+
+A `decimal` has two encodings, and which one is written is a setting:
+
+```csharp
+CborOptions options = new CborOptions { DecimalFormat = DecimalFormat.DecimalFraction };
+await Cbor.SerializeAsync(273.15m, stream, options);
+// writes C4 82 21 19 6AB3 -- tag 4, [-2, 27315]
+```
+
+| Value | What is written |
+|---|---|
+| `DecimalFloat` (default) | `FC` plus the sixteen raw bytes of the value: `FC 0000000000006AB3 0000000000020000`. |
+| `DecimalFraction` | Tag 4 over `[exponent, mantissa]`, the RFC 8949 §3.4.4 form. |
+
+**Prefer `DecimalFraction` for anything read outside this library.** RFC 8949 §3.3 lists additional
+information 28–30 in major type 7 as *reserved*, so the default form occupies a slot the format has not
+assigned: it round-trips here and no other decoder reads it — `System.Formats.Cbor` throws on it in
+both its lax and strict modes. It remains the default because changing it would move the bytes of every
+document with a `decimal` in it.
+
+The conversion is total and lossless in both directions, with no range or precision policy to pick: a
+`decimal` is a sign, a 96-bit mantissa and a scale of 0 to 28, which is exactly the decimal fraction
+`[-scale, mantissa]`. The scale is part of what is written, so `0.00m` and `0m` stay distinguishable —
+`C4 82 21 00` against `C4 82 00 00` — as they are in the default form. A mantissa past 2^64 goes out
+under the bignum tag (`decimal.MaxValue` writes as `C4 82 00 C2 4C FFFFFFFFFFFFFFFFFFFFFFFF`), which
+is the preferred serialization rather than a special case.
+
+#### Reading takes both, always
+
+There is nothing to opt into on the read side: a `decimal` member reads either form whatever
+`DecimalFormat` says, so turning the setting on does not stop a service reading the documents it wrote
+before, and leaving it off still lets it read a peer's tag 4. Accepting tag 4 takes nothing away — it
+was a `CborException` in earlier versions.
+
+Reading is deliberately the more generous of the two: an unnormalised mantissa is accepted rather than
+refused, so `[-30, 100]` reads as `1E-28`. What a `decimal` genuinely cannot hold — a mantissa wider
+than 96 bits, or a scale that cannot be reduced to 28 — is a `CborException` rather than a rounded
+value.
+
+Two things do not follow the setting. `CborWriter.WriteDecimal(value)` writes the default form as it
+always has, since a `CborWriter` holds no options; pass the format explicitly
+(`WriteDecimal(value, DecimalFormat.DecimalFraction)`) from a custom converter. And the object model
+has no decimal fraction of its own: a `CborDecimal` *writes* as tag 4 like any other decimal, but
+reading those bytes back gives a `CborArray` tagged 4 rather than a `CborDecimal`. The document is
+right either way; the DOM type is not what wrote it.
 
 ### Custom converters
 
@@ -469,11 +519,15 @@ A few things to know about what gets emitted:
   [CborSourceGenerationOptions(
       EnumFormat = ValueFormat.WriteToString,
       DateTimeFormat = DateTimeFormat.Unix,
-      TypedArrayMode = TypedArrayMode.ReadWriteLittleEndian)]
+      TypedArrayMode = TypedArrayMode.ReadWriteLittleEndian,
+      DecimalFormat = DecimalFormat.DecimalFraction)]
   ```
 
 * **A type with no CDDL representation is a build error (`CBOR1011`)**, not a silent omission — a
-  schema that quietly drops a member is worse than no schema at all.
+  schema that quietly drops a member is worse than no schema at all. A `decimal` member is the one case
+  a setting decides: `DecimalFormat.DecimalFraction` renders it as
+  `#6.4([int, (int / #6.2(bstr) / #6.3(bstr))])`, while the default encoding sits in a reserved major
+  type 7 slot that no CDDL can describe and so raises `CBOR1011`.
 
 The output uses core RFC 8610 grammar only — prelude types, arrays, maps, `*`, `/`, ranges and
 `#6.n(...)` — so it can be checked with any conformant CDDL tool; this repository's own tests validate

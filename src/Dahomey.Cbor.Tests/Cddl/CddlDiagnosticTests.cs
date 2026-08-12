@@ -97,10 +97,10 @@ namespace Harness
         }
 
         /// <summary>
-        /// System.Decimal is written as 0xFC plus 16 bytes, where additional information 28 is reserved
-        /// and ill-formed under RFC 8949 section 3 -- no conforming decoder can read it, so no CDDL can
-        /// describe it. <see cref="CddlTypeReference"/>'s primitive switch has no case for it, which is
-        /// what CBOR1011 exists to catch rather than silently omitting the member.
+        /// In its default encoding System.Decimal is 0xFC plus 16 bytes, where additional information
+        /// 28 is reserved and ill-formed under RFC 8949 section 3 -- no conforming decoder can read it,
+        /// so no CDDL can describe it. <see cref="CddlTypeReference"/>'s primitive case returns nothing
+        /// for it, which is what CBOR1011 exists to catch rather than silently omitting the member.
         /// </summary>
         [Fact]
         public void DecimalHasNoCddlRepresentation()
@@ -116,6 +116,28 @@ namespace Harness
 
             Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1011");
             Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
+        }
+
+        /// <summary>
+        /// Declare the interoperable encoding and the same member is describable: a decimal fraction is
+        /// tag 4 over an exponent and a mantissa, all of which CDDL has words for. This is the one
+        /// diagnostic in this file a setting can turn off, which is the point -- the schema follows what
+        /// the context writes.
+        /// </summary>
+        [Fact]
+        public void DecimalHasACddlRepresentationAsADecimalFraction()
+        {
+            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
+    public class Money { public decimal Amount { get; set; } }
+
+    [CborSerializable(typeof(Money))]
+    [CborSourceGenerationOptions(DecimalFormat = Dahomey.Cbor.DecimalFormat.DecimalFraction)]
+    [CborCddlSchema]
+    public partial class HarnessContext : CborSerializerContext { }
+}
+");
+
+            Assert.DoesNotContain(diagnostics, d => d.Id == "CBOR1011");
         }
 
         /// <summary>Guid has no scalar CBOR converter at all, so it falls through the same way.</summary>

@@ -154,8 +154,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                     writer.WriteDouble(value.Value<double>());
                     break;
 
+                // Honours CborOptions.DecimalFormat like the typed path does, so a document does not
+                // depend on whether the decimal in it was written from a member or from the object
+                // model. Note the read side is not symmetrical: a decimal fraction has no CborValueType
+                // of its own, so it comes back as a tagged CborArray rather than as a CborDecimal.
                 case CborValueType.Decimal:
-                    writer.WriteDecimal(value.Value<decimal>());
+                    writer.WriteDecimal(value.Value<decimal>(), _options.DecimalFormat);
                     break;
 
                 case CborValueType.String:
