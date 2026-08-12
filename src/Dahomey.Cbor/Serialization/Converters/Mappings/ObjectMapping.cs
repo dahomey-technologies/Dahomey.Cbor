@@ -131,6 +131,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             // well-formed document carrying a member it should not — and collided under #177's
             // duplicate-name check when it did not. Returning the mapping already covering the member
             // matches MongoDB.Bson's BsonClassMap.MapMember, whose shape this API takes.
+            //
+            // Only a MemberMapping<T> can be returned, so only those are looked at. Every mapping
+            // this library builds from a member is one; an implementation of IMemberMapping from
+            // outside it that names a member of its own is left to the duplicate-name check, which
+            // reports the collision rather than this silently returning something that is not the
+            // mapping the caller was handed.
             foreach (IMemberMapping memberMapping in _memberMappings)
             {
                 if (memberMapping is MemberMapping<T> existingMapping

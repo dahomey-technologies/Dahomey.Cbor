@@ -219,10 +219,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                 if (memberMapping.CanBeDeserialized || isCreatorMember)
                 {
                     // Both lookups refuse a key they already hold, and the mapping was validated for
-                    // exactly that before this loop began. A collision reaching here is therefore a
-                    // member added to the mapping after its validation ran - mapping over a member
-                    // AutoMap already covered, once something has read MemberMappings - which is the
-                    // same mistake arriving late, and is reported as the same kind of failure rather
+                    // exactly that before this loop began. A collision reaching here is therefore one
+                    // that reached the mapping after its validation ran - a SetMemberName or
+                    // SetMemberIndex onto a key already taken, once something has read
+                    // MemberMappings - which is the same mistake arriving late, and is reported as
+                    // the same kind of failure rather
                     // than as the raw ArgumentException of the container that caught it. The clause
                     // naming the lateness is what tells the two apart: the validator sees the whole
                     // mapping and refuses any collision in it, while this sees only the members that

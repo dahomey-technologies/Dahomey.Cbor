@@ -645,27 +645,6 @@ Give the two members distinct names, or drop one. Where the collision comes from
 not own, ``[CborIgnore]`` on the member you do own removes it from the mapping, and
 ``ClearMemberMappings()`` followed by explicit ``MapMember`` calls decides the whole mapping by hand.
 
-Adjusting a single member needs none of that: ``MapMember`` over a member the mapping already covers
-returns that member's mapping rather than adding a second one, so ``AutoMap`` then ``MapMember`` reads
-as it looks — take the conventions, then change this one member.
-
-```csharp
-options.Registry.ObjectMappingRegistry.Register<Foo>(om =>
-{
-    om.AutoMap();
-    om.MapMember(o => o.A).SetMemberName("a").SetRequired(RequirementPolicy.Always);
-});
-```
-
-> **Behaviour change.** ``MapMember`` used to append unconditionally, so the call above mapped ``A``
-> twice: under ``A`` from the conventions and under ``a`` from the call, writing the member under both
-> keys. Without the rename the two mappings shared a name and the type is refused by the check above.
-> The member is now identified by its ``MemberInfo`` — the declaration, so a member inherited from a
-> base type is recognized as the one the conventions already mapped — and both the lambda and the
-> reflection overloads reach the same mapping. Code that relied on the append to write one member
-> under two keys has to declare a second member to carry the second key. This matches
-> ``MongoDB.Bson``'s ``BsonClassMap.MapMember``, which this API takes its shape from.
-
 > **Behaviour change.** Such a type used to serialize, so this is a new exception at first use for a
 > type that "worked". What it wrote was a document whose second member was unreadable — silently
 > discarded before #169, refused as a duplicate key after it — so the type never round-tripped; the
@@ -678,3 +657,32 @@ options.Registry.ObjectMappingRegistry.Register<Foo>(om =>
 > rather than silently replacing the entry, as ``Dictionary<TKey, TValue>.Add`` does. The type has
 > neither an indexer nor a removal, so code of your own that relied on ``Add`` overwriting has to keep
 > the keys it has added and build a fresh dictionary instead.
+
+#### Adjusting a single member
+
+Taking the whole mapping over is not needed to change one member: ``MapMember`` over a member the
+mapping already covers returns that member's mapping rather than adding a second one, so ``AutoMap``
+then ``MapMember`` reads as it looks — take the conventions, then change this one member.
+
+```csharp
+options.Registry.ObjectMappingRegistry.Register<Foo>(om =>
+{
+    om.AutoMap();
+    om.MapMember(o => o.A).SetMemberName("a").SetRequired(RequirementPolicy.Always);
+});
+```
+
+The member is identified by its ``MemberInfo`` — the declaration, so a member inherited from a base
+type is recognized as the one the conventions already mapped — and the lambda and reflection overloads
+reach the same mapping. This is what ``MongoDB.Bson``'s ``BsonClassMap.MapMember``, which this API
+takes its shape from, does with the same input.
+
+> **Behaviour change.** ``MapMember`` used to append unconditionally, so the call above mapped ``A``
+> twice: under ``A`` from the conventions and under ``a`` from the call, writing the member under both
+> keys — a document that reads back without complaint, carrying a member it should not. Without the
+> rename the two mappings shared a name, and the type is refused by the duplicate-name check above.
+> Code that relied on the append to write one member under two keys has to declare a second member to
+> carry the second key.
+>
+> ``AutoMap`` itself still appends, so the calls in the other order — ``MapMember`` and then
+> ``AutoMap`` — leave the member mapped twice as before. Configure the mapping in the order above.

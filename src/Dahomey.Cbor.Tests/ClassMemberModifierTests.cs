@@ -234,9 +234,10 @@ namespace Dahomey.Cbor.Tests
         /// </summary>
         /// <remarks>
         /// <c>Name</c> is deliberately not mapped a second time. It used to be, and the expected
-        /// document carried the key twice as a result; a mapping that puts two members under one name
-        /// is now refused when it is built (issue #177), so mapping over what AutoMap already covered
-        /// throws rather than writing a document this type cannot read back.
+        /// document carried the key twice as a result. Neither half of that is reachable now: a
+        /// mapping that puts two members under one name is refused when it is built (issue #177), and
+        /// mapping over what <c>AutoMap</c> already covered returns the mapping it already has rather
+        /// than adding a second one (issue #193).
         /// </remarks>
         [Fact]
         public void TestWriteByApi()
