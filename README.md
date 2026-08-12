@@ -211,6 +211,9 @@ The object model does not model typed arrays. A `CborValue` holding one is a `By
 `CborValue.SemanticTag`, so DOM code sees opaque bytes rather than numbers. The tag itself survives a
 read-then-write, so the document still describes a typed array afterwards.
 
+One tag, not a chain. `CborValue.SemanticTag` is a single `ulong?`, so a nested `C1 C2 01` keeps the outer
+tag and drops the inner. That is a limit of the object model rather than of the writer.
+
 ### Indefinite-length strings (RFC 8949 §3.2.3)
 
 A byte or text string may arrive as a series of chunks terminated by a break, which is what a producer
