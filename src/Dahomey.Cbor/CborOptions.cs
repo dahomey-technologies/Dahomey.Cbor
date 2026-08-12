@@ -135,10 +135,17 @@ namespace Dahomey.Cbor
         /// decimal.
         /// </summary>
         /// <remarks>
-        /// Lossless in both directions and no wider than the type. A <see cref="decimal"/> of scale
-        /// <c>s</c> and mantissa <c>m</c> is exactly the decimal fraction <c>[-s, m]</c>, so the
-        /// scale survives the round trip - <c>0.00m</c> writes as <c>[-2, 0]</c> and <c>0m</c> as
-        /// <c>[0, 0]</c>, the same distinction <see cref="DecimalFloat"/> keeps.
+        /// Carries every value the type holds, and its scale with it: a <see cref="decimal"/> of scale
+        /// <c>s</c> and mantissa <c>m</c> is exactly the decimal fraction <c>[-s, m]</c>, so
+        /// <c>0.00m</c> writes as <c>[-2, 0]</c> and <c>0m</c> as <c>[0, 0]</c> - the same distinction
+        /// <see cref="DecimalFloat"/> keeps.
+        /// <para>
+        /// One exception, and it is in the encoding rather than in this library: a decimal fraction has
+        /// no signed zero, so <c>-0.00m</c> reads back as <c>0.00m</c>. Equal by every comparison the
+        /// language offers, and distinguishable only by <see cref="decimal.GetBits(decimal)"/> or by
+        /// rendering it - where <see cref="DecimalFloat"/>, which stores the sign bit as it stands,
+        /// keeps it.
+        /// </para>
         /// </remarks>
         DecimalFraction = 1,
     }

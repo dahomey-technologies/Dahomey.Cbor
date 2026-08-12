@@ -87,6 +87,12 @@ namespace Dahomey.Cbor.Serialization
         /// <summary>Widest scale a <see cref="decimal"/> holds.</summary>
         private const int MAX_DECIMAL_SCALE = 28;
 
+        /// <summary>
+        /// Decimal digits a 96-bit mantissa can span. 10^29 is already past <c>2^96 - 1</c>, so a
+        /// magnitude of 30 digits or more is out of range whatever its digits are.
+        /// </summary>
+        private const int MAX_DECIMAL_DIGITS = 29;
+
         private ReadOnlySpan<byte> _buffer;
         private ReadOnlySequence<byte>? _sequence;
         private int _currentPos;
@@ -822,30 +828,41 @@ namespace Dahomey.Cbor.Serialization
                 if (scale > MAX_DECIMAL_SCALE)
                 {
                     long excess = scale - MAX_DECIMAL_SCALE;
+                    long digits = (long)BigInteger.Log10(magnitude) + 1;
 
-                    // A value cannot lose more factors of ten than it has digits, and Log10 bounds the
-                    // digit count without materialising anything: this keeps Pow's argument tied to the
-                    // size of the mantissa actually in the document rather than to the exponent it
-                    // claims.
-                    if (excess > (long)BigInteger.Log10(magnitude) + 1)
+                    // Two bounds on what Pow is asked for, so its argument follows the mantissa actually
+                    // in the document rather than an exponent the document only claims. A value cannot
+                    // lose more factors of ten than it has digits; and what is left has to be within
+                    // reach of the width reduction below, which gives back at most MAX_DECIMAL_SCALE
+                    // more. Log10 bounds the digit count without materialising anything.
+                    if (excess > digits
+                        || digits - excess > MAX_DECIMAL_DIGITS + MAX_DECIMAL_SCALE)
                     {
                         ThrowDecimalFractionOutOfRange(exponent, mantissa);
                     }
 
-                    magnitude = BigInteger.DivRem(
-                        magnitude, BigInteger.Pow(10, (int)excess), out BigInteger remainder);
-
-                    if (!remainder.IsZero)
-                    {
-                        ThrowDecimalFractionOutOfRange(exponent, mantissa);
-                    }
+                    magnitude = DivideOutFactorsOfTen(
+                        magnitude, BigInteger.Pow(10, (int)excess), exponent, mantissa);
 
                     scale = MAX_DECIMAL_SCALE;
                 }
             }
 
-            // 96 bits, checked after the scale reduction above rather than before it, since dividing
-            // out the trailing zeros is what brings a value such as [-30, 10^29] into range.
+            // A mantissa too wide for 96 bits is reduced the same way and for the same reason a scale
+            // past 28 is - the two are one operation seen from either end, since dividing the mantissa
+            // by ten and decrementing the scale leaves the value alone. [-1, 10^29] arrives here inside
+            // the scale limit and still too wide, and is the 1E+28 that decimal holds perfectly well at
+            // a scale of 0.
+            //
+            // Bounded by the scale, which is at most MAX_DECIMAL_SCALE by now, so this is a handful of
+            // divisions rather than a search. A magnitude with a non-zero digit to give up is out of
+            // range and leaves on the first one.
+            while (!(magnitude >> 96).IsZero && scale > 0)
+            {
+                magnitude = DivideOutFactorsOfTen(magnitude, 10, exponent, mantissa);
+                scale--;
+            }
+
             if (!(magnitude >> 96).IsZero)
             {
                 ThrowDecimalFractionOutOfRange(exponent, mantissa);
@@ -859,11 +876,63 @@ namespace Dahomey.Cbor.Serialization
                 (byte)scale);
         }
 
+        /// <summary>
+        /// Divides <paramref name="magnitude"/> by <paramref name="divisor"/>, which must be a power of
+        /// ten, and throws if that would drop a digit that is not zero.
+        /// </summary>
+        /// <remarks>
+        /// Removing a factor of ten from the mantissa while giving one back to the scale leaves the
+        /// value unchanged - which is what makes the reduction legitimate. A non-zero remainder is the
+        /// case where it would not: the digit dropped is part of the value, so the document names
+        /// something a <see cref="decimal"/> cannot hold rather than something to be rounded.
+        /// </remarks>
+        private BigInteger DivideOutFactorsOfTen(
+            BigInteger magnitude, BigInteger divisor, int exponent, BigInteger mantissa)
+        {
+            BigInteger reduced = BigInteger.DivRem(magnitude, divisor, out BigInteger remainder);
+
+            if (!remainder.IsZero)
+            {
+                ThrowDecimalFractionOutOfRange(exponent, mantissa);
+            }
+
+            return reduced;
+        }
+
         private void ThrowDecimalFractionOutOfRange(int exponent, BigInteger mantissa)
         {
             ThrowCbor(
-                $"The decimal fraction [{exponent}, {mantissa}] is not exactly representable as a decimal, "
-                + $"which holds a 96-bit mantissa at a scale of 0 to {MAX_DECIMAL_SCALE}");
+                $"The decimal fraction [{exponent}, {DescribeMantissa(mantissa)}] is not exactly "
+                + $"representable as a decimal, which holds a 96-bit mantissa at a scale of 0 to "
+                + $"{MAX_DECIMAL_SCALE}");
+        }
+
+        /// <summary>
+        /// Renders a mantissa for the message above: its value where a <see cref="decimal"/> could have
+        /// held it, and its digit count where it could not.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="BigInteger.ToString()"/> is a base conversion, quadratic in the digit count, so a
+        /// mantissa straight out of an untrusted document must not reach it. A 33 KB document carries
+        /// 80,000 digits and takes about two seconds to render - which would make the diagnostic far
+        /// more expensive than the decode it is diagnosing, and reachable on a document the reader
+        /// otherwise rejects in a millisecond. The digit count comes from <see cref="BigInteger.Log10"/>,
+        /// which reads the leading bits rather than every digit.
+        /// <para>
+        /// The cutoff is the width of the type, so the exact value is still named for every mantissa
+        /// that was close to fitting, which is the case where it helps.
+        /// </para>
+        /// </remarks>
+        private static string DescribeMantissa(BigInteger mantissa)
+        {
+            BigInteger magnitude = BigInteger.Abs(mantissa);
+
+            if ((magnitude >> 96).IsZero)
+            {
+                return mantissa.ToString();
+            }
+
+            return $"a {(long)BigInteger.Log10(magnitude) + 1}-digit mantissa";
         }
 
         /// <summary>

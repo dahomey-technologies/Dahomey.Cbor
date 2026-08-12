@@ -1,9 +1,11 @@
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.ObjectModel;
 using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Util;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Numerics;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -139,11 +141,20 @@ namespace Dahomey.Cbor.Tests
         /// A mantissa with trailing zeros is in range even when its exponent is not: the factors of
         /// ten are divided out, so a producer that does not normalize is still readable.
         /// </summary>
+        /// <remarks>
+        /// Out of range on either end of the same operation, which is why the last three rows are here.
+        /// A scale past 28 has to give factors of ten back; so does a mantissa too wide for 96 bits,
+        /// and <c>[-1, 10^29]</c> is inside the scale limit while being too wide - it is the 1E+28 a
+        /// <c>decimal</c> holds at a scale of 0. Reducing only for the scale rejected it.
+        /// </remarks>
         [Theory]
         // C482 381D 1864 -> [-30, 100], which is 1E-28 and fits.
         [InlineData("C482381D1864", "0.0000000000000000000000000001")]
         // C482 381C 0A -> [-29, 10], the same value one factor of ten out.
         [InlineData("C482381C0A", "0.0000000000000000000000000001")]
+        [InlineData("C48220C24D01431E0FAE6D7217CAA0000000", "10000000000000000000000000000")]  // [-1, 10^29]
+        [InlineData("C48221C24D0C9F2C9CD04674EDEA40000000", "10000000000000000000000000000")]  // [-2, 10^30]
+        [InlineData("C4823827C2520125DFA371A19E6F7CB54395CA0000000000", "10")]                // [-40, 10^41]
         public void ReadsAnUnnormalizedMantissa(string hexBuffer, string expectedValue)
         {
             Helper.TestRead(hexBuffer, Parse(expectedValue));
@@ -191,6 +202,10 @@ namespace Dahomey.Cbor.Tests
         [InlineData("C482381D1865")                        ] // [-30, 101] - no trailing zero to give
         [InlineData("C482181D01")                          ] // [29, 1] - 1E29 is past decimal.MaxValue
         [InlineData("C48200C24D01000000000000000000000000")] // [0, 2^96] - one bit too wide
+        // Still too wide once every factor of ten the scale can give back has been given back: 1E+29
+        // is past decimal.MaxValue, and 2^96 is past the mantissa by one.
+        [InlineData("C48220C24D0C9F2C9CD04674EDEA40000000")] // [-1, 10^30]
+        [InlineData("C48220C24D0A000000000000000000000000")] // [-1, 2^96 * 10]
         [InlineData("C4821B00000002540BE40001")             ] // [10000000000, 1] - exponent past int
         // Malformed: the content of tag 4 is a two-element array of integers.
         [InlineData("C48321196AB300")]   // three items
@@ -200,6 +215,41 @@ namespace Dahomey.Cbor.Tests
         public void RejectsWhatIsNotAReadableDecimal(string hexBuffer)
         {
             Helper.TestRead<decimal>(hexBuffer, typeof(CborException));
+        }
+
+        /// <summary>
+        /// The rejection message names an oversized mantissa by its digit count rather than by its
+        /// digits. Rendering a <see cref="System.Numerics.BigInteger"/> is a base conversion, quadratic
+        /// in the digit count, so a message spelling one out costs far more than the decode it reports
+        /// on - about two seconds for a 33 KB document that is otherwise rejected in a millisecond.
+        /// </summary>
+        [Fact]
+        public void AnOversizedMantissaIsNotSpelledOutInTheMessage()
+        {
+            using ByteBufferWriter buffer = new ByteBufferWriter();
+            CborWriter writer = new CborWriter(buffer);
+
+            writer.WriteSemanticTag(4);
+            writer.WriteBeginArray(2);
+            writer.WriteInt32(-1);
+            writer.WriteBigInteger(BigInteger.Pow(10, 400) * 7);
+
+            byte[] document = buffer.WrittenSpan.ToArray();
+            string message = null;
+
+            try
+            {
+                CborReader reader = new CborReader(document);
+                reader.ReadDecimal();
+            }
+            catch (CborException exception)
+            {
+                message = exception.Message;
+            }
+
+            Assert.NotNull(message);
+            Assert.Contains("401-digit mantissa", message);
+            Assert.True(message.Length < 200, message);
         }
 
         [Fact]

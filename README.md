@@ -293,12 +293,16 @@ assigned: it round-trips here and no other decoder reads it — `System.Formats.
 both its lax and strict modes. It remains the default because changing it would move the bytes of every
 document with a `decimal` in it.
 
-The conversion is total and lossless in both directions, with no range or precision policy to pick: a
+The conversion carries every value the type holds, with no range or precision policy to pick: a
 `decimal` is a sign, a 96-bit mantissa and a scale of 0 to 28, which is exactly the decimal fraction
 `[-scale, mantissa]`. The scale is part of what is written, so `0.00m` and `0m` stay distinguishable —
 `C4 82 21 00` against `C4 82 00 00` — as they are in the default form. A mantissa past 2^64 goes out
 under the bignum tag (`decimal.MaxValue` writes as `C4 82 00 C2 4C FFFFFFFFFFFFFFFFFFFFFFFF`), which
 is the preferred serialization rather than a special case.
+
+The one thing tag 4 does not carry is a signed zero, which it has no room for: `-0.00m` reads back as
+`0.00m`, equal by every comparison the language offers and distinguishable only by `decimal.GetBits` or
+by rendering it. The default form stores the sign bit as it stands and keeps it.
 
 #### Reading takes both, always
 
