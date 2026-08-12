@@ -733,8 +733,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                     // resolved type had nothing tracking it, and the check at the end of Read, which
                     // iterates the resolved converter's list, was skipped entirely. Enabled here
                     // because this is the point the converter is settled and no member has been read
-                    // yet.
-                    if (context.converter.RequiredMemberConvertersForRead.Count != 0)
+                    // yet. Only when the discriminator moved the read off this converter: where it did
+                    // not, the constructor asked this same question of this same list already.
+                    if (context.converter != this
+                        && context.converter.RequiredMemberConvertersForRead.Count != 0)
                     {
                         context.readState.TrackRequiredMembers();
                     }
