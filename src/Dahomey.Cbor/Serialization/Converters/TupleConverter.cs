@@ -69,6 +69,16 @@
             }
             T2 item2 = TupleItemReader.Read(ref reader, _item2Converter, 1);
 
+            if (size == -1)
+            {
+                if (!reader.IsBreak())
+                {
+                    throw new CborException("Expected CBOR Array of size 2");
+                }
+
+                reader.ConsumeBreak();
+            }
+
             return (item1, item2);
         }
 
@@ -136,6 +146,16 @@
                 throw new CborException("Expected CBOR Array of size 3");
             }
             T3 item3 = TupleItemReader.Read(ref reader, _item3Converter, 2);
+
+            if (size == -1)
+            {
+                if (!reader.IsBreak())
+                {
+                    throw new CborException("Expected CBOR Array of size 3");
+                }
+
+                reader.ConsumeBreak();
+            }
 
             return (item1, item2, item3);
         }
@@ -213,6 +233,16 @@
                 throw new CborException("Expected CBOR Array of size 4");
             }
             T4 item4 = TupleItemReader.Read(ref reader, _item4Converter, 3);
+
+            if (size == -1)
+            {
+                if (!reader.IsBreak())
+                {
+                    throw new CborException("Expected CBOR Array of size 4");
+                }
+
+                reader.ConsumeBreak();
+            }
 
             return (item1, item2, item3, item4);
         }
@@ -299,6 +329,16 @@
                 throw new CborException("Expected CBOR Array of size 5");
             }
             T5 item5 = TupleItemReader.Read(ref reader, _item5Converter, 4);
+
+            if (size == -1)
+            {
+                if (!reader.IsBreak())
+                {
+                    throw new CborException("Expected CBOR Array of size 5");
+                }
+
+                reader.ConsumeBreak();
+            }
 
             return (item1, item2, item3, item4, item5);
         }
@@ -394,6 +434,16 @@
                 throw new CborException("Expected CBOR Array of size 6");
             }
             T6 item6 = TupleItemReader.Read(ref reader, _item6Converter, 5);
+
+            if (size == -1)
+            {
+                if (!reader.IsBreak())
+                {
+                    throw new CborException("Expected CBOR Array of size 6");
+                }
+
+                reader.ConsumeBreak();
+            }
 
             return (item1, item2, item3, item4, item5, item6);
         }
@@ -498,6 +548,16 @@
                 throw new CborException("Expected CBOR Array of size 7");
             }
             T7 item7 = TupleItemReader.Read(ref reader, _item7Converter, 6);
+
+            if (size == -1)
+            {
+                if (!reader.IsBreak())
+                {
+                    throw new CborException("Expected CBOR Array of size 7");
+                }
+
+                reader.ConsumeBreak();
+            }
 
             return (item1, item2, item3, item4, item5, item6, item7);
         }
@@ -611,6 +671,16 @@
                 throw new CborException("Expected CBOR Array of size 8");
             }
             T8 item8 = TupleItemReader.Read(ref reader, _item8Converter, 7);
+
+            if (size == -1)
+            {
+                if (!reader.IsBreak())
+                {
+                    throw new CborException("Expected CBOR Array of size 8");
+                }
+
+                reader.ConsumeBreak();
+            }
 
             return (item1, item2, item3, item4, item5, item6, item7, item8);
         }

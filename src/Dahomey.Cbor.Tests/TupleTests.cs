@@ -1,5 +1,6 @@
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Tests.Extensions;
+using System.Collections.Generic;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -153,6 +154,63 @@ namespace Dahomey.Cbor.Tests
 
             Assert.Contains("Expected major type Array", exception.Message);
             Assert.Equal("$.a", exception.Path);
+        }
+
+        /// <summary>
+        /// An indefinite-length tuple ends where its arity says it does, at every arity and in both
+        /// length forms. The definite-length half already held, from <c>size != N</c>; the
+        /// indefinite-length half had no check after the last item at all, so the extra items were
+        /// silently dropped.
+        /// </summary>
+        [Fact]
+        public void ATupleWithTooManyItemsIsRefusedAtEveryArity()
+        {
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int)>("9F010203FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int)>("9F01020304FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int)>("9F0102030405FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int)>("9F010203040506FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int, int)>("9F01020304050607FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int, int, int)>("9F0102030405060708FF".HexToBytes()));
+
+            // The definite-length form of the same document, which the arity check already refused.
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int)>("83010203".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int)>("8401020304".HexToBytes()));
+        }
+
+        /// <summary>
+        /// The other side of that check: a well-formed indefinite-length tuple still reads, at every
+        /// arity. Refusing one would be the easy way to make the test above pass.
+        /// </summary>
+        [Fact]
+        public void AnIndefiniteLengthTupleIsStillReadAtEveryArity()
+        {
+            Assert.Equal((1, 2), Helper.Read<(int, int)>("9F0102FF"));
+            Assert.Equal((1, 2, 3), Helper.Read<(int, int, int)>("9F010203FF"));
+            Assert.Equal((1, 2, 3, 4), Helper.Read<(int, int, int, int)>("9F01020304FF"));
+            Assert.Equal((1, 2, 3, 4, 5), Helper.Read<(int, int, int, int, int)>("9F0102030405FF"));
+            Assert.Equal((1, 2, 3, 4, 5, 6), Helper.Read<(int, int, int, int, int, int)>("9F010203040506FF"));
+            Assert.Equal((1, 2, 3, 4, 5, 6, 7), Helper.Read<(int, int, int, int, int, int, int)>("9F01020304050607FF"));
+        }
+
+        /// <summary>
+        /// Where the unconsumed break did its damage: the closing <c>FF</c> was left in the buffer, so
+        /// whatever followed the tuple read it instead. An indefinite-length tuple was therefore only
+        /// usable as a whole document — as a map member the break was read as the next key, and as an
+        /// array element as the next element's head.
+        /// </summary>
+        [Fact]
+        public void AnIndefiniteLengthTupleLeavesNothingBehind()
+        {
+            // {"a": [_ 1, 2], "b": 7}
+            TupleMember member = Cbor.Deserialize<TupleMember>("A261619F0102FF616207".HexToBytes());
+
+            Assert.Equal((1, 2), member.A);
+            Assert.Equal(7, member.B);
+
+            // [[_ 1, 2], [_ 3, 4]]
+            List<(int, int)> list = Cbor.Deserialize<List<(int, int)>>("829F0102FF9F0304FF".HexToBytes());
+
+            Assert.Equal(new[] { (1, 2), (3, 4) }, list);
         }
 
         [Fact]
