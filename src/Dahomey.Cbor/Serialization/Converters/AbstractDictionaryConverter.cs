@@ -190,12 +190,17 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// than to an empty name, which would be indistinguishable from a key that really is the empty
         /// string.
         /// </para>
+        /// <para>
+        /// Named through <see cref="MapKeyErrors.KeyText"/> so that the path agrees with the message
+        /// beside it. <typeparamref name="TK"/> may itself be a <c>CborValue</c>, which renders a text
+        /// key quoted; describing it here directly reported one key two ways in one exception.
+        /// </para>
         /// </remarks>
         private static string? DescribeKey(TK? key)
         {
             try
             {
-                return key?.ToString();
+                return key is null ? null : MapKeyErrors.KeyText(key);
             }
             catch (Exception)
             {
