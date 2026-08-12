@@ -257,11 +257,12 @@ namespace Dahomey.Cbor.Tests
         /// this change rather than a bug on master.
         /// </summary>
         /// <remarks>
-        /// <c>TupleConverter</c> is the only converter that reaches the reader below its
-        /// tag-skipping entry points -- <c>Read</c> opens with <c>ReadSize()</c>, which inspects the
-        /// header directly -- so it relied on the member null probe consuming the tag on its behalf.
-        /// Once that probe stopped consuming, the tag byte's low five bits were read as the array
-        /// size and the arity check fired. Each arity now skips its own tag.
+        /// <c>TupleConverter</c> used to reach the reader below its tag-skipping entry points --
+        /// <c>Read</c> opened with <c>ReadSize()</c>, which inspects the header directly -- so it
+        /// relied on the member null probe consuming the tag on its behalf. Once that probe stopped
+        /// consuming, the tag byte's low five bits were read as the array size and the arity check
+        /// fired. Since #189 each arity opens with <c>ReadBeginArray()</c>, which skips the whole tag
+        /// stack before it checks the major type, so the tag is this converter's own business again.
         /// </remarks>
         [Fact]
         public void ATaggedTupleIsStillReadable()
