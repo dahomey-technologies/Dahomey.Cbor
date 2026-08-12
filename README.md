@@ -629,8 +629,9 @@ the source looking wrong:
 
 * a **naming convention** that folds two member names into one — ``Id`` and ``ID`` under
   ``LowerCaseNamingConvention``;
-* a **mapping API call** over a member the conventions already covered — ``MapMember`` after
-  ``AutoMap`` without a ``ClearMemberMappings`` between them, or without a new name;
+* a **mapping API call** that renames a member onto a name another member already holds —
+  ``SetMemberName("X")`` where ``X`` is already mapped, whether by an attribute, by the conventions or
+  by an earlier call;
 * a member that **hides a base member** of the same name with ``new`` rather than ``override``, which
   reports both declarations and so maps both, under the one name. Where the hiding member is a
   **field** this always happens, whatever the two types are: field lookup folds nothing, so ``int``
@@ -643,6 +644,27 @@ the source looking wrong:
 Give the two members distinct names, or drop one. Where the collision comes from a base type you do
 not own, ``[CborIgnore]`` on the member you do own removes it from the mapping, and
 ``ClearMemberMappings()`` followed by explicit ``MapMember`` calls decides the whole mapping by hand.
+
+Adjusting a single member needs none of that: ``MapMember`` over a member the mapping already covers
+returns that member's mapping rather than adding a second one, so ``AutoMap`` then ``MapMember`` reads
+as it looks — take the conventions, then change this one member.
+
+```csharp
+options.Registry.ObjectMappingRegistry.Register<Foo>(om =>
+{
+    om.AutoMap();
+    om.MapMember(o => o.A).SetMemberName("a").SetRequired(RequirementPolicy.Always);
+});
+```
+
+> **Behaviour change.** ``MapMember`` used to append unconditionally, so the call above mapped ``A``
+> twice: under ``A`` from the conventions and under ``a`` from the call, writing the member under both
+> keys. Without the rename the two mappings shared a name and the type is refused by the check above.
+> The member is now identified by its ``MemberInfo`` — the declaration, so a member inherited from a
+> base type is recognized as the one the conventions already mapped — and both the lambda and the
+> reflection overloads reach the same mapping. Code that relied on the append to write one member
+> under two keys has to declare a second member to carry the second key. This matches
+> ``MongoDB.Bson``'s ``BsonClassMap.MapMember``, which this API takes its shape from.
 
 > **Behaviour change.** Such a type used to serialize, so this is a new exception at first use for a
 > type that "worked". What it wrote was a document whose second member was unreadable — silently

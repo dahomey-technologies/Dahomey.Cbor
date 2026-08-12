@@ -21,9 +21,9 @@ namespace Dahomey.Cbor.Tests.Issues
     /// Refusing at build time is a new failure at first use for a type that "worked" before, which is
     /// the point: the alternative is a document that silently drops a member. The check is on the
     /// mapped name, so it covers every route to the collision rather than the attribute alone: a
-    /// naming convention that folds two member names into one, a mapping API call that maps a member
-    /// twice, and a member that hides a base member of the same name all arrive at the same place with
-    /// nothing in the source looking wrong.
+    /// naming convention that folds two member names into one, a mapping API call that renames a
+    /// member onto a name already taken, and a member that hides a base member of the same name all
+    /// arrive at the same place with nothing in the source looking wrong.
     /// </para>
     /// </remarks>
     public class Issue0177
@@ -192,15 +192,24 @@ namespace Dahomey.Cbor.Tests.Issues
             Assert.Contains("'id'", ex.Message);
         }
 
-        /// <summary>And mapping a member twice through the mapping API, which names it only once.</summary>
+        /// <summary>
+        /// And a mapping API call that renames a member onto a name another member already holds,
+        /// which names it only once.
+        /// </summary>
+        /// <remarks>
+        /// Calling <c>MapMember</c> over a member the conventions already covered used to reach here
+        /// too, by mapping that member a second time under its own name. It no longer maps anything —
+        /// see #193 — so a second member renamed onto the first one's name is what this route looks
+        /// like now.
+        /// </remarks>
         [Fact]
-        public void MappingTheSameMemberTwiceByApiIsRefused()
+        public void AMemberRenamedOntoAnotherMembersNameIsRefused()
         {
             CborOptions options = new CborOptions();
             options.Registry.ObjectMappingRegistry.Register<DistinctNames>(objectMapping =>
             {
                 objectMapping.AutoMap();
-                objectMapping.MapMember(o => o.First);
+                objectMapping.MapMember(o => o.Second).SetMemberName("X");
             });
 
             CborException ex = AssertRefusedByValidation(
@@ -282,9 +291,9 @@ namespace Dahomey.Cbor.Tests.Issues
         }
 
         /// <summary>
-        /// A member added to the mapping after something has already initialized it arrives past the
-        /// check, at the read lookup, which refuses the key on its own terms. It reports as the same
-        /// kind of failure — the library's own exception type, not the raw
+        /// A collision reaching the mapping after something has already initialized it arrives past
+        /// the check, at the read lookup, which refuses the key on its own terms. It reports as the
+        /// same kind of failure — the library's own exception type, not the raw
         /// <see cref="System.ArgumentException"/> of the container that caught it — and says that it
         /// arrived late, which is what tells the two mechanisms apart.
         /// </summary>
@@ -299,7 +308,7 @@ namespace Dahomey.Cbor.Tests.Issues
                 // reading the mappings initializes them, so the validation has already run
                 _ = objectMapping.MemberMappings.Count;
 
-                objectMapping.MapMember(o => o.First);
+                objectMapping.MapMember(o => o.Second).SetMemberName("X");
             });
 
             CborException ex = AssertThrowsCborException(
@@ -321,7 +330,7 @@ namespace Dahomey.Cbor.Tests.Issues
             {
                 objectMapping.AutoMap();
                 _ = objectMapping.MemberMappings.Count;
-                objectMapping.MapMember(o => o.First);
+                objectMapping.MapMember(o => o.Second).SetMemberIndex(1);
             });
 
             CborException ex = AssertThrowsCborException(
