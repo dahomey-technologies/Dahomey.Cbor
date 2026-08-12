@@ -437,6 +437,59 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
+        /// One document, two ways of asking for a <see cref="decimal"/>, one answer. A tag 4 read into a
+        /// <see cref="decimal"/> member goes through <c>CborReader</c>'s own conversion; the same bytes
+        /// read into this type and then converted go through <see cref="CborDecimalFraction.ToDecimal"/>.
+        /// Both are exact-or-refuse, and they have to agree on which.
+        /// </summary>
+        /// <remarks>
+        /// A differential test rather than two tables of expectations, because the two implementations
+        /// arrived separately -- #206 and #170 -- and nothing else holds them together. It caught a real
+        /// divergence: <c>[-1, 10^29]</c> is <c>1E+28</c>, which a <see cref="decimal"/> holds once the
+        /// scale is given back to the mantissa's width, and only the reader did that. The exception types
+        /// differ by design and are not compared: a read failure is a <see cref="CborException"/>, a
+        /// conversion failure an <see cref="OverflowException"/>.
+        /// </remarks>
+        [Theory]
+        [InlineData("27315", -2)]
+        [InlineData("-27315", -2)]
+        // Inside the scale limit and too wide, so the width is fixed by giving the scale back.
+        [InlineData("100000000000000000000000000000", -1)]
+        [InlineData("10000000000000000000000000000000", -3)]
+        // Past the scale limit, with trailing zeros to give back.
+        [InlineData("1000", -30)]
+        // Neither is available: refused by both.
+        [InlineData("3", -29)]
+        [InlineData("79228162514264337593543950336", 0)]
+        public void ADecimalMemberAndToDecimalAgree(string mantissaText, int exponent)
+        {
+            BigInteger mantissa = BigInteger.Parse(mantissaText);
+            CborDecimalFraction fraction = new CborDecimalFraction(mantissa, exponent);
+            string hexBuffer = Helper.Write(fraction);
+
+            decimal? read = null;
+            decimal? converted = null;
+
+            try
+            {
+                read = Helper.Read<decimal>(hexBuffer);
+            }
+            catch (CborException)
+            {
+            }
+
+            try
+            {
+                converted = fraction.ToDecimal();
+            }
+            catch (OverflowException)
+            {
+            }
+
+            Assert.Equal(read, converted);
+        }
+
+        /// <summary>
         /// Nothing about the object model changes: a tag 4 still reads into a <c>CborValue</c> as the
         /// two-element array it is encoded as, and the tag still survives the write, as it has since
         /// #165. Only a member <em>typed</em> as one of these structs gains semantics.

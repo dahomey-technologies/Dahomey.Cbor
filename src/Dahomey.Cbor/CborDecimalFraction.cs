@@ -127,6 +127,28 @@ namespace Dahomey.Cbor
                     $"A decimal fraction with exponent {Exponent} is outside the range of Decimal.");
             }
 
+            // A mantissa too wide for 96 bits is the same operation seen from the other end: dividing it
+            // by ten while giving one back to the scale leaves the value alone. [-1, 10^29] arrives
+            // inside the scale limit and still too wide, and is the 1E+28 a decimal holds perfectly well
+            // at a scale of 0. Bounded by the scale, so at most 28 divisions rather than a search, and a
+            // digit that is not zero leaves on the first one -- the value is then out of range, which
+            // the check below reports.
+            //
+            // This mirrors CborReader.DecimalFromDecimalFraction deliberately: the same document read
+            // into a decimal member and converted through this method has to give the same answer.
+            while (exponent < 0 && !(BigInteger.Abs(mantissa) >> 96).IsZero)
+            {
+                BigInteger reduced = BigInteger.DivRem(mantissa, 10, out BigInteger remainder);
+
+                if (!remainder.IsZero)
+                {
+                    break;
+                }
+
+                mantissa = reduced;
+                exponent++;
+            }
+
             BigInteger magnitude = BigInteger.Abs(mantissa);
 
             if (magnitude > MaxDecimalMagnitude)
