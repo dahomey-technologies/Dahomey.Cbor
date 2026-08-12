@@ -210,5 +210,52 @@ namespace Dahomey.Cbor.Tests
             Assert.Contains("Duplicate map key", exception.Message);
             Assert.DoesNotContain(key, exception.Message);
         }
+
+        /// <summary>
+        /// One duplicated key reads the same way whatever it was being decoded into.
+        /// </summary>
+        /// <remarks>
+        /// The object model handed <c>MapKeyErrors</c> a <see cref="CborValue"/>, whose
+        /// <c>ToString()</c> quotes a text value - and <c>TextTruncation.Ellipsize</c> then escaped
+        /// those quotes as though they had come from the document, since it cannot know they were
+        /// added by the description. So <c>{"a": 1, "a": 2}</c> reported <c>\"a\"</c> into a
+        /// <c>CborObject</c> and <c>a</c> into a <c>Dictionary</c>, which makes the message hard to
+        /// match on and undercuts the point of routing every target through one helper.
+        /// </remarks>
+        [Fact]
+        public void TheKeyIsRenderedTheSameWayForEveryDecodeTarget()
+        {
+            // a2 6161 01 6161 02  -- {"a": 1, "a": 2}
+            const string hexBuffer = "A2616101616102";
+
+            string objectModel = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<CborObject>(hexBuffer.HexToBytes())).Message;
+            string dictionary = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<Dictionary<string, int>>(hexBuffer.HexToBytes())).Message;
+
+            Assert.Contains("Duplicate map key: a", objectModel);
+            Assert.Contains("Duplicate map key: a", dictionary);
+            Assert.DoesNotContain("\\", objectModel);
+
+            // a2 6141 01 6141 02  -- {"A": 1, "A": 2}, the same shape into a mapped class
+            string mappedClass = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<DuplicateHolder>("A2614101614102".HexToBytes())).Message;
+
+            Assert.Contains("Duplicate map key: A", mappedClass);
+        }
+
+        /// <summary>
+        /// A key with no quoting of its own is unchanged: only the string case is unwrapped, so a
+        /// number key still renders as the object model renders it.
+        /// </summary>
+        [Fact]
+        public void ANonTextKeyIsStillRenderedByItsOwnToString()
+        {
+            // a2 01 01 01 02  -- {1: 1, 1: 2}
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<CborObject>("A20101 0102".Replace(" ", "").HexToBytes()));
+
+            Assert.Contains("Duplicate map key: 1", exception.Message);
+        }
     }
 }
