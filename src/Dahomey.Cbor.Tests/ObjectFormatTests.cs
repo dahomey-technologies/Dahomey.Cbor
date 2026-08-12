@@ -336,6 +336,134 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal("foo", obj2.Name);
         }
 
+        /// <summary>
+        /// A document carrying a discriminator, read as the very type that wrote it rather than
+        /// through the base.
+        /// </summary>
+        /// <remarks>
+        /// The Array arm consumes the discriminator without returning to the bookmark, so the read
+        /// has to leave on the item that carried it. It recognised that item by the converter having
+        /// changed - a signal that is missing exactly when the declared type is the discriminated
+        /// one, since the registry hands back the converter the read already started on. That call
+        /// then read the following item too, spending two on one call: the array declared three
+        /// items and is read with three calls, so the last one found nothing left.
+        /// </remarks>
+        [Fact]
+        public void ReadArrayWithDiscrimatorAsTheDiscriminatedType()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person5>();
+
+            const string hexBuffer = "83D82767506572736F6E340C63666F6F"; // [39("Person4"), 12, "foo"]
+            Person5 person = Helper.Read<Person5>(hexBuffer, options);
+
+            Assert.NotNull(person);
+            Assert.Equal(12, person.Id);
+            Assert.Equal("foo", person.Name);
+        }
+
+        /// <summary>
+        /// The same case in the map formats, which resolve the discriminator behind a bookmark and
+        /// so were never affected - pinned here so the two cannot drift apart.
+        /// </summary>
+        [Fact]
+        public void ReadMapWithDiscrimatorAsTheDiscriminatedType()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person4>();
+
+            const string hexBuffer = "A30067506572736F6E34010C0263666F6F"; // {0: "Person4", 1: 12, 2: "foo"}
+            Person4 person = Helper.Read<Person4>(hexBuffer, options);
+
+            Assert.NotNull(person);
+            Assert.Equal(12, person.Id);
+            Assert.Equal("foo", person.Name);
+        }
+
+        /// <summary>
+        /// An array holding nothing but the discriminator: one declared item, one call, and that
+        /// call has no member to read.
+        /// </summary>
+        [Fact]
+        public void ReadArrayOfDiscrimatorAloneAsTheDiscriminatedType()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person5>();
+
+            const string hexBuffer = "81D82767506572736F6E34"; // [39("Person4")]
+            Person5 person = Helper.Read<Person5>(hexBuffer, options);
+
+            Assert.NotNull(person);
+            Assert.Equal(0, person.Id);
+            Assert.Null(person.Name);
+        }
+
+        /// <summary>
+        /// The indefinite-length form, which the defect never reached: its read ends on the break
+        /// marker rather than on a declared count, so spending two items on one call left nothing
+        /// short. Pinned so that leaving on the discriminator's item does not disturb it.
+        /// </summary>
+        [Fact]
+        public void ReadIndefiniteArrayWithDiscrimatorAsTheDiscriminatedType()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person5>();
+
+            const string hexBuffer = "9FD82767506572736F6E340C63666F6FFF"; // [_ 39("Person4"), 12, "foo"]
+            Person5 person = Helper.Read<Person5>(hexBuffer, options);
+
+            Assert.Equal(12, person.Id);
+            Assert.Equal("foo", person.Name);
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public abstract class WithId3
+        {
+            [CborProperty(1)]
+            public int Id { get; set; }
+        }
+
+        [CborDiscriminator("Person6")]
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class Person6 : WithId3
+        {
+            [CborProperty(2)]
+            public string Name { get; set; }
+
+            [CborConstructor]
+            public Person6(int id, string name)
+            {
+                Id = id;
+                Name = name;
+            }
+        }
+
+        /// <summary>
+        /// The same array format, read into a type built through a creator rather than a default
+        /// constructor.
+        /// </summary>
+        /// <remarks>
+        /// A creator collects member values and builds the instance after the loop, so the read holds
+        /// no instance while it runs. Every item therefore re-entered the block that resolves the
+        /// type, reached the exit meant for the discriminator's own item, and found the condition it
+        /// keyed on - the converter differing from the declared type - still true, because that is a
+        /// property of the read and not of the item. Every member was skipped, and the object came
+        /// back built from nothing supplied, with no error raised.
+        /// </remarks>
+        [Fact]
+        public void ReadArrayWithDiscrimatorAndCreator()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person6>();
+
+            const string hexBuffer = "83D82767506572736F6E360C63666F6F"; // [39("Person6"), 12, "foo"]
+            WithId3 obj = Helper.Read<WithId3>(hexBuffer, options);
+
+            Person6 person = Assert.IsType<Person6>(obj);
+            Assert.Equal(12, person.Id);
+            Assert.Equal("foo", person.Name);
+        }
+
         [Fact]
         public void WriteArrayWithDiscrimator()
         {
