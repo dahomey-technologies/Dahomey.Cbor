@@ -379,6 +379,52 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
+        /// Every shape of <see cref="decimal"/> round-trips bit for bit, scale included: all 96
+        /// mantissa bits, every scale, both signs. And what was read writes back byte-identically, so
+        /// the encoding is a function of the value rather than of the route taken to it.
+        /// </summary>
+        /// <remarks>
+        /// A fixed seed, so this is a large deterministic case list rather than a test that passes or
+        /// fails depending on the day. It exists because the arithmetic has more corners than a hand
+        /// written list covers: the reduction that brings a wide mantissa into range was originally
+        /// driven by the scale alone, which refused values as ordinary as <c>1E+28</c>, and no vector
+        /// anybody thought to write down caught it.
+        /// </remarks>
+        [Fact]
+        public void EveryDecimalShapeRoundTripsBitForBit()
+        {
+            Random random = new Random(20260812);
+            CborOptions options = InteroperableOptions();
+
+            for (int i = 0; i < 20_000; i++)
+            {
+                int low = random.Next(int.MinValue, int.MaxValue);
+                int middle = random.Next(3) == 0 ? random.Next(int.MinValue, int.MaxValue) : 0;
+                int high = random.Next(4) == 0 ? random.Next(int.MinValue, int.MaxValue) : 0;
+                bool isNegative = random.Next(2) == 0;
+                byte scale = (byte)random.Next(29);
+
+                decimal value = new decimal(low, middle, high, isNegative, scale);
+
+                string hexBuffer = Helper.Write(value, options);
+                decimal read = Helper.Read<decimal>(hexBuffer);
+
+                int[] expected = decimal.GetBits(value);
+                int[] actual = decimal.GetBits(read);
+
+                // Negative zero is the documented exception: tag 4 has no signed zero, so the sign bit
+                // is the one thing the round trip drops. See NegativeZeroLosesItsSign.
+                if (isNegative && low == 0 && middle == 0 && high == 0)
+                {
+                    expected[3] &= 0x7FFFFFFF;
+                }
+
+                Assert.Equal(expected, actual);
+                Assert.Equal(hexBuffer, Helper.Write(read, options));
+            }
+        }
+
+        /// <summary>
         /// Negative zero is the one value the two forms disagree about. <c>decimal</c> has a sign bit
         /// independent of the mantissa; tag 4 does not, so <c>-0.00m</c> comes back as <c>0.00m</c> -
         /// equal by every comparison the language offers, and distinguishable only by
