@@ -89,6 +89,21 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            if (type == typeof(Cddl.Größe))
+            {
+                return new Cddl.Größe { Value = 3 };
+            }
+
+            if (type == typeof(Cddl.Café))
+            {
+                return new Cddl.Café { Value = 4 };
+            }
+
+            if (type == typeof(Cddl.Caf_00E9))
+            {
+                return new Cddl.Caf_00E9 { Value = 5 };
+            }
+
             if (type == typeof(GeneratedPerson))
             {
                 return new GeneratedPerson
