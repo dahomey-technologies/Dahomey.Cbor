@@ -320,8 +320,11 @@ Two things do not follow the setting. `CborWriter.WriteDecimal(value)` writes th
 always has, since a `CborWriter` holds no options; pass the format explicitly
 (`WriteDecimal(value, DecimalFormat.DecimalFraction)`) from a custom converter. And the object model
 has no decimal fraction of its own: a `CborDecimal` *writes* as tag 4 like any other decimal, but
-reading those bytes back gives a `CborArray` tagged 4 rather than a `CborDecimal`. The document is
-right either way; the DOM type is not what wrote it.
+reading those bytes back gives a `CborArray` tagged 4 rather than a `CborDecimal`. What is lost is the
+node's type and nothing else — such a value writes back byte-identically, tag included, so DOM code
+still carries a peer's decimals faithfully. It also carries the ones no `decimal` can hold, which is
+why narrowing tag 4 onto the type here would cost more than it gives; that trade-off belongs to
+[#170](https://github.com/dahomey-technologies/Dahomey.Cbor/issues/170).
 
 ### Custom converters
 

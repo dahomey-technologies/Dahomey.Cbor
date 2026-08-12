@@ -425,6 +425,26 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
+        /// What the object model gives up is the node's type, not the document: a decimal fraction read
+        /// into a <see cref="CborValue"/> writes back byte-identically, tag included. So a DOM read is
+        /// still a faithful carrier of someone else's decimals, which is what makes the asymmetry above
+        /// a limit of the model rather than a hole in it.
+        /// </summary>
+        [Theory]
+        [InlineData("C48221196AB3")]                          // [-2, 27315]
+        [InlineData("C48200C24CFFFFFFFFFFFFFFFFFFFFFFFF")]    // a mantissa needing the bignum tag
+        // Past what decimal holds, and this is the case that argues against decoding tag 4 into a
+        // CborDecimal here: the DOM carries a decimal fraction no .NET decimal can represent, and
+        // narrowing it to the type would make this document unreadable rather than merely untyped.
+        [InlineData("C48200C24D01000000000000000000000000")]  // [0, 2^96]
+        public void TheObjectModelCarriesADecimalFractionWithoutHoldingIt(string hexBuffer)
+        {
+            CborValue read = Helper.Read<CborValue>(hexBuffer);
+
+            Assert.Equal(hexBuffer, Helper.Write(read));
+        }
+
+        /// <summary>
         /// Negative zero is the one value the two forms disagree about. <c>decimal</c> has a sign bit
         /// independent of the mantissa; tag 4 does not, so <c>-0.00m</c> comes back as <c>0.00m</c> -
         /// equal by every comparison the language offers, and distinguishable only by
