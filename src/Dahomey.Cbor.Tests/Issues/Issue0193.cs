@@ -41,6 +41,11 @@ namespace Dahomey.Cbor.Tests.Issues
             public int Declared { get; set; }
         }
 
+        public class RequiredBeforeAutoMap
+        {
+            [CborRequired] public int A { get; set; }
+        }
+
         public class PartiallyMapped
         {
             public int A { get; set; }
@@ -177,6 +182,52 @@ namespace Dahomey.Cbor.Tests.Issues
 
             const string hexBuffer = "A2684465636C61726564076772656E616D656409";
             Helper.TestWrite(obj, hexBuffer, null, options);
+        }
+
+        /// <summary>
+        /// The other order maps the member once too: <c>AutoMap</c> reaches its members through
+        /// <c>MapMember</c>, so one mapped by hand first is the one it configures.
+        /// </summary>
+        /// <remarks>
+        /// Both halves survive: the caller's rename, which the conventions have no opinion on, and
+        /// the requirement policy the attribute carries, which <c>AutoMap</c> applies to the mapping
+        /// it finds. Appending instead left the member under two keys with nothing saying so — the
+        /// same defect as the documented order, and silent for the same reason.
+        /// </remarks>
+        [Fact]
+        public void AutoMapConfiguresAMemberMappedBeforeIt()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ObjectMappingRegistry.Register<RequiredBeforeAutoMap>(objectMapping =>
+            {
+                objectMapping.MapMember(o => o.A).SetMemberName("renamed");
+                objectMapping.AutoMap();
+            });
+
+            IObjectMapping objectMapping = options.Registry.ObjectMappingRegistry.Lookup<RequiredBeforeAutoMap>();
+            Assert.Single(objectMapping.MemberMappings);
+
+            IMemberMapping memberMapping = Assert.Single(objectMapping.MemberMappings);
+            Assert.Equal("renamed", memberMapping.MemberName);
+            Assert.Equal(RequirementPolicy.Always, memberMapping.RequirementPolicy);
+
+            // a1 67 "renamed" 07
+            Helper.TestWrite(new RequiredBeforeAutoMap { A = 7 }, "A16772656E616D656407", null, options);
+        }
+
+        /// <summary>Two <c>AutoMap</c> calls leave one mapping per member, for the same reason.</summary>
+        [Fact]
+        public void AutoMapTwiceMapsEachMemberOnce()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ObjectMappingRegistry.Register<Adjusted>(objectMapping =>
+                objectMapping
+                    .AutoMap()
+                    .AutoMap()
+            );
+
+            Assert.Equal(2, options.Registry.ObjectMappingRegistry.Lookup<Adjusted>().MemberMappings.Count);
+            Helper.TestWrite(new Adjusted { A = 7, B = 9 }, "A2614107614209", null, options);
         }
 
         /// <summary>

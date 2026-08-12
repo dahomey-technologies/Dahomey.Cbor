@@ -677,6 +677,12 @@ type is recognized as the one the conventions already mapped — and the lambda 
 reach the same mapping. This is what ``MongoDB.Bson``'s ``BsonClassMap.MapMember``, which this API
 takes its shape from, does with the same input.
 
+``AutoMap`` reaches its own members the same way, so the order does not matter: called after a member
+was mapped by hand, it configures that mapping from the attributes rather than adding a second one,
+and the two settings live together — the caller's name, the attribute's requirement policy. Two
+``AutoMap`` calls likewise leave one mapping per member. Where the two do say something about the same
+setting, the attribute wins, since that is the call being made.
+
 > **Behaviour change.** ``MapMember`` used to append unconditionally, so the call above mapped ``A``
 > twice: under ``A`` from the conventions and under ``a`` from the call, writing the member under both
 > keys — a document that reads back without complaint, carrying a member it should not. Without the
@@ -684,5 +690,6 @@ takes its shape from, does with the same input.
 > Code that relied on the append to write one member under two keys has to declare a second member to
 > carry the second key.
 >
-> ``AutoMap`` itself still appends, so the calls in the other order — ``MapMember`` and then
-> ``AutoMap`` — leave the member mapped twice as before. Configure the mapping in the order above.
+> ``AutoMap`` now goes through ``MapMember`` for each member it maps, which is what makes the other
+> order behave too. A convention of your own that builds ``MemberMapping<T>`` itself and passes them to
+> ``AddMemberMappings`` still appends, unchanged: that call adds what it is given.
