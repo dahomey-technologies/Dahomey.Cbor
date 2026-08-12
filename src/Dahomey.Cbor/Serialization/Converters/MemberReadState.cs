@@ -21,8 +21,9 @@ namespace Dahomey.Cbor.Serialization.Converters
     public struct MemberReadState
     {
         /// <summary>
-        /// Null when the type has no required members, which is what keeps the set off the common
-        /// path. Not merged with the duplicate tracking below: this one holds member converters,
+        /// Null while nothing requires tracking - neither the declared type nor, once a discriminator
+        /// has settled it, the resolved one - which is what keeps the set off the common path. Not
+        /// merged with the duplicate tracking below: this one holds member converters,
         /// because the required check compares against another converter's member list, and it is
         /// populated whatever <see cref="DuplicateKeyMode"/> is in force.
         /// </summary>
