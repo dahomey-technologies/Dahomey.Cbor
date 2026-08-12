@@ -326,6 +326,7 @@ namespace Dahomey.Cbor.Generator
         public string? EnumFormat { get; private set; }
         public string? DateTimeFormat { get; private set; }
         public string? TypedArrayMode { get; private set; }
+        public string? DecimalFormat { get; private set; }
 
         /// <summary>
         /// Whether this context writes RFC 8746 typed arrays, which is the only half of
@@ -334,6 +335,14 @@ namespace Dahomey.Cbor.Generator
         /// </summary>
         public bool WritesTypedArrays =>
             TypedArrayMode is "WriteLittleEndian" or "ReadWriteLittleEndian";
+
+        /// <summary>
+        /// Whether this context writes RFC 8949 §3.4.4 decimal fractions, which is the only form of
+        /// <c>decimal</c> a schema can describe - the default encoding is a reserved major type 7 slot
+        /// with no CDDL spelling. Like <see cref="WritesTypedArrays"/> this is a write-side question:
+        /// reading tag 4 is unconditional and says nothing about the documents this context produces.
+        /// </summary>
+        public bool WritesDecimalFractions => DecimalFormat is "DecimalFraction";
 
         public static GenerationOptions Read(INamedTypeSymbol contextSymbol, List<DiagnosticInfo> diagnostics)
         {
@@ -419,6 +428,14 @@ namespace Dahomey.Cbor.Generator
                             1 => "Read",
                             2 => "WriteLittleEndian",
                             3 => "ReadWriteLittleEndian",
+                            _ => null,
+                        };
+                        break;
+
+                    case "DecimalFormat":
+                        options.DecimalFormat = named.Value.Value switch
+                        {
+                            1 => "DecimalFraction",
                             _ => null,
                         };
                         break;

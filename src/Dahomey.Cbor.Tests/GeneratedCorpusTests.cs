@@ -148,6 +148,24 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // Written as RFC 8949 section 3.4.4 decimal fractions, so the comparison catches a
+            // generated context that resolved a DecimalConverter built on default options: it would
+            // write the 0xFC form against the reflection path's tag 4. The values span the mantissa
+            // widths that form reaches for -- an integer header, and a bignum tag past 64 bits.
+            if (type == typeof(GeneratedDecimalHolder))
+            {
+                return new GeneratedDecimalHolder
+                {
+                    Value = 273.15m,
+                    Optional = decimal.MaxValue,
+                    Keyed = new Dictionary<decimal, string>
+                    {
+                        [1.5m] = "one and a half",
+                        [decimal.MinValue] = "the floor",
+                    },
+                };
+            }
+
             if (type == typeof(float[]))
             {
                 return new[] { 1.5f, -2.25f };
@@ -224,6 +242,16 @@ namespace Dahomey.Cbor.Tests
             if (type == typeof(Cddl.CddlRow))
             {
                 return new Cddl.CddlRow { Id = 2, Name = "row" };
+            }
+
+            if (type == typeof(Cddl.CddlDecimals))
+            {
+                return new Cddl.CddlDecimals
+                {
+                    Amount = 273.15m,
+                    Tiny = 0.0000000000000000000000000001m,
+                    Huge = decimal.MaxValue,
+                };
             }
 
             if (type == typeof(Cddl.CddlEscaped))
@@ -461,11 +489,12 @@ namespace Dahomey.Cbor.Tests
             // is byte-identical to an ArrayConverter, so a context that forgot to register one would
             // compare equal and pass. With the mode on, the reflection side writes tag 85 and a
             // generated side that fell back to ArrayConverter writes a plain array.
-            // EnumFormat and DateTimeFormat are copied for exactly the same reason, and are the two a
-            // context can now declare that change the bytes without changing which converter is
-            // registered: leaving either at its default here compares a generated context writing
-            // names or Unix seconds against a reflection path writing ordinals or ISO 8601, which
-            // fails for a reason that is this list's omission rather than the generator's doing.
+            // EnumFormat, DateTimeFormat and DecimalFormat are copied for exactly the same reason, and
+            // are the three a context can now declare that change the bytes without changing which
+            // converter is registered: leaving any of them at its default here compares a generated
+            // context writing names, Unix seconds or tag 4 against a reflection path writing ordinals,
+            // ISO 8601 or the 0xFC form, which fails for a reason that is this list's omission rather
+            // than the generator's doing.
             CborOptions reflection = new CborOptions
             {
                 DefaultNamingConvention = generated.DefaultNamingConvention,
@@ -474,6 +503,7 @@ namespace Dahomey.Cbor.Tests
                 Deterministic = generated.Deterministic,
                 EnumFormat = generated.EnumFormat,
                 DateTimeFormat = generated.DateTimeFormat,
+                DecimalFormat = generated.DecimalFormat,
             };
 
             string reflectionBytes = WriteAs(type, Sample(type), reflection);

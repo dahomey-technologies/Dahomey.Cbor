@@ -332,6 +332,12 @@ namespace Dahomey.Cbor.Generator
                 wrote = true;
             }
 
+            if (options.DecimalFormat is not null)
+            {
+                builder.AppendLine($"{indent}        options.DecimalFormat = DecimalFormat.{options.DecimalFormat};");
+                wrote = true;
+            }
+
             if (wrote)
             {
                 builder.AppendLine();

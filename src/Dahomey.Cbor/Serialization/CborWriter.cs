@@ -30,6 +30,9 @@ namespace Dahomey.Cbor.Serialization
         private const ulong UNSIGNED_BIGNUM_TAG = 2;
         private const ulong NEGATIVE_BIGNUM_TAG = 3;
 
+        // RFC 8949 §3.4.4.
+        private const ulong DECIMAL_FRACTION_TAG = 4;
+
         /// <summary>
         /// Default nesting limit, matching <see cref="CborOptions.MaxDepth"/> and
         /// <c>System.Text.Json</c>.
@@ -225,9 +228,38 @@ namespace Dahomey.Cbor.Serialization
             InternalWriteDouble(value);
         }
 
+        /// <summary>
+        /// Writes a <see cref="decimal"/> in the historical <see cref="DecimalFormat.DecimalFloat"/>
+        /// form: major type 7, additional information 28, sixteen raw bytes.
+        /// </summary>
+        /// <remarks>
+        /// Unchanged, and deliberately not routed through <see cref="CborOptions.DecimalFormat"/> -
+        /// nothing here holds the options, and a caller writing to a <see cref="CborWriter"/> directly
+        /// gets the bytes this overload has always produced. Pass the format explicitly to choose the
+        /// interoperable encoding; a converter reached through <see cref="CborOptions"/> already does.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteDecimal(decimal value)
         {
+            InternalWriteDecimal(value);
+        }
+
+        /// <inheritdoc cref="WriteDecimal(decimal)"/>
+        /// <param name="value">The value to write.</param>
+        /// <param name="format">
+        /// Which encoding to use. <see cref="DecimalFormat.DecimalFraction"/> writes the RFC 8949
+        /// §3.4.4 form that other implementations read; <see cref="DecimalFormat.DecimalFloat"/> is the
+        /// same as the single-argument overload.
+        /// </param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void WriteDecimal(decimal value, DecimalFormat format)
+        {
+            if (format == DecimalFormat.DecimalFraction)
+            {
+                InternalWriteDecimalFraction(value);
+                return;
+            }
+
             InternalWriteDecimal(value);
         }
 
@@ -647,6 +679,48 @@ namespace Dahomey.Cbor.Serialization
             }
 
             _bufferWriter.Advance(16);
+        }
+
+        /// <summary>
+        /// Writes an RFC 8949 §3.4.4 decimal fraction: tag 4 over <c>[exponent, mantissa]</c>.
+        /// </summary>
+        /// <remarks>
+        /// A <see cref="decimal"/> is a sign, a 96-bit mantissa and a scale of 0 to 28, which is
+        /// exactly the decimal fraction <c>mantissa x 10^-scale</c> - so this conversion is total and
+        /// lossless, and unlike the float encodings it has no range or precision policy to choose.
+        /// <para>
+        /// The mantissa goes through <see cref="WriteBigInteger"/> rather than being written as an
+        /// integer, because it does not always fit one: a mantissa past 2^64 needs the bignum tag, and
+        /// <see cref="WriteBigInteger"/> reaches for it only then, leaving every ordinary value a
+        /// basic integer.
+        /// </para>
+        /// <para>
+        /// The array is definite-length regardless of <see cref="CborOptions.ArrayLengthMode"/>. It is
+        /// two items by definition of the tag rather than a collection the caller handed over, so its
+        /// length is never unknown in advance, and RFC 8949 §4.2.1 wants the definite form.
+        /// </para>
+        /// </remarks>
+        private void InternalWriteDecimalFraction(decimal value)
+        {
+            int[] bits = decimal.GetBits(value);
+
+            // bits[3] is the flags word: bit 31 is the sign and bits 16-23 the scale. The three
+            // magnitude words are unsigned - reading them as int would make any value with the top bit
+            // of the high word set come out negative.
+            int scale = (bits[3] >> 16) & 0xFF;
+            bool isNegative = bits[3] < 0;
+
+            BigInteger mantissa = ((BigInteger)(uint)bits[2] << 64)
+                + ((BigInteger)(uint)bits[1] << 32)
+                + (uint)bits[0];
+
+            WriteSemanticTag(DECIMAL_FRACTION_TAG);
+            WriteBeginArray(2);
+
+            // Negated: the tag's exponent is the power of ten the mantissa is multiplied by, where
+            // decimal's scale is the power it is divided by.
+            WriteSigned(-scale);
+            WriteBigInteger(isNegative ? -mantissa : mantissa);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

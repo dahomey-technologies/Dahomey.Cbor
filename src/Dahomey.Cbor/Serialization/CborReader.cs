@@ -81,6 +81,18 @@ namespace Dahomey.Cbor.Serialization
         private const ulong UNSIGNED_BIGNUM_TAG = 2;
         private const ulong NEGATIVE_BIGNUM_TAG = 3;
 
+        // RFC 8949 §3.4.4.
+        private const ulong DECIMAL_FRACTION_TAG = 4;
+
+        /// <summary>Widest scale a <see cref="decimal"/> holds.</summary>
+        private const int MAX_DECIMAL_SCALE = 28;
+
+        /// <summary>
+        /// Decimal digits a 96-bit mantissa can span. 10^29 is already past <c>2^96 - 1</c>, so a
+        /// magnitude of 30 digits or more is out of range whatever its digits are.
+        /// </summary>
+        private const int MAX_DECIMAL_DIGITS = 29;
+
         private ReadOnlySpan<byte> _buffer;
         private ReadOnlySequence<byte>? _sequence;
         private int _currentPos;
@@ -630,10 +642,43 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        /// <summary>
+        /// Reads a <see cref="decimal"/> from either of its two encodings: the RFC 8949 §3.4.4 decimal
+        /// fraction - tag 4 over <c>[exponent, mantissa]</c>, which is what other implementations write
+        /// - or the <see cref="CborPrimitive.DecimalFloat"/> form this library writes by default. Also
+        /// accepts any basic integer and a text string, as its neighbours do.
+        /// </summary>
+        /// <remarks>
+        /// Accepting tag 4 is unconditional and is not governed by
+        /// <see cref="CborOptions.DecimalFormat"/>: that setting decides what is written, and there is
+        /// nothing to lose by reading a form that used to be a <see cref="CborException"/>.
+        /// <para>
+        /// Which is why this does not open with <c>SkipSemanticTag</c> like the rest of them. The tag
+        /// carries the meaning here, so it has to be noticed rather than stepped over. The stack walk
+        /// mirrors <see cref="ReadBigInteger"/>: foreign tags are skipped as they are everywhere else,
+        /// and a tag 4 anywhere in the stack says decimal fraction.
+        /// </para>
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public decimal ReadDecimal()
         {
-            SkipSemanticTag();
+            bool isDecimalFraction = false;
+
+            while (IsSemanticTag())
+            {
+                TryReadSemanticTag(out ulong tag);
+
+                if (tag == DECIMAL_FRACTION_TAG)
+                {
+                    isDecimalFraction = true;
+                }
+            }
+
+            if (isDecimalFraction)
+            {
+                return ReadDecimalFraction();
+            }
+
             CborReaderHeader header = GetHeader();
 
             switch (header.MajorType)
@@ -678,6 +723,216 @@ namespace Dahomey.Cbor.Serialization
                     ThrowCbor($"Invalid major type {header.MajorType}");
                     return default; // Unreachable
             }
+        }
+
+        /// <summary>
+        /// Reads the content of an RFC 8949 §3.4.4 decimal fraction, whose tag has already been
+        /// consumed: a two-element array of an integer exponent and an integer or bignum mantissa.
+        /// </summary>
+        /// <remarks>
+        /// The mantissa goes through <see cref="ReadBigInteger"/>, which accepts a basic integer or a
+        /// bignum - a 96-bit mantissa needs tag 2 or 3 past 2^64, so a decimal written by this library
+        /// can carry either - and rejects everything else, so nothing composite reaches the arithmetic
+        /// below.
+        /// <para>
+        /// An indefinite-length array is accepted too. §3.4.4 describes the content as an array of two
+        /// items and does not require a definite length, and this library reads other
+        /// indefinite-length shapes wherever they are well-formed; a producer that streams the pair
+        /// is readable rather than rejected on a detail that does not change the value.
+        /// </para>
+        /// <para>
+        /// No <see cref="EnterNestedItem"/>: the array's two items are read by the two calls below,
+        /// neither of which reads a container, so this cannot recurse and has no stack to bound.
+        /// </para>
+        /// </remarks>
+        private decimal ReadDecimalFraction()
+        {
+            Expect(CborMajorType.Array);
+
+            int size = ReadSize();
+
+            if (size != 2 && size != -1)
+            {
+                ThrowCbor($"A decimal fraction is an array of 2 items, not {size}");
+            }
+
+            int exponent = ReadInt32();
+            BigInteger mantissa = ReadBigInteger();
+
+            if (size == -1)
+            {
+                if (!IsBreak())
+                {
+                    ThrowCbor("A decimal fraction is an array of 2 items, and this one holds more");
+                }
+
+                ConsumeBreak();
+            }
+
+            return DecimalFromDecimalFraction(exponent, mantissa);
+        }
+
+        /// <summary>
+        /// Rebuilds the <see cref="decimal"/> denoted by <c>mantissa x 10^exponent</c>, or throws if
+        /// the type cannot hold it exactly.
+        /// </summary>
+        /// <remarks>
+        /// Every <see cref="decimal"/> is a decimal fraction but not every decimal fraction is a
+        /// <see cref="decimal"/>: the type holds a 96-bit mantissa at a scale of 0 to 28, and tag 4
+        /// bounds neither. What does not fit is a <see cref="CborException"/> rather than a rounded
+        /// value - a decoder that quietly loses digits of a monetary amount is worse than one that
+        /// says it cannot read the document.
+        /// <para>
+        /// A mantissa carrying trailing zeros is not out of range just because its exponent is: the
+        /// factors of ten are divided out first, so <c>[-30, 100]</c> reads as <c>1E-28</c> rather than
+        /// being refused for a scale of 30. Producers outside .NET have no reason to normalize.
+        /// </para>
+        /// </remarks>
+        private decimal DecimalFromDecimalFraction(int exponent, BigInteger mantissa)
+        {
+            bool isNegative = mantissa.Sign < 0;
+            BigInteger magnitude = BigInteger.Abs(mantissa);
+
+            // Zero at any exponent is zero, so this is in range whatever the exponent says. The scale
+            // is kept where decimal has room for it, which is what makes [-2, 0] read back as the
+            // 0.00m that wrote it.
+            if (magnitude.IsZero)
+            {
+                int zeroScale = exponent >= 0 ? 0 : (int)Math.Min(-(long)exponent, MAX_DECIMAL_SCALE);
+
+                return new decimal(0, 0, 0, false, (byte)zeroScale);
+            }
+
+            // long, because -(int.MinValue) does not fit an int - and the value is checked before it is
+            // narrowed to the byte the decimal constructor takes.
+            long scale;
+
+            if (exponent > 0)
+            {
+                // 10^29 is already past decimal.MaxValue, so a positive exponent beyond the scale limit
+                // is out of range whatever the mantissa is. Checked before the multiply rather than
+                // after: BigInteger.Pow would otherwise be handed an exponent out of a hostile document
+                // and asked for a number with billions of digits.
+                if (exponent > MAX_DECIMAL_SCALE)
+                {
+                    ThrowDecimalFractionOutOfRange(exponent, mantissa);
+                }
+
+                magnitude *= BigInteger.Pow(10, exponent);
+                scale = 0;
+            }
+            else
+            {
+                scale = -(long)exponent;
+
+                if (scale > MAX_DECIMAL_SCALE)
+                {
+                    long excess = scale - MAX_DECIMAL_SCALE;
+                    long digits = (long)BigInteger.Log10(magnitude) + 1;
+
+                    // Two bounds on what Pow is asked for, so its argument follows the mantissa actually
+                    // in the document rather than an exponent the document only claims. A value cannot
+                    // lose more factors of ten than it has digits; and what is left has to be within
+                    // reach of the width reduction below, which gives back at most MAX_DECIMAL_SCALE
+                    // more. Log10 bounds the digit count without materialising anything.
+                    if (excess > digits
+                        || digits - excess > MAX_DECIMAL_DIGITS + MAX_DECIMAL_SCALE)
+                    {
+                        ThrowDecimalFractionOutOfRange(exponent, mantissa);
+                    }
+
+                    magnitude = DivideOutFactorsOfTen(
+                        magnitude, BigInteger.Pow(10, (int)excess), exponent, mantissa);
+
+                    scale = MAX_DECIMAL_SCALE;
+                }
+            }
+
+            // A mantissa too wide for 96 bits is reduced the same way and for the same reason a scale
+            // past 28 is - the two are one operation seen from either end, since dividing the mantissa
+            // by ten and decrementing the scale leaves the value alone. [-1, 10^29] arrives here inside
+            // the scale limit and still too wide, and is the 1E+28 that decimal holds perfectly well at
+            // a scale of 0.
+            //
+            // Bounded by the scale, which is at most MAX_DECIMAL_SCALE by now, so this is a handful of
+            // divisions rather than a search. A magnitude with a non-zero digit to give up is out of
+            // range and leaves on the first one.
+            while (!(magnitude >> 96).IsZero && scale > 0)
+            {
+                magnitude = DivideOutFactorsOfTen(magnitude, 10, exponent, mantissa);
+                scale--;
+            }
+
+            if (!(magnitude >> 96).IsZero)
+            {
+                ThrowDecimalFractionOutOfRange(exponent, mantissa);
+            }
+
+            return new decimal(
+                (int)(uint)(magnitude & uint.MaxValue),
+                (int)(uint)((magnitude >> 32) & uint.MaxValue),
+                (int)(uint)(magnitude >> 64),
+                isNegative,
+                (byte)scale);
+        }
+
+        /// <summary>
+        /// Divides <paramref name="magnitude"/> by <paramref name="divisor"/>, which must be a power of
+        /// ten, and throws if that would drop a digit that is not zero.
+        /// </summary>
+        /// <remarks>
+        /// Removing a factor of ten from the mantissa while giving one back to the scale leaves the
+        /// value unchanged - which is what makes the reduction legitimate. A non-zero remainder is the
+        /// case where it would not: the digit dropped is part of the value, so the document names
+        /// something a <see cref="decimal"/> cannot hold rather than something to be rounded.
+        /// </remarks>
+        private BigInteger DivideOutFactorsOfTen(
+            BigInteger magnitude, BigInteger divisor, int exponent, BigInteger mantissa)
+        {
+            BigInteger reduced = BigInteger.DivRem(magnitude, divisor, out BigInteger remainder);
+
+            if (!remainder.IsZero)
+            {
+                ThrowDecimalFractionOutOfRange(exponent, mantissa);
+            }
+
+            return reduced;
+        }
+
+        private void ThrowDecimalFractionOutOfRange(int exponent, BigInteger mantissa)
+        {
+            ThrowCbor(
+                $"The decimal fraction [{exponent}, {DescribeMantissa(mantissa)}] is not exactly "
+                + $"representable as a decimal, which holds a 96-bit mantissa at a scale of 0 to "
+                + $"{MAX_DECIMAL_SCALE}");
+        }
+
+        /// <summary>
+        /// Renders a mantissa for the message above: its value where a <see cref="decimal"/> could have
+        /// held it, and its digit count where it could not.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="BigInteger.ToString()"/> is a base conversion, quadratic in the digit count, so a
+        /// mantissa straight out of an untrusted document must not reach it. A 33 KB document carries
+        /// 80,000 digits and takes about two seconds to render - which would make the diagnostic far
+        /// more expensive than the decode it is diagnosing, and reachable on a document the reader
+        /// otherwise rejects in a millisecond. The digit count comes from <see cref="BigInteger.Log10"/>,
+        /// which reads the leading bits rather than every digit.
+        /// <para>
+        /// The cutoff is the width of the type, so the exact value is still named for every mantissa
+        /// that was close to fitting, which is the case where it helps.
+        /// </para>
+        /// </remarks>
+        private static string DescribeMantissa(BigInteger mantissa)
+        {
+            BigInteger magnitude = BigInteger.Abs(mantissa);
+
+            if ((magnitude >> 96).IsZero)
+            {
+                return mantissa.ToString();
+            }
+
+            return $"a {(long)BigInteger.Log10(magnitude) + 1}-digit mantissa";
         }
 
         /// <summary>
