@@ -379,6 +379,54 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal("foo", person.Name);
         }
 
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public abstract class WithId3
+        {
+            [CborProperty(1)]
+            public int Id { get; set; }
+        }
+
+        [CborDiscriminator("Person6")]
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class Person6 : WithId3
+        {
+            [CborProperty(2)]
+            public string Name { get; set; }
+
+            [CborConstructor]
+            public Person6(int id, string name)
+            {
+                Id = id;
+                Name = name;
+            }
+        }
+
+        /// <summary>
+        /// The same array format, read into a type built through a creator rather than a default
+        /// constructor.
+        /// </summary>
+        /// <remarks>
+        /// A creator collects member values and builds the instance after the loop, so the read holds
+        /// no instance while it runs. Every item therefore re-entered the block that resolves the
+        /// type, reached the exit meant for the discriminator's own item, and found the condition it
+        /// keyed on - the converter differing from the declared type - still true, because that is a
+        /// property of the read and not of the item. Every member was skipped, and the object came
+        /// back built from nothing supplied, with no error raised.
+        /// </remarks>
+        [Fact]
+        public void ReadArrayWithDiscrimatorAndCreator()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person6>();
+
+            const string hexBuffer = "83D82767506572736F6E360C63666F6F"; // [39("Person6"), 12, "foo"]
+            WithId3 obj = Helper.Read<WithId3>(hexBuffer, options);
+
+            Person6 person = Assert.IsType<Person6>(obj);
+            Assert.Equal(12, person.Id);
+            Assert.Equal("foo", person.Name);
+        }
+
         [Fact]
         public void WriteArrayWithDiscrimator()
         {
