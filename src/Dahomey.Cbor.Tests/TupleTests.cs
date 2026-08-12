@@ -1,3 +1,4 @@
+using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Tests.Extensions;
 using Xunit;
 
@@ -113,6 +114,45 @@ namespace Dahomey.Cbor.Tests
         public void AnArrayIsStillReadAsATuple()
         {
             Assert.Equal((1, 2, 3), Helper.Read<(int, int, int)>("83010203"));
+        }
+
+        public class TupleMember
+        {
+            [CborProperty("a")]
+            public (int, int) A { get; set; }
+
+            [CborProperty("b")]
+            public int B { get; set; }
+        }
+
+        /// <summary>
+        /// A wrong-shaped member is rejected where it sits, rather than read across the item boundary.
+        /// </summary>
+        /// <remarks>
+        /// The arity check alone did not catch either of these: the byte string's additional value was
+        /// the arity, so the converter read the tuple's items out of whatever followed the head. In
+        /// <c>A261614201026162182A</c> the two content bytes happen to be two items, so the whole
+        /// document read cleanly: <c>a</c> came back as <c>(1, 2)</c> and <c>b</c> as 42, with nothing
+        /// to say the member had been encoded as a byte string. In <c>A2616142182A616207</c> they are
+        /// one item - <c>18 2A</c> is 42 - so the second was taken from past the end of the byte
+        /// string, and the *key* <c>"b"</c> was read as the tuple's second element.
+        /// <para>
+        /// Both now stop at the member, and <see cref="CborException.Path"/> names it: the failure is
+        /// reported at <c>$.a</c>, not at <c>$.a[1]</c> inside a tuple that was never there.
+        /// </para>
+        /// </remarks>
+        [Theory]
+        // {"a": h'0102', "b": 42} -- content bytes that do parse as two items
+        [InlineData("A261614201026162182A")]
+        // {"a": h'182A', "b": 7}  -- content bytes that do not, so the read used to run past the item
+        [InlineData("A2616142182A616207")]
+        public void AWrongShapedMemberIsNotReadAcrossTheItemBoundary(string hexBuffer)
+        {
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<TupleMember>(hexBuffer.HexToBytes()));
+
+            Assert.Contains("Expected major type Array", exception.Message);
+            Assert.Equal("$.a", exception.Path);
         }
 
         [Fact]
