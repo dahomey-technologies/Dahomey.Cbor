@@ -80,11 +80,10 @@ namespace Dahomey.Cbor.Serialization
         // RFC 8949 §3.4.3.
         private const ulong UNSIGNED_BIGNUM_TAG = 2;
         private const ulong NEGATIVE_BIGNUM_TAG = 3;
-        private const ulong DECIMAL_FRACTION_TAG = 4;
-        private const ulong BIGFLOAT_TAG = 5;
 
         // RFC 8949 §3.4.4.
         private const ulong DECIMAL_FRACTION_TAG = 4;
+        private const ulong BIGFLOAT_TAG = 5;
 
         /// <summary>Widest scale a <see cref="decimal"/> holds.</summary>
         private const int MAX_DECIMAL_SCALE = 28;
@@ -678,7 +677,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (isDecimalFraction)
             {
-                return ReadDecimalFraction();
+                return ReadDecimalFractionAsDecimal();
             }
 
             CborReaderHeader header = GetHeader();
@@ -747,7 +746,7 @@ namespace Dahomey.Cbor.Serialization
         /// neither of which reads a container, so this cannot recurse and has no stack to bound.
         /// </para>
         /// </remarks>
-        private decimal ReadDecimalFraction()
+        private decimal ReadDecimalFractionAsDecimal()
         {
             Expect(CborMajorType.Array);
 

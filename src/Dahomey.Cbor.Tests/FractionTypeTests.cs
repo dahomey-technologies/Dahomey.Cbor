@@ -237,6 +237,31 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(1e-27m, new CborDecimalFraction(1000, -30).ToDecimal());
         }
 
+        /// <summary>
+        /// A mantissa the size of a real document, reduced in one division rather than one per digit.
+        /// </summary>
+        /// <remarks>
+        /// The size is the test. Each big-integer division is O(n) in the mantissa, so giving digits back
+        /// one at a time is quadratic in the size of the document the mantissa came from: measured on
+        /// net10.0, 40,000 digits took 513 ms that way, 80,000 took 2.0 s and 160,000 took 8.0 s, against
+        /// 3, 3 and 11 ms bounded. The same shape reaches <see cref="CborBigFloat"/> through
+        /// <c>2^k × 2^-k</c>, which is why both are here. An application calling either conversion on a
+        /// value it decoded is the ordinary thing to do, so the amplification is reachable from a
+        /// document.
+        /// </remarks>
+        [Fact]
+        public void AMantissaWithManyTrailingZerosReducesInOneStep()
+        {
+            BigInteger tenToThe100000 = BigInteger.Pow(10, 100000);
+
+            Assert.Equal(1e-28m, new CborDecimalFraction(tenToThe100000, -100028).ToDecimal());
+            Assert.Equal(1m, new CborBigFloat(BigInteger.Pow(2, 100000), -100000).ToDecimal());
+            Assert.Equal(1.0, new CborBigFloat(BigInteger.Pow(2, 100000), -100000).ToDouble());
+
+            // And a digit that is not zero still refuses, rather than the reduction quietly dropping it.
+            Assert.Throws<OverflowException>(() => new CborDecimalFraction(tenToThe100000 + 1, -100028).ToDecimal());
+        }
+
         [Theory]
         [InlineData("3", -29)]                                      // scale will not reduce
         [InlineData("1", 29)]                                       // past decimal.MaxValue

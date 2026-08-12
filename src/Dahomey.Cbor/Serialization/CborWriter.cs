@@ -29,11 +29,10 @@ namespace Dahomey.Cbor.Serialization
         // RFC 8949 §3.4.3.
         private const ulong UNSIGNED_BIGNUM_TAG = 2;
         private const ulong NEGATIVE_BIGNUM_TAG = 3;
-        private const ulong DECIMAL_FRACTION_TAG = 4;
-        private const ulong BIGFLOAT_TAG = 5;
 
         // RFC 8949 §3.4.4.
         private const ulong DECIMAL_FRACTION_TAG = 4;
+        private const ulong BIGFLOAT_TAG = 5;
 
         /// <summary>
         /// Default nesting limit, matching <see cref="CborOptions.MaxDepth"/> and
