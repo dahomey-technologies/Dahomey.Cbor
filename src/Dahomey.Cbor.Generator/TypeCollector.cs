@@ -1,6 +1,8 @@
 ﻿using Microsoft.CodeAnalysis;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Linq;
 
 namespace Dahomey.Cbor.Generator
@@ -176,6 +178,9 @@ namespace Dahomey.Cbor.Generator
             ReadTypeLevelAttributes(type, model);
             ReportUnsupportedFeatures(type);
 
+            Dictionary<string, string> membersByCborName = new Dictionary<string, string>(StringComparer.Ordinal);
+            Dictionary<int, string> membersByCborIndex = new Dictionary<int, string>();
+
             foreach (ISymbol member in EnumerateMembers(type))
             {
                 if (HasAttribute(member, "CborIgnoreAttribute"))
@@ -238,6 +243,43 @@ namespace Dahomey.Cbor.Generator
                         member.Locations.FirstOrDefault(),
                         type.Name,
                         member.Name));
+                }
+
+                // The wire key, which is the name for StringKeyMap and the index for the other two
+                // formats -- the same split ObjectConverter's read lookup makes. Two members under one
+                // key cannot both be in a document, so the second is reported and dropped rather than
+                // registered: the build fails either way, and emitting it would only add a run-time
+                // failure behind the build error.
+                if (model.ObjectFormat == "StringKeyMap")
+                {
+                    if (membersByCborName.TryGetValue(cborName, out string? firstUnderName))
+                    {
+                        _diagnostics.Add(DiagnosticInfo.Create(
+                            Diagnostics.DuplicateMemberName,
+                            member.Locations.FirstOrDefault(),
+                            type.Name,
+                            firstUnderName,
+                            member.Name,
+                            cborName));
+                        continue;
+                    }
+
+                    membersByCborName[cborName] = member.Name;
+                }
+                else if (membersByCborIndex.TryGetValue(cborIndex!.Value, out string? firstUnderIndex))
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.DuplicateMemberIndex,
+                        member.Locations.FirstOrDefault(),
+                        type.Name,
+                        firstUnderIndex,
+                        member.Name,
+                        cborIndex.Value.ToString(CultureInfo.InvariantCulture)));
+                    continue;
+                }
+                else
+                {
+                    membersByCborIndex[cborIndex.Value] = member.Name;
                 }
 
                 model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite));
@@ -357,8 +399,25 @@ namespace Dahomey.Cbor.Generator
         /// Matching that order matters because it determines the order members appear on the wire, and
         /// the generated output is required to be byte-identical.
         /// </summary>
+        /// <remarks>
+        /// An overridden property is declared on both types and is one member, so the base declaration
+        /// is dropped once an override for it has been seen — the walk runs most-derived first, so the
+        /// override always comes first. <c>Type.GetProperties</c> collapses an override the same way,
+        /// which is what makes this a match for the reflection path rather than a preference: yielding
+        /// both put two mappings under one name, so the generated context wrote the key twice and, since
+        /// the mapping validation added in #186, threw while being built.
+        /// <para>
+        /// A member hiding a base member with <c>new</c> is deliberately not collapsed.
+        /// <c>GetProperties</c> returns both of those, so the reflection path sees two members under one
+        /// name and refuses the mapping; the generator reports <c>CBOR1013</c> for the same type, which
+        /// is the same answer given earlier.
+        /// </para>
+        /// </remarks>
         private IEnumerable<ISymbol> EnumerateMembers(ITypeSymbol type)
         {
+            HashSet<ISymbol> overriddenByADerivedMember =
+                new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+
             for (ITypeSymbol? current = type;
                  current is not null && current.SpecialType != SpecialType.System_Object;
                  current = current.BaseType)
@@ -368,6 +427,21 @@ namespace Dahomey.Cbor.Generator
                     if (member is not (IPropertySymbol or IFieldSymbol))
                     {
                         continue;
+                    }
+
+                    if (overriddenByADerivedMember.Contains(member))
+                    {
+                        continue;
+                    }
+
+                    if (member is IPropertySymbol { IsOverride: true } overriding)
+                    {
+                        for (IPropertySymbol? overridden = overriding.OverriddenProperty;
+                             overridden is not null;
+                             overridden = overridden.OverriddenProperty)
+                        {
+                            overriddenByADerivedMember.Add(overridden);
+                        }
                     }
 
                     if (member.DeclaredAccessibility == Accessibility.Public)

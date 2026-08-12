@@ -217,6 +217,11 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedTupleTests.Sample();
             }
 
+            if (type == typeof(GeneratedOverrideHolder))
+            {
+                return new GeneratedOverrideHolder { Id = 7, Name = "seven" };
+            }
+
             if (type == typeof(float[]))
             {
                 return new[] { 1.5f, -2.25f };

@@ -146,6 +146,41 @@ namespace Dahomey.Cbor.Generator
         /// that cannot be instantiated at all -- an abstract class or an interface -- since a concrete
         /// class with no subtypes is simply described by its own rule.
         /// </summary>
+        /// <summary>
+        /// Two members under one CBOR name. An error rather than a warning because the type cannot
+        /// serialize at all -- since #186 the reflection path refuses the mapping when it is built, so
+        /// there is no working program this turns away. The generator is the earliest place it can be
+        /// said: against the second declaration, rather than at the first <c>new MyContext(options)</c>.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately not exhaustive, and its wording avoids implying otherwise. It sees an explicit
+        /// <c>[CborProperty]</c> name and a naming convention this generator can resolve; a member
+        /// hiding one declared in another assembly, or a name settled by a convention type it cannot
+        /// run, stays with the run-time check. Catching most cases early is worth having even where the
+        /// later check remains the backstop.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor DuplicateMemberName = new(
+            id: "CBOR1013",
+            title: "Two members map to one CBOR name",
+            messageFormat: "'{0}' maps both '{1}' and '{2}' to the CBOR name '{3}'; a document can only carry one of them, so rename one member or give one a different [CborProperty] name",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// The same failure in the formats keyed by index rather than by name, which is what
+        /// <c>IntKeyMap</c> and <c>Array</c> are. Separate from <see cref="DuplicateMemberName"/>
+        /// because the fix is a different attribute, and the two cannot both apply to one type -- the
+        /// object format decides which of the two keys is the wire key.
+        /// </summary>
+        public static readonly DiagnosticDescriptor DuplicateMemberIndex = new(
+            id: "CBOR1014",
+            title: "Two members map to one CBOR index",
+            messageFormat: "'{0}' maps both '{1}' and '{2}' to CBOR index {3}; a document can only carry one of them, so give one a different [CborProperty] index",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         public static readonly DiagnosticDescriptor IncompletePolymorphicSchema = new(
             id: "CBOR1012",
             title: "Polymorphic schema is incomplete",
