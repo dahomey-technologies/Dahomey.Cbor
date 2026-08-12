@@ -4,7 +4,8 @@ using Dahomey.Cbor.Util;
 namespace Dahomey.Cbor.Serialization.Converters
 {
     /// <summary>
-    /// Messages for the ways adding a map entry can fail, so every read path words them the same.
+    /// Messages for the ways adding a map entry can fail, so every read path words them the same, and
+    /// the naming of a key those messages share with <see cref="CborException.Path"/>.
     /// </summary>
     /// <remarks>
     /// The backing dictionary reports all of these as <see cref="System.ArgumentException"/>, and

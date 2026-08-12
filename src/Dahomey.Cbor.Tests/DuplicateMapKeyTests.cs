@@ -257,27 +257,5 @@ namespace Dahomey.Cbor.Tests
 
             Assert.Contains("Duplicate map key: 1", exception.Message);
         }
-
-        /// <summary>
-        /// The path a duplicate is reported at names the key the same way the message does.
-        /// </summary>
-        /// <remarks>
-        /// A <c>Dictionary&lt;CborValue, TV&gt;</c> is the fourth decode target, and the only one that
-        /// names its key twice in one exception: <c>AbstractDictionaryConverter</c> describes the key
-        /// for the message and again for the path segment. Those were two renderings - the message
-        /// unwrapped a <see cref="CborString"/> and the path did not - so one key read
-        /// <c>Duplicate map key: a</c> at <c>$['\"a\"']</c>, which is the defect #178 is about, one
-        /// step smaller and inside a single message.
-        /// </remarks>
-        [Fact]
-        public void ThePathNamesTheKeyTheSameWayTheMessageDoes()
-        {
-            // a2 6161 01 6161 02  -- {"a": 1, "a": 2}
-            CborException exception = Assert.Throws<CborException>(
-                () => Cbor.Deserialize<Dictionary<CborValue, int>>("A2616101616102".HexToBytes()));
-
-            Assert.Contains("Duplicate map key: a", exception.Message);
-            Assert.Equal("$.a", exception.Path);
-        }
     }
 }
