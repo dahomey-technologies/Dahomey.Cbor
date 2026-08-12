@@ -624,6 +624,12 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         private void ReadItem(ref CborReader reader, ref ReaderContext context)
         {
+            // Only the Array arm below consumes what it read to resolve the type; the map arms hand
+            // the reader back to where they found it. So this says "the current item was the
+            // discriminator and is spent", which is what decides whether this call still has a member
+            // to read - see the exit at the end of the block.
+            bool discriminatorConsumed = false;
+
             if (context.obj == null || context.converter == null)
             {
                 if (context.converter == null)
@@ -707,6 +713,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                                         ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
                                         context.creatorValuesByIndex = creatorMapping != null ? new() : null;
                                         context.regularValuesByIndex = creatorMapping != null ? new() : null;
+                                        discriminatorConsumed = true;
                                     }
                                     else
                                     {
@@ -759,9 +766,14 @@ namespace Dahomey.Cbor.Serialization.Converters
                     }
                 }
 
-                if (_objectMapping.ObjectFormat == CborObjectFormat.Array && context.converter != this)
+                if (discriminatorConsumed)
                 {
-                    // discrimnator read with no ReturnToBoomark, must exit here
+                    // The discriminator was this item, and reading it left the reader on the next one
+                    // with no bookmark to return to, so there is no member here to read. Asking
+                    // whether the converter had changed instead answered this correctly only while
+                    // the resolved type differed from the declared one: a document read as the very
+                    // type that wrote it resolves to the converter the read started on, and the read
+                    // went on to take the following item for the discriminator's own slot.
                     return;
                 }
             }

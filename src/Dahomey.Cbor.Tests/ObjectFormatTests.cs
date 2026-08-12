@@ -336,6 +336,49 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal("foo", obj2.Name);
         }
 
+        /// <summary>
+        /// A document carrying a discriminator, read as the very type that wrote it rather than
+        /// through the base.
+        /// </summary>
+        /// <remarks>
+        /// The Array arm consumes the discriminator without returning to the bookmark, so the read
+        /// has to leave on the item that carried it. It recognised that item by the converter having
+        /// changed - a signal that is missing exactly when the declared type is the discriminated
+        /// one, since the registry hands back the converter the read already started on. The read
+        /// then took the next item for the discriminator's own slot and ran off the end.
+        /// </remarks>
+        [Fact]
+        public void ReadArrayWithDiscrimatorAsTheDiscriminatedType()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person5>();
+
+            const string hexBuffer = "83D82767506572736F6E340C63666F6F"; // [39("Person4"), 12, "foo"]
+            Person5 person = Helper.Read<Person5>(hexBuffer, options);
+
+            Assert.NotNull(person);
+            Assert.Equal(12, person.Id);
+            Assert.Equal("foo", person.Name);
+        }
+
+        /// <summary>
+        /// The same case in the map formats, which resolve the discriminator behind a bookmark and
+        /// so were never affected - pinned here so the two cannot drift apart.
+        /// </summary>
+        [Fact]
+        public void ReadMapWithDiscrimatorAsTheDiscriminatedType()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<Person4>();
+
+            const string hexBuffer = "A30067506572736F6E34010C0263666F6F"; // {0: "Person4", 1: 12, 2: "foo"}
+            Person4 person = Helper.Read<Person4>(hexBuffer, options);
+
+            Assert.NotNull(person);
+            Assert.Equal(12, person.Id);
+            Assert.Equal("foo", person.Name);
+        }
+
         [Fact]
         public void WriteArrayWithDiscrimator()
         {
