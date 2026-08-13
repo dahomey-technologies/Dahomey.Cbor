@@ -264,35 +264,66 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// <see cref="CborDecimalFraction.ToDouble"/> renders at most a bounded number of significant
-        /// digits, and that cap has to be invisible. Compared against the whole mantissa rendered
-        /// exactly, over a spread of sizes either side of the cap.
+        /// A <see cref="double"/> converted to a fraction and back is the same <see cref="double"/>, at
+        /// any mantissa width. Padding the mantissa with zeros and lowering the exponent leaves the
+        /// value alone, so the expected answer is known however long the digits run.
         /// </summary>
         /// <remarks>
-        /// <see cref="BigInteger.ToString()"/> is a base conversion and quadratic in the digit count:
-        /// measured on net10.0 Release, rendering 20,000 digits took 5 ms, 40,000 took 23 ms and 80,000
-        /// took 92 ms. Capped, the same three conversions are 0, 6 and 7 ms. The cost is paid on a
-        /// mantissa a caller decoded rather than on anything it chose, which is what makes it worth
-        /// bounding rather than documenting.
+        /// The padding is what makes this a test of long mantissas with a knowable answer, rather than
+        /// one that has to trust another conversion to say what the answer is. It covers both ends of
+        /// the range: <see cref="double.Epsilon"/> and the value below the smallest normal exercise the
+        /// subnormal grid, where the rounding position is set by 2^-1074 rather than by 53 significant
+        /// bits, and <see cref="double.MaxValue"/> exercises the top without tipping into the overflow
+        /// check.
         /// </remarks>
         [Theory]
-        [InlineData(20)]
-        [InlineData(1199)]
-        [InlineData(1200)]
-        [InlineData(1201)]
-        [InlineData(4000)]
-        public void CappingTheRenderedDigitsDoesNotChangeTheDouble(int digits)
+        [InlineData(0.1, 0)]
+        [InlineData(0.1, 2000)]
+        [InlineData(1.5, 0)]
+        [InlineData(1.5, 2000)]
+        [InlineData(-273.15, 500)]
+        [InlineData(double.MaxValue, 0)]
+        [InlineData(double.MaxValue, 400)]
+        [InlineData(double.Epsilon, 0)]
+        [InlineData(double.Epsilon, 500)]
+        [InlineData(2.2250738585072014E-308, 300)]   // the smallest normal
+        [InlineData(1E-320, 300)]                    // subnormal
+        public void ADoubleSurvivesAFractionOfAnyWidth(double value, int padding)
         {
-            // A mantissa of `digits` digits with no trailing zeros, so nothing reduces away, and an
-            // exponent putting the value near one.
-            BigInteger mantissa = BigInteger.Parse("1" + new string('7', digits - 1));
-            int exponent = -(digits - 1);
+            CborDecimalFraction fraction = (CborDecimalFraction)value;
+            CborDecimalFraction padded = new CborDecimalFraction(
+                fraction.Mantissa * BigInteger.Pow(10, padding), fraction.Exponent - padding);
 
-            string wholeThing = mantissa.ToString(CultureInfo.InvariantCulture)
-                + "E" + exponent.ToString(CultureInfo.InvariantCulture);
-            double exact = double.Parse(wholeThing, NumberStyles.Float, CultureInfo.InvariantCulture);
+            Assert.Equal(value, padded.ToDouble());
+        }
 
-            Assert.Equal(exact, new CborDecimalFraction(mantissa, exponent).ToDouble());
+        /// <summary>
+        /// The conversion agrees with the platform's own parser over a spread of ordinary values, which
+        /// is the oracle for everything the cases above do not name individually.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately kept to modest digit counts. <c>double.Parse</c> is only trustworthy as an
+        /// oracle where every framework version agrees with it, and .NET 8 does not: a 1,201-digit
+        /// mantissa at <c>E-1200</c> — a value just above 1.0 — parses there as <em>zero</em>, where
+        /// .NET 9 and .NET 10 are right. That is why this type does its own arithmetic rather than
+        /// rendering and parsing, and why the oracle is used only where it can be trusted.
+        /// </remarks>
+        [Fact]
+        public void OrdinaryValuesAgreeWithThePlatformParser()
+        {
+            Random random = new Random(20260813);
+
+            for (int iteration = 0; iteration < 2000; iteration++)
+            {
+                BigInteger mantissa = new BigInteger(random.NextInt64());
+                int exponent = random.Next(-25, 26);
+
+                string rendered = mantissa.ToString(CultureInfo.InvariantCulture)
+                    + "E" + exponent.ToString(CultureInfo.InvariantCulture);
+                double expected = double.Parse(rendered, NumberStyles.Float, CultureInfo.InvariantCulture);
+
+                Assert.Equal(expected, new CborDecimalFraction(mantissa, exponent).ToDouble());
+            }
         }
 
         /// <summary>

@@ -171,113 +171,205 @@ namespace Dahomey.Cbor
         /// <see cref="ToDecimal"/>.
         /// </summary>
         /// <remarks>
-        /// Rounding is delegated rather than hand-rolled. <c>Mantissa E Exponent</c> is an exact
-        /// rendering of this value in the notation <see cref="double.Parse(string, NumberStyles,
-        /// IFormatProvider)"/> reads, so the conversion carries exactly one rounding step -- the
-        /// platform's own decimal-to-binary one -- where composing powers of ten in floating point
-        /// would round twice and hand-rolling the round-to-nearest would be a numeric kernel to get
-        /// wrong. On .NET Core 3.0 and later that step is correctly rounded; on the .NET Framework a
-        /// <c>netstandard2.0</c> consumer reaches an older parser that may differ in the last place.
+        /// Done in integer arithmetic rather than by rendering the value and letting
+        /// <c>double.Parse</c> round it, which is what this did first and is not sound across the
+        /// framework versions this library targets: on .NET 8 a 1,201-digit mantissa at
+        /// <c>E-1200</c> -- a value just above 1.0 -- parses as **zero**, where .NET 9 and .NET 10
+        /// return the right answer. Delegating the rounding also delegated that, so the conversion now
+        /// owns it: one exact division and one rounding step, identical on every target.
         /// <para>
-        /// The rendering is capped, because <see cref="BigInteger.ToString()"/> is a base conversion and
-        /// so quadratic in the digit count: an 80,000-digit mantissa took 93 ms to render against 5 ms
-        /// for 20,000, and the cost is paid on data a caller decoded rather than on anything it chose.
-        /// The cap cannot change the answer -- see <see cref="SignificantDigitsForDouble"/>.
+        /// The value is <c>num / den</c> with both sides exact, aligned so the quotient carries one bit
+        /// more than a significand needs, and rounded to nearest with ties to even -- the remainder and
+        /// any bit shifted out together saying whether anything followed. The powers of ten are bounded
+        /// by the mantissa in hand before either is built, so an exponent a document merely claims
+        /// cannot ask for one the value does not need.
         /// </para>
         /// </remarks>
         public double ToDouble()
         {
-            (BigInteger mantissa, int exponent) = WithDigitsCappedForDouble();
-
-            string exact = mantissa.ToString(CultureInfo.InvariantCulture)
-                + "E"
-                + exponent.ToString(CultureInfo.InvariantCulture);
-
-            // Older parsers throw where newer ones saturate, so both outcomes have to become the same
-            // OverflowException.
-            double result;
-
-            try
+            if (Mantissa.IsZero)
             {
-                result = double.Parse(exact, NumberStyles.Float, CultureInfo.InvariantCulture);
+                return 0.0;
             }
-            catch (OverflowException)
+
+            bool negative = Mantissa.Sign < 0;
+            BigInteger magnitude = BigInteger.Abs(Mantissa);
+
+            // Decimal magnitude of the value, which settles the two extremes without any arithmetic:
+            // 10^309 is past double.MaxValue and 10^-324 is below the smallest subnormal, so a value
+            // clear of both ends needs no exact treatment to answer.
+            long decimalMagnitude = (long)BigInteger.Log10(magnitude) + 1 + Exponent;
+
+            if (decimalMagnitude > 310)
             {
                 throw new OverflowException(
                     $"A decimal fraction with exponent {Exponent} is outside the range of Double.");
             }
+
+            if (decimalMagnitude < -340)
+            {
+                return negative ? -0.0 : 0.0;
+            }
+
+            BigInteger numerator = magnitude;
+            BigInteger denominator = BigInteger.One;
+
+            if (Exponent >= 0)
+            {
+                numerator *= BigInteger.Pow(10, Exponent);
+            }
+            else
+            {
+                denominator = BigInteger.Pow(10, -Exponent);
+            }
+
+            return RoundToDouble(numerator, denominator, negative, Exponent);
+        }
+
+        /// <summary>
+        /// The nearest <see cref="double"/> to <paramref name="numerator"/> /
+        /// <paramref name="denominator"/>, both positive, rounding ties to even.
+        /// </summary>
+        /// <remarks>
+        /// The quotient is taken with 54 significant bits -- 53 for the significand and one to round on
+        /// -- and the division's remainder says whether anything followed it, which is what separates a
+        /// value exactly on a midpoint from one just above it. Near zero the grid is coarser than 53
+        /// bits, because a subnormal's lowest bit is 2^-1074 whatever its magnitude; the alignment is
+        /// widened to that grid before rounding rather than after, so the result is rounded once instead
+        /// of twice.
+        /// </remarks>
+        private static double RoundToDouble(
+            BigInteger numerator, BigInteger denominator, bool negative, int exponentForMessage)
+        {
+            const int SignificandBits = 53;
+            const int MinimumSubnormalExponent = -1074;
+
+            // Where the quotient's leading bit falls, to within one place: enough to align on, and the
+            // normalisation below settles the ambiguity.
+            long alignment = BitLength(numerator) - BitLength(denominator) - (SignificandBits + 1);
+
+            // A subnormal result cannot carry 54 bits below 2^-1074, so the grid rather than the
+            // precision decides where to round. One place below the grid, not on it: the rounding step
+            // spends a bit, and clamping to the grid itself would spend the value's last one --
+            // double.Epsilon would come back as zero.
+            if (alignment < MinimumSubnormalExponent - 1)
+            {
+                alignment = MinimumSubnormalExponent - 1;
+            }
+
+            BigInteger shiftedNumerator = numerator;
+            BigInteger shiftedDenominator = denominator;
+
+            if (alignment > 0)
+            {
+                shiftedDenominator <<= (int)alignment;
+            }
+            else
+            {
+                shiftedNumerator <<= (int)-alignment;
+            }
+
+            BigInteger quotient = BigInteger.DivRem(
+                shiftedNumerator, shiftedDenominator, out BigInteger remainder);
+            bool anythingFollowed = !remainder.IsZero;
+
+            // The estimate can leave one bit too many, and for a subnormal it leaves however many the
+            // grid demands. Bits shifted out here join the remainder in saying something followed.
+            long excessBits = BitLength(quotient) - (SignificandBits + 1);
+
+            if (excessBits > 0)
+            {
+                BigInteger dropped = quotient & ((BigInteger.One << (int)excessBits) - 1);
+
+                anythingFollowed |= !dropped.IsZero;
+                quotient >>= (int)excessBits;
+                alignment += excessBits;
+            }
+
+            // Round the last bit away: up when what follows is more than half, to even when exactly
+            // half, down otherwise.
+            bool roundBitSet = !(quotient & BigInteger.One).IsZero;
+            quotient >>= 1;
+            alignment++;
+
+            if (roundBitSet && (anythingFollowed || !(quotient & BigInteger.One).IsZero))
+            {
+                quotient += BigInteger.One;
+
+                // Carrying past the significand's width takes a bit back from the exponent.
+                if (BitLength(quotient) > SignificandBits)
+                {
+                    quotient >>= 1;
+                    alignment++;
+                }
+            }
+
+            double result = ScaleByPowerOfTwo((double)quotient, alignment);
 
             if (double.IsInfinity(result))
             {
                 throw new OverflowException(
-                    $"A decimal fraction with exponent {Exponent} is outside the range of Double.");
+                    $"A decimal fraction with exponent {exponentForMessage} is outside the range of Double.");
             }
 
-            return result;
+            return negative ? -result : result;
         }
 
         /// <summary>
-        /// Significant digits kept when rendering for <see cref="ToDouble"/>. Comfortably more than any
-        /// answer can depend on, and enough that the cap is provably invisible.
+        /// <paramref name="value"/> × 2^<paramref name="exponent"/>, exactly where the result is
+        /// normal.
         /// </summary>
         /// <remarks>
-        /// Which <see cref="double"/> a decimal value rounds to is decided by where it falls relative to
-        /// the midpoints between adjacent doubles. Every such midpoint is a dyadic rational -- an odd
-        /// multiple of 2^-1075 at the smallest -- and its exact decimal expansion therefore has at most
-        /// about 770 significant digits. So a midpoint cannot agree with a value in its first 1,200
-        /// significant digits and then differ beyond them: there are no digits left for it to differ in.
-        /// Truncating past 1,200 digits and marking that something was dropped leaves the rounded result
-        /// identical, and the marking is what keeps a value that was <em>above</em> a midpoint above it.
+        /// A power of two is exactly representable, so a single multiplication carries no rounding of
+        /// its own -- but only while both the power and the result stay normal. Below that the power is
+        /// applied in two steps, which is exact for the same reason: the caller has already rounded to
+        /// the subnormal grid, so nothing is left to lose.
         /// </remarks>
-        private const int SignificantDigitsForDouble = 1200;
+        private static double ScaleByPowerOfTwo(double value, long exponent)
+        {
+            const int SmallestNormalExponent = -1022;
+
+            if (exponent < SmallestNormalExponent)
+            {
+                double halfWay = Math.Pow(2.0, SmallestNormalExponent);
+
+                return value * halfWay * Math.Pow(2.0, (double)(exponent - SmallestNormalExponent));
+            }
+
+            return value * Math.Pow(2.0, (double)exponent);
+        }
 
         /// <summary>
-        /// This value with no more than <see cref="SignificantDigitsForDouble"/> significant digits: as
-        /// it stands where it already has fewer, and otherwise truncated with a trailing non-zero digit
-        /// standing for everything dropped.
+        /// Bits in a positive <see cref="BigInteger"/>. <c>netstandard2.0</c> has no
+        /// <c>GetBitLength</c>, so it counts from the bytes.
         /// </summary>
-        /// <remarks>
-        /// The digit count comes from <see cref="BigInteger.Log10"/>, which reads the leading bits rather
-        /// than every digit, so nothing is rendered to find out how long it is. One
-        /// <see cref="BigInteger.DivRem"/> does the truncation. An exact truncation -- every dropped
-        /// digit a zero -- needs no marker and is left exact.
-        /// </remarks>
-        private (BigInteger Mantissa, int Exponent) WithDigitsCappedForDouble()
+        private static long BitLength(BigInteger value)
         {
-            if (Mantissa.IsZero)
+            if (value.IsZero)
             {
-                return (Mantissa, Exponent);
+                return 0;
             }
 
-            BigInteger magnitude = BigInteger.Abs(Mantissa);
-            long digits = (long)BigInteger.Log10(magnitude) + 1;
+#if NET8_0_OR_GREATER
+            return (long)value.GetBitLength();
+#else
+            byte[] bytes = value.ToByteArray();
+            int index = bytes.Length - 1;
 
-            if (digits <= SignificantDigitsForDouble)
+            while (index > 0 && bytes[index] == 0)
             {
-                return (Mantissa, Exponent);
+                index--;
             }
 
-            long drop = digits - SignificantDigitsForDouble;
+            long bits = (long)index * 8;
 
-            // The exponent grows by what the mantissa loses, so the value is unchanged apart from the
-            // digits dropped. It cannot overflow: dropping digits only ever moves the exponent towards
-            // zero from below, and a positive exponent this large is refused by the range check either
-            // way once the parse sees it.
-            BigInteger kept = BigInteger.DivRem(
-                Mantissa, BigInteger.Pow(10, (int)drop), out BigInteger dropped);
-            long exponent = Exponent + drop;
-
-            if (dropped.IsZero)
+            for (byte top = bytes[index]; top != 0; top >>= 1)
             {
-                return (kept, (int)Math.Min(exponent, int.MaxValue));
+                bits++;
             }
 
-            // A non-zero remainder means the true value is strictly beyond the truncation, so one
-            // non-zero digit is appended to say so rather than leaving it looking exact -- otherwise a
-            // value just above a midpoint would round as though it were on it.
-            BigInteger marked = kept * 10 + (kept.Sign < 0 ? -1 : 1);
-
-            return (marked, (int)Math.Min(exponent - 1, int.MaxValue));
+            return bits;
+#endif
         }
 
         /// <summary>
