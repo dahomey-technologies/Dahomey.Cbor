@@ -33,6 +33,42 @@ namespace Dahomey.Cbor.Tests
     }
 
     /// <summary>
+    /// One type carrying both encodings of tag 4: a <see cref="decimal"/>, whose form is chosen by
+    /// <c>CborOptions.DecimalFormat</c>, and the two §3.4.4 structs, whose form is fixed by their type.
+    /// </summary>
+    public class GeneratedMixedHolder
+    {
+        [CborProperty("d")]
+        public decimal Plain { get; set; }
+
+        [CborProperty("f")]
+        public CborDecimalFraction Fraction { get; set; }
+
+        [CborProperty("b")]
+        public CborBigFloat Big { get; set; }
+    }
+
+    /// <summary>
+    /// The generated half of the cohabitation, which needs its own context because the generator
+    /// collects types through <c>TypeCollector</c> and takes the setting from this attribute rather
+    /// than from a <see cref="CborOptions"/> instance -- two mechanisms that meet only here.
+    /// </summary>
+    [CborSerializable(typeof(GeneratedMixedHolder))]
+    [CborSourceGenerationOptions(DecimalFormat = DecimalFormat.DecimalFraction)]
+    public partial class MixedFractionContext : CborSerializerContext
+    {
+    }
+
+    /// <summary>
+    /// The same type again with the setting left alone, so the contrast is between two generated
+    /// contexts rather than between a generated one and a reflected one.
+    /// </summary>
+    [CborSerializable(typeof(GeneratedMixedHolder))]
+    public partial class MixedDefaultContext : CborSerializerContext
+    {
+    }
+
+    /// <summary>
     /// The two RFC 8949 §3.4.4 types, <see cref="CborDecimalFraction"/> (tag 4) and
     /// <see cref="CborBigFloat"/> (tag 5). The hex buffers for <c>273.15</c> and <c>1.5</c> are the ones
     /// §3.4.4 spells out.
@@ -539,6 +575,154 @@ namespace Dahomey.Cbor.Tests
             // And each reads the other's bytes, as far as its own type reaches.
             Assert.Equal(273.15m, Helper.Read<decimal>("C48221196AB3", options));
             Assert.Equal(new CborDecimalFraction(27315, -2), Helper.Read<CborDecimalFraction>("C48221196AB3"));
+        }
+
+        /// <summary>
+        /// Both encodings of tag 4 in one document: a <see cref="decimal"/> member beside a
+        /// <see cref="CborDecimalFraction"/> and a <see cref="CborBigFloat"/> one, written and read back
+        /// together.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="ADecimalMemberAndAFractionMemberWriteTheSameBytes"/> writes the two separately,
+        /// which settles the bytes but not the cohabitation: it never has both converters registered
+        /// against one object mapping at once. The value of doing it in a single type is that the
+        /// members are resolved together, so a provider that answered for the wrong one would show up
+        /// here and nowhere else.
+        /// </remarks>
+        [Fact]
+        public void ADecimalAndTheFractionTypesCoexistInOneObject()
+        {
+            CborOptions options = new CborOptions { DecimalFormat = DecimalFormat.DecimalFraction };
+
+            GeneratedMixedHolder holder = new GeneratedMixedHolder
+            {
+                Plain = 273.15m,
+                Fraction = new CborDecimalFraction(27315, -2),
+                Big = new CborBigFloat(3, -1),
+            };
+
+            // The decimal and the fraction are the same six bytes, twice over, under different names.
+            Assert.Equal(
+                "A36164C48221196AB36166C48221196AB36162C5822003",
+                Helper.Write(holder, options),
+                ignoreCase: true);
+
+            GeneratedMixedHolder read = Helper.Read<GeneratedMixedHolder>(Helper.Write(holder, options), options);
+
+            Assert.Equal(holder.Plain, read.Plain);
+            Assert.Equal(holder.Fraction, read.Fraction);
+            Assert.Equal(holder.Big, read.Big);
+        }
+
+        /// <summary>
+        /// <c>CborOptions.DecimalFormat</c> governs the <see cref="decimal"/> member and nothing else.
+        /// Under the default the decimal goes back to the <c>FC</c> form while the two struct members
+        /// stay on tags 4 and 5, in the same document.
+        /// </summary>
+        /// <remarks>
+        /// This is the assertion behind "neither shadows the other". The two mechanisms select on
+        /// different things -- an option for the one, the declared type for the others -- and the way
+        /// that would break is the option leaking across, which only shows when one document contains
+        /// both and the option is set the way that makes them differ.
+        /// </remarks>
+        [Fact]
+        public void TheDecimalFormatDoesNotReachTheFractionTypes()
+        {
+            GeneratedMixedHolder holder = new GeneratedMixedHolder
+            {
+                Plain = 273.15m,
+                Fraction = new CborDecimalFraction(27315, -2),
+                Big = new CborBigFloat(3, -1),
+            };
+
+            Assert.Equal(
+                "A36164FC0000000000006AB300000000000200006166C48221196AB36162C5822003",
+                Helper.Write(holder),
+                ignoreCase: true);
+
+            GeneratedMixedHolder read = Helper.Read<GeneratedMixedHolder>(Helper.Write(holder));
+
+            Assert.Equal(holder.Plain, read.Plain);
+            Assert.Equal(holder.Fraction, read.Fraction);
+            Assert.Equal(holder.Big, read.Big);
+        }
+
+        /// <summary>
+        /// The three members round-trip together under <c>CborOptions.Deterministic</c>, where the map
+        /// keys are reordered and the bytes are the ones the ordering was computed over.
+        /// </summary>
+        [Fact]
+        public void TheFractionTypesCoexistUnderDeterministic()
+        {
+            CborOptions options = new CborOptions
+            {
+                DecimalFormat = DecimalFormat.DecimalFraction,
+                Deterministic = true,
+            };
+
+            GeneratedMixedHolder holder = new GeneratedMixedHolder
+            {
+                Plain = 273.15m,
+                Fraction = new CborDecimalFraction(27315, -2),
+                Big = new CborBigFloat(3, -1),
+            };
+
+            // Keys in length-then-bytewise order: "b", "d", "f".
+            Assert.Equal(
+                "A36162C58220036164C48221196AB36166C48221196AB3",
+                Helper.Write(holder, options),
+                ignoreCase: true);
+
+            GeneratedMixedHolder read = Helper.Read<GeneratedMixedHolder>(Helper.Write(holder, options), options);
+
+            Assert.Equal(holder.Plain, read.Plain);
+            Assert.Equal(holder.Fraction, read.Fraction);
+            Assert.Equal(holder.Big, read.Big);
+        }
+
+        /// <summary>
+        /// The cohabitation holds on the generated path too, with both settings.
+        /// </summary>
+        /// <remarks>
+        /// The half a run-time test cannot reach, and the two mechanisms are independent there in a way
+        /// they are not at run time: <c>TypeCollector</c> decides that the two structs are primitives,
+        /// while <c>DecimalFormat</c> travels from the attribute into the emitted registrations. A
+        /// generated context could get either right and the other wrong -- collecting the structs as
+        /// objects, or dropping the setting -- and the reflection bytes are what catches both, since
+        /// they are the same document by construction.
+        /// </remarks>
+        [Fact]
+        public void TheGeneratedPathAgreesOnBothEncodingsOfTagFour()
+        {
+            GeneratedMixedHolder holder = new GeneratedMixedHolder
+            {
+                Plain = 273.15m,
+                Fraction = new CborDecimalFraction(27315, -2),
+                Big = new CborBigFloat(3, -1),
+            };
+
+            MixedFractionContext fractionContext = new MixedFractionContext();
+            CborOptions fractionOptions = new CborOptions { DecimalFormat = DecimalFormat.DecimalFraction };
+
+            Assert.Equal(
+                Helper.Write(holder, fractionOptions),
+                Helper.Write(holder, fractionContext.Options),
+                ignoreCase: true);
+
+            MixedDefaultContext defaultContext = new MixedDefaultContext();
+
+            Assert.Equal(
+                Helper.Write(holder),
+                Helper.Write(holder, defaultContext.Options),
+                ignoreCase: true);
+
+            // And back, through the generated readers rather than the reflection ones.
+            GeneratedMixedHolder read = Helper.Read<GeneratedMixedHolder>(
+                Helper.Write(holder, fractionContext.Options), fractionContext.Options);
+
+            Assert.Equal(holder.Plain, read.Plain);
+            Assert.Equal(holder.Fraction, read.Fraction);
+            Assert.Equal(holder.Big, read.Big);
         }
 
         /// <summary>

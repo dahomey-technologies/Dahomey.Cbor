@@ -180,6 +180,20 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // Both encodings of tag 4 in one type. The corpus runs it under two contexts differing only
+            // in DecimalFormat, so the decimal member moves between the FC form and tag 4 while the two
+            // struct members stay put -- which is the cohabitation, checked against the reflection path
+            // rather than against a literal.
+            if (type == typeof(GeneratedMixedHolder))
+            {
+                return new GeneratedMixedHolder
+                {
+                    Plain = 273.15m,
+                    Fraction = new CborDecimalFraction(BigInteger.Parse("18446744073709551616"), -3),
+                    Big = new CborBigFloat(3, -1),
+                };
+            }
+
             if (type == typeof(float[]))
             {
                 return new[] { 1.5f, -2.25f };
