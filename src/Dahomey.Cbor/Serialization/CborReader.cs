@@ -671,6 +671,7 @@ namespace Dahomey.Cbor.Serialization
             while (IsSemanticTag())
             {
                 TryReadSemanticTag(out ulong tag);
+                RejectStringRef(tag);
 
                 if (tag == DECIMAL_FRACTION_TAG)
                 {
@@ -967,6 +968,7 @@ namespace Dahomey.Cbor.Serialization
             while (IsSemanticTag())
             {
                 TryReadSemanticTag(out ulong tag);
+                RejectStringRef(tag);
 
                 if (tag == UNSIGNED_BIGNUM_TAG || tag == NEGATIVE_BIGNUM_TAG)
                 {
@@ -1053,6 +1055,7 @@ namespace Dahomey.Cbor.Serialization
             while (IsSemanticTag())
             {
                 TryReadSemanticTag(out ulong tag);
+                RejectStringRef(tag);
 
                 if (tag == DECIMAL_FRACTION_TAG || tag == BIGFLOAT_TAG)
                 {
@@ -1645,6 +1648,13 @@ namespace Dahomey.Cbor.Serialization
         /// <c>string_referencing=True</c> writes for a document that repeats nothing - is ordinary
         /// CBOR; and <see cref="SkipDataItem"/> steps over a reference without complaint, since an
         /// unmapped member is discarded whether or not its strings could have been resolved.
+        /// </para>
+        /// <para>
+        /// The readers that walk the tag stack themselves - <see cref="ReadDecimal"/>,
+        /// <see cref="ReadBigInteger"/> and <see cref="ReadFractionParts"/>, which take their tags
+        /// through <see cref="TryReadSemanticTag"/> rather than through the skip - call this on every
+        /// tag they take, or a reference over one of those members would keep taking the table index
+        /// for its value.
         /// </para>
         /// </remarks>
         private void RejectStringRef(ulong semanticTag)

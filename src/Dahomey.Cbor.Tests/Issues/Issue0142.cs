@@ -1,4 +1,5 @@
 using Dahomey.Cbor.Attributes;
+using System.Numerics;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
@@ -22,6 +23,18 @@ namespace Dahomey.Cbor.Tests.Issues
         {
             [CborProperty("temperature")]
             public int Temperature { get; set; }
+        }
+
+        public class DecimalHolder
+        {
+            [CborProperty("value")]
+            public decimal Value { get; set; }
+        }
+
+        public class BigIntegerHolder
+        {
+            [CborProperty("value")]
+            public BigInteger Value { get; set; }
         }
 
         /// <summary>
@@ -67,6 +80,41 @@ namespace Dahomey.Cbor.Tests.Issues
             // a1 6b "temperature" d8 19 00 -- {"temperature": stringref(0)}
             CborException ex = Assert.Throws<CborException>(
                 () => Helper.Read<Measurement>("A16B74656D7065726174757265D81900"));
+
+            Assert.Contains("semantic tag 25", ex.Message);
+        }
+
+        /// <summary>a1 65 "value" d8 19 00 — <c>{"value": stringref(0)}</c>.</summary>
+        private const string ReferenceOverAValue = "A16576616C7565D81900";
+
+        /// <summary>
+        /// The readers that walk the tag stack themselves — <c>decimal</c>, <c>BigInteger</c> and the
+        /// §3.4.4 pair — take their tags through <c>TryReadSemanticTag</c>, which does not refuse, so
+        /// each has to refuse the reference itself. Silent otherwise, like the numeric case above:
+        /// these are the members that were left taking the table index for their value.
+        /// </summary>
+        [Fact]
+        public void AStringReferenceOverADecimalIsRefusedByName()
+        {
+            CborException ex = Assert.Throws<CborException>(() => Helper.Read<DecimalHolder>(ReferenceOverAValue));
+
+            Assert.Contains("semantic tag 25", ex.Message);
+        }
+
+        [Fact]
+        public void AStringReferenceOverABigIntegerIsRefusedByName()
+        {
+            CborException ex = Assert.Throws<CborException>(() => Helper.Read<BigIntegerHolder>(ReferenceOverAValue));
+
+            Assert.Contains("semantic tag 25", ex.Message);
+        }
+
+        /// <summary>The same, for the type that reads a §3.4.4 tag stack of its own.</summary>
+        [Fact]
+        public void AStringReferenceInPlaceOfADecimalFractionIsRefusedByName()
+        {
+            // d8 19 00 -- stringref(0) where tag 4 belongs
+            CborException ex = Assert.Throws<CborException>(() => Helper.Read<CborDecimalFraction>("D81900"));
 
             Assert.Contains("semantic tag 25", ex.Message);
         }

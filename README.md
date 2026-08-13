@@ -257,9 +257,15 @@ it did not surface at all: the tag was skipped like any other and the member too
 value. Tag 256 is skipped, since a namespace with no reference under it is ordinary CBOR, and so is a
 reference inside a member the type does not map, since nothing needs resolving to discard it.
 
-The refusal is in the reader, so it covers deserialization into your own types. The object model is
-unchanged: `CborValue` carries a tag it does not model as data — as it does for typed arrays — so a
-document read into one keeps tag 25 in `CborValue.SemanticTag` over the index, rather than throwing.
+The refusal is in the reader, so it covers deserialization into your own types, including the members
+whose readers walk the tag stack themselves — `decimal`, `BigInteger`, `CborDecimalFraction`,
+`CborBigFloat`.
+
+The object model is unchanged, and reads a reference where it can. `CborValue` carries a tag it does not
+model as data — as it does for typed arrays — so a document read into one keeps tag 25 in
+`CborValue.SemanticTag` over the index rather than throwing. `CborValue.SemanticTag` holds one tag, so
+that applies to an outermost reference only: a tag 25 nested under another tag is read as the value
+underneath, which refuses it.
 
 If the aim is compactness rather than interoperability with a producer you do not control,
 `CborObjectFormat.IntKeyMap` writes each key as a small integer and `CborObjectFormat.Array` drops the
