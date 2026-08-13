@@ -97,8 +97,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         }
 
         /// <summary>
-        /// Creates a member map and adds it to the object mapping.
+        /// Returns the member map for a member, creating and adding one if the mapping does not
+        /// already cover that member.
         /// </summary>
+        /// <remarks>
+        /// A member the mapping already covers — which <see cref="AutoMap"/> is the usual way of
+        /// arranging — is adjusted rather than mapped a second time, so
+        /// <c>AutoMap().MapMember(o =&gt; o.A).SetRequired(...)</c> means what it reads as.
+        /// </remarks>
         /// <typeparam name="TM">The member type.</typeparam>
         /// <param name="memberLambda">A lambda expression specifying the member.</param>
         /// <returns>The member map.</returns>
@@ -108,11 +114,41 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             return MapMember(memberInfo, memberType);
         }
 
+        /// <summary>
+        /// Returns the member map for a member, creating and adding one if the mapping does not
+        /// already cover that member.
+        /// </summary>
+        /// <param name="memberInfo">The field or property to map.</param>
+        /// <param name="memberType">The type of that field or property.</param>
+        /// <returns>The member map.</returns>
         public MemberMapping<T> MapMember(MemberInfo memberInfo, Type memberType)
         {
-            MemberMapping<T> memberMapping = new MemberMapping<T>(_registry.ConverterRegistry, this, memberInfo, memberType);
-            _memberMappings.Add(memberMapping);
-            return memberMapping;
+            // Adjusting one member is what this call is for: "take the conventions, then set
+            // SetRequired/SetConverter/… on this one" is how AutoMap followed by MapMember reads, and
+            // the only alternative is ClearMemberMappings() plus mapping every member by hand, which
+            // drifts the moment a member is added to the type. Appending a second mapping for the
+            // same member instead wrote it under two keys when the second call renamed it — a
+            // well-formed document carrying a member it should not — and collided under #177's
+            // duplicate-name check when it did not. Returning the mapping already covering the member
+            // matches MongoDB.Bson's BsonClassMap.MapMember, whose shape this API takes.
+            //
+            // Only a MemberMapping<T> can be returned, so only those are looked at. Every mapping
+            // this library builds from a member is one; an implementation of IMemberMapping from
+            // outside it that names a member of its own is left to the duplicate-name check, which
+            // reports the collision rather than this silently returning something that is not the
+            // mapping the caller was handed.
+            foreach (IMemberMapping memberMapping in _memberMappings)
+            {
+                if (memberMapping is MemberMapping<T> existingMapping
+                    && IsSameMember(existingMapping.MemberInfo, memberInfo))
+                {
+                    return existingMapping;
+                }
+            }
+
+            MemberMapping<T> newMapping = new MemberMapping<T>(_registry.ConverterRegistry, this, memberInfo, memberType);
+            _memberMappings.Add(newMapping);
+            return newMapping;
         }
 
         public MemberMapping<T> MapMember(FieldInfo fieldInfo)
@@ -407,6 +443,31 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     }
                     break;
             }
+        }
+
+        /// <summary>
+        /// Whether two <see cref="MemberInfo"/> denote the same declared field or property.
+        /// </summary>
+        /// <remarks>
+        /// Reference equality is not enough for a member declared on a base type: the conventions
+        /// reflect over <typeparamref name="T"/>, so an inherited member arrives with
+        /// <c>ReflectedType</c> set to <typeparamref name="T"/>, while <c>o =&gt; o.A</c> compiles to
+        /// the accessor on the declaring type and so arrives with <c>ReflectedType</c> set to that
+        /// base. The two are unequal, and the same declaration. Comparing the metadata definition —
+        /// what <c>MemberInfo.HasSameMetadataDefinitionAs</c> does, which netstandard2.0 does not
+        /// have — sees through the difference.
+        /// </remarks>
+        private static bool IsSameMember(MemberInfo? left, MemberInfo? right)
+        {
+            if (left is null || right is null)
+            {
+                // A null one is a mapping defined by delegates rather than by reflection - the
+                // discriminator, or what a source generator emits - which no member identifies.
+                return false;
+            }
+
+            return left == right
+                || (left.MetadataToken == right.MetadataToken && left.Module.Equals(right.Module));
         }
 
         private static (MemberInfo, Type) GetMemberInfoFromLambda<TM>(Expression<Func<T, TM>> memberLambda)

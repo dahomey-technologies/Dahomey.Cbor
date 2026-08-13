@@ -21,7 +21,8 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// </summary>
         /// <remarks>
         /// Worth saying because the two have different fixes: one is two members declared under one
-        /// name, the other is a <c>MapMember</c> call over a member the conventions already covered.
+        /// name, the other is a mapping API call - a <c>SetMemberName</c> or <c>SetMemberIndex</c>
+        /// onto a key already taken - made after the mapping had been used.
         /// </remarks>
         public const string AddedAfterValidation =
             ". The collision was added to the mapping after it was validated.";

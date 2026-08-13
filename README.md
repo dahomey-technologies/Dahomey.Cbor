@@ -755,8 +755,9 @@ the source looking wrong:
 
 * a **naming convention** that folds two member names into one — ``Id`` and ``ID`` under
   ``LowerCaseNamingConvention``;
-* a **mapping API call** over a member the conventions already covered — ``MapMember`` after
-  ``AutoMap`` without a ``ClearMemberMappings`` between them, or without a new name;
+* a **mapping API call** that renames a member onto a name another member already holds —
+  ``SetMemberName("X")`` where ``X`` is already mapped, whether by an attribute, by the conventions or
+  by an earlier call;
 * a member that **hides a base member** of the same name with ``new`` rather than ``override``, which
   reports both declarations and so maps both, under the one name. Where the hiding member is a
   **field** this always happens, whatever the two types are: field lookup folds nothing, so ``int``
@@ -782,3 +783,39 @@ not own, ``[CborIgnore]`` on the member you do own removes it from the mapping, 
 > rather than silently replacing the entry, as ``Dictionary<TKey, TValue>.Add`` does. The type has
 > neither an indexer nor a removal, so code of your own that relied on ``Add`` overwriting has to keep
 > the keys it has added and build a fresh dictionary instead.
+
+#### Adjusting a single member
+
+Taking the whole mapping over is not needed to change one member: ``MapMember`` over a member the
+mapping already covers returns that member's mapping rather than adding a second one, so ``AutoMap``
+then ``MapMember`` reads as it looks — take the conventions, then change this one member.
+
+```csharp
+options.Registry.ObjectMappingRegistry.Register<Foo>(om =>
+{
+    om.AutoMap();
+    om.MapMember(o => o.A).SetMemberName("a").SetRequired(RequirementPolicy.Always);
+});
+```
+
+The member is identified by its ``MemberInfo`` — the declaration, so a member inherited from a base
+type is recognized as the one the conventions already mapped — and the lambda and reflection overloads
+reach the same mapping. This is what ``MongoDB.Bson``'s ``BsonClassMap.MapMember``, which this API
+takes its shape from, does with the same input.
+
+``AutoMap`` reaches its own members the same way, so the order does not matter: called after a member
+was mapped by hand, it configures that mapping from the attributes rather than adding a second one,
+and the two settings live together — the caller's name, the attribute's requirement policy. Two
+``AutoMap`` calls likewise leave one mapping per member. Where the two do say something about the same
+setting, the attribute wins, since that is the call being made.
+
+> **Behaviour change.** ``MapMember`` used to append unconditionally, so the call above mapped ``A``
+> twice: under ``A`` from the conventions and under ``a`` from the call, writing the member under both
+> keys — a document that reads back without complaint, carrying a member it should not. Without the
+> rename the two mappings shared a name, and the type is refused by the duplicate-name check above.
+> Code that relied on the append to write one member under two keys has to declare a second member to
+> carry the second key.
+>
+> ``AutoMap`` now goes through ``MapMember`` for each member it maps, which is what makes the other
+> order behave too. A convention of your own that builds ``MemberMapping<T>`` itself and passes them to
+> ``AddMemberMappings`` still appends, unchanged: that call adds what it is given.

@@ -17,7 +17,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         public void Apply<T>(SerializationRegistry registry, ObjectMapping<T> objectMapping)
         {
             Type type = objectMapping.ObjectType;
-            List<MemberMapping<T>> memberMappings = new List<MemberMapping<T>>();
 
             CborDiscriminatorAttribute? discriminatorAttribute = type.GetCustomAttribute<CborDiscriminatorAttribute>();
             CborIntDiscriminatorAttribute? intDiscriminatorAttribute = type.GetCustomAttribute<CborIntDiscriminatorAttribute>();
@@ -95,12 +94,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     continue;
                 }
 
-                MemberMapping<T> memberMapping = new MemberMapping<T>(registry.ConverterRegistry, objectMapping, propertyInfo, propertyInfo.PropertyType);
+                // Through MapMember rather than by construction, so that a member already mapped by
+                // hand is the one the conventions configure rather than a second mapping of it. The
+                // two orders then agree: AutoMap either way leaves one mapping per member, carrying
+                // both what the attributes say and what the caller set.
+                MemberMapping<T> memberMapping = objectMapping.MapMember(propertyInfo, propertyInfo.PropertyType);
                 ProcessDefaultValue(propertyInfo, memberMapping);
                 ProcessShouldSerializeMethod(memberMapping);
                 ProcessLengthMode(propertyInfo, memberMapping);
                 ProcessRequired(propertyInfo, memberMapping);
-                memberMappings.Add(memberMapping);
             }
 
             foreach (FieldInfo fieldInfo in fields)
@@ -115,18 +117,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     continue;
                 }
 
-                Type fieldType = fieldInfo.FieldType;
-
-                MemberMapping<T> memberMapping = new MemberMapping<T>(registry.ConverterRegistry, objectMapping, fieldInfo, fieldInfo.FieldType);
+                MemberMapping<T> memberMapping = objectMapping.MapMember(fieldInfo, fieldInfo.FieldType);
                 ProcessDefaultValue(fieldInfo, memberMapping);
                 ProcessShouldSerializeMethod(memberMapping);
                 ProcessLengthMode(fieldInfo, memberMapping);
                 ProcessRequired(fieldInfo, memberMapping);
-
-                memberMappings.Add(memberMapping);
             }
-
-            objectMapping.AddMemberMappings(memberMappings);
 
             if (!type.IsAbstract)
             {
