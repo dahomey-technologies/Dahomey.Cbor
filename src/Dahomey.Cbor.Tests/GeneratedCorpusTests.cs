@@ -194,6 +194,14 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // Tuples at three shapes: within seven, past seven so the converter carries a Rest, and
+            // nested twice. The comparison is what catches a generated context that named a different
+            // converter or the wrong type arguments -- both would still produce valid CBOR.
+            if (type == typeof(GeneratedTupleHolder))
+            {
+                return GeneratedTupleTests.Sample();
+            }
+
             if (type == typeof(float[]))
             {
                 return new[] { 1.5f, -2.25f };
@@ -459,6 +467,7 @@ namespace Dahomey.Cbor.Tests
                 {
                     Initial = 'A',
                     Big = new System.Numerics.BigInteger(ulong.MaxValue) + System.Numerics.BigInteger.One,
+                    Pair = (7, "seven"),
                 };
             }
 

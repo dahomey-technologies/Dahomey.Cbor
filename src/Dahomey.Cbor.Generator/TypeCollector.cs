@@ -1,5 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace Dahomey.Cbor.Generator
@@ -83,9 +84,75 @@ namespace Dahomey.Cbor.Generator
                     model.Dependencies.Add(value!);
                     break;
 
+                case TypeKind.Tuple:
+                    CollectTuple((INamedTypeSymbol)type, model);
+                    break;
+
                 case TypeKind.Object:
                     CollectObject(type, model);
                     break;
+            }
+        }
+
+        /// <summary>
+        /// A tuple's type arguments, each of which needs a converter of its own before this one can be
+        /// constructed.
+        /// </summary>
+        /// <remarks>
+        /// For an arity past seven the eighth argument is the <c>Rest</c>, a tuple in its own right, so
+        /// collecting it recurses and the chain terminates at seven or fewer. That is also why the
+        /// dependency has to be recorded: <c>Tuple8Converter</c> asks the registry for the <c>Rest</c>'s
+        /// converter while it is being constructed, so the <c>Rest</c> must be registered first.
+        /// </remarks>
+        private void CollectTuple(INamedTypeSymbol type, TypeModel model)
+        {
+            foreach (ITypeSymbol argument in type.TypeArguments)
+            {
+                model.TupleArguments.Add(argument);
+
+                Collect(argument);
+                model.Dependencies.Add(argument);
+            }
+        }
+
+        /// <summary>
+        /// Whether this is one of the <c>System.ValueTuple</c> types.
+        /// </summary>
+        /// <remarks>
+        /// By metadata name rather than by <c>IsTupleType</c>, which is false for the one-element
+        /// <c>ValueTuple&lt;T&gt;</c> -- C# has no tuple syntax for a single element -- and that arity is
+        /// exactly what an eight-element tuple's <c>Rest</c> is.
+        /// </remarks>
+        private static bool IsValueTuple(INamedTypeSymbol type)
+        {
+            return type.MetadataName.StartsWith("ValueTuple`", System.StringComparison.Ordinal)
+                && type.ContainingNamespace is { Name: "System" }
+                && type.ContainingNamespace.ContainingNamespace is { IsGlobalNamespace: true };
+        }
+
+        /// <summary>
+        /// A tuple's elements with the <c>Rest</c> chain flattened, which is what the wire form is and
+        /// therefore what a schema has to describe.
+        /// </summary>
+        public static IEnumerable<ITypeSymbol> FlattenTupleElements(INamedTypeSymbol type)
+        {
+            ImmutableArray<ITypeSymbol> arguments = type.TypeArguments;
+
+            for (int index = 0; index < arguments.Length; index++)
+            {
+                if (index == 7
+                    && arguments[index] is INamedTypeSymbol rest
+                    && IsValueTuple(rest))
+                {
+                    foreach (ITypeSymbol nested in FlattenTupleElements(rest))
+                    {
+                        yield return nested;
+                    }
+
+                    continue;
+                }
+
+                yield return arguments[index];
             }
         }
 
@@ -528,6 +595,13 @@ namespace Dahomey.Cbor.Generator
                 {
                     underlying = named.TypeArguments[0];
                     return TypeKind.Nullable;
+                }
+
+                // Before the collection tests: a tuple implements none of those interfaces, but it is
+                // the more specific shape and reads better stated first.
+                if (IsValueTuple(named))
+                {
+                    return TypeKind.Tuple;
                 }
 
                 // Dictionary<K,V> and anything implementing IDictionary<K,V>.
