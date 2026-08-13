@@ -1,5 +1,7 @@
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Tests.Extensions;
+using System;
+using System.Collections.Generic;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests
@@ -153,6 +155,154 @@ namespace Dahomey.Cbor.Tests
 
             Assert.Contains("Expected major type Array", exception.Message);
             Assert.Equal("$.a", exception.Path);
+        }
+
+        /// <summary>
+        /// A tuple of more than seven elements is one flat array of that many items.
+        /// </summary>
+        /// <remarks>
+        /// C# represents such a tuple as seven fields plus a <c>Rest</c> holding the overflow, and that
+        /// nesting is an implementation detail of the language rather than anything the format knows: a
+        /// nine-element tuple is <c>[1, …, 9]</c>, not <c>[1, …, 7, [8, 9]]</c>. Fifteen elements nest
+        /// twice — <c>Rest</c> is itself an eight-field tuple — and are still fifteen items.
+        /// </remarks>
+        [Fact]
+        public void ATupleOfMoreThanSevenElementsIsOneFlatArray()
+        {
+            Helper.TestWrite((1, 2, 3, 4, 5, 6, 7, 8), "880102030405060708");
+            Helper.TestWrite((1, 2, 3, 4, 5, 6, 7, 8, 9), "89010203040506070809");
+            Helper.TestWrite((1, 2, 3, 4, 5, 6, 7, 8, 9, 10), "8A0102030405060708090A");
+            Helper.TestWrite(
+                (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
+                "8F0102030405060708090A0B0C0D0E0F");
+        }
+
+        [Fact]
+        public void ATupleOfMoreThanSevenElementsReadsBack()
+        {
+            Assert.Equal(
+                (1, 2, 3, 4, 5, 6, 7, 8),
+                Helper.Read<(int, int, int, int, int, int, int, int)>("880102030405060708"));
+            Assert.Equal(
+                (1, 2, 3, 4, 5, 6, 7, 8, 9),
+                Helper.Read<(int, int, int, int, int, int, int, int, int)>("89010203040506070809"));
+            Assert.Equal(
+                (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
+                Helper.Read<(int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)>(
+                    "8F0102030405060708090A0B0C0D0E0F"));
+        }
+
+        /// <summary>
+        /// The items keep their order across the <c>Rest</c> boundary, which a tuple of one type cannot
+        /// show: every element here is a different type, so a misordered read fails on major type.
+        /// </summary>
+        [Fact]
+        public void TheItemsPastSevenKeepTheirOrder()
+        {
+            (int, string, bool, double, int, string, bool, int, string) value =
+                (1, "two", true, 4.5, 5, "six", false, 8, "nine");
+
+            string hexBuffer = Helper.Write(value);
+
+            Assert.Equal(
+                value,
+                Helper.Read<(int, string, bool, double, int, string, bool, int, string)>(hexBuffer));
+        }
+
+        /// <summary>
+        /// An arity past seven is refused for the same reasons a shorter one is, and the message names
+        /// the flattened arity rather than the seven-plus-<c>Rest</c> shape behind it.
+        /// </summary>
+        [Fact]
+        public void AWrongArityPastSevenIsRefused()
+        {
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<(int, int, int, int, int, int, int, int, int)>(
+                    "880102030405060708".HexToBytes()));
+
+            Assert.Contains("Expected CBOR Array of size 9", exception.Message);
+
+            // Too many, and the indefinite-length form of both.
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int, int, int, int)>(
+                "89010203040506070809".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int, int, int, int, int)>(
+                "9F0102030405060708FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int, int, int, int)>(
+                "9F010203040506070809FF".HexToBytes()));
+
+            // And a non-array, which the arity past seven reaches through the same entry point.
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int, int, int, int)>(
+                "480102030405060708".HexToBytes()));
+        }
+
+        [Fact]
+        public void AnIndefiniteLengthTuplePastSevenIsReadAndLeavesNothingBehind()
+        {
+            Assert.Equal(
+                (1, 2, 3, 4, 5, 6, 7, 8, 9),
+                Helper.Read<(int, int, int, int, int, int, int, int, int)>("9F010203040506070809FF"));
+
+            // [[_ 1..9], [_ 1..9]] -- the second element only reads if the first consumed its break.
+            List<(int, int, int, int, int, int, int, int, int)> list =
+                Cbor.Deserialize<List<(int, int, int, int, int, int, int, int, int)>>(
+                    ("82" + "9F010203040506070809FF" + "9F010203040506070809FF").HexToBytes());
+
+            Assert.Equal(2, list.Count);
+            Assert.Equal((1, 2, 3, 4, 5, 6, 7, 8, 9), list[1]);
+        }
+
+        /// <summary>
+        /// A failure inside the overflow names the item's flattened position, so <c>$[8]</c> rather than
+        /// a path through a <c>Rest</c> the document knows nothing about.
+        /// </summary>
+        [Fact]
+        public void AnItemPastSevenIsNamedByItsFlattenedIndex()
+        {
+            // [1, 2, 3, 4, 5, 6, 7, 8, "x"] into nine ints
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<(int, int, int, int, int, int, int, int, int)>(
+                    "89010203040506070861 78".Replace(" ", "").HexToBytes()));
+
+            Assert.Equal("$[8]", exception.Path);
+        }
+
+        /// <summary>
+        /// A one-element tuple, which C# has no literal for and which an eight-element tuple's
+        /// <c>Rest</c> is. It is an array of one item like any other tuple.
+        /// </summary>
+        [Fact]
+        public void AOneElementTupleIsAnArrayOfOne()
+        {
+            Helper.TestWrite(new ValueTuple<int>(1), "8101");
+            Assert.Equal(new ValueTuple<int>(1), Helper.Read<ValueTuple<int>>("8101"));
+        }
+
+        public class LongTupleMember
+        {
+            [CborProperty("a")]
+            public (int, int, int, int, int, int, int, int, int) A { get; set; }
+
+            [CborProperty("b")]
+            public int B { get; set; }
+        }
+
+        /// <summary>
+        /// As a member and as a nullable, which reach the converter through
+        /// <c>MemberConverter</c> and <c>NullableConverter</c> rather than directly.
+        /// </summary>
+        [Fact]
+        public void ATuplePastSevenWorksAsAMemberAndAsANullable()
+        {
+            LongTupleMember member = Cbor.Deserialize<LongTupleMember>(
+                ("A2" + "6161" + "89010203040506070809" + "6162" + "07").HexToBytes());
+
+            Assert.Equal((1, 2, 3, 4, 5, 6, 7, 8, 9), member.A);
+            Assert.Equal(7, member.B);
+
+            Assert.Equal(
+                (1, 2, 3, 4, 5, 6, 7, 8, 9),
+                Helper.Read<(int, int, int, int, int, int, int, int, int)?>("89010203040506070809"));
+            Assert.Null(Helper.Read<(int, int, int, int, int, int, int, int, int)?>("F6"));
         }
 
         [Fact]
