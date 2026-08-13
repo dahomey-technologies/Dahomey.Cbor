@@ -1,4 +1,5 @@
 using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.ObjectModel;
 using System.Numerics;
 using Xunit;
 
@@ -145,6 +146,38 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Assert.NotNull(value);
             Assert.Equal(1, value.Temperature);
+        }
+
+        /// <summary>
+        /// The object model reads a reference where it can, and this pins where that stops.
+        /// <c>CborValueConverter</c> takes a tag through <c>TryReadSemanticTag</c>, which does not
+        /// refuse, so an outermost tag 25 lands in <see cref="CborValue.SemanticTag"/> over the index
+        /// — the treatment every tag it does not model gets, typed arrays included.
+        /// </summary>
+        [Fact]
+        public void AnOutermostReferenceReadsIntoTheObjectModelAsATaggedIndex()
+        {
+            // d8 19 00 -- stringref(0)
+            CborValue value = Helper.Read<CborValue>("D81900");
+
+            Assert.Equal(CborValueType.Positive, value.Type);
+            Assert.Equal(25ul, value.SemanticTag);
+            Assert.Equal(0, value.Value<int>());
+        }
+
+        /// <summary>
+        /// One tag, though: <see cref="CborValue.SemanticTag"/> holds a single <c>ulong?</c>, so a
+        /// reference nested under another tag is read as the value underneath that tag, and that read
+        /// refuses it. The object model is spared the refusal only where it has somewhere to put the
+        /// tag.
+        /// </summary>
+        [Fact]
+        public void AReferenceNestedUnderAnotherTagIsRefusedInTheObjectModel()
+        {
+            // d8 20 d8 19 00 -- tag 32 (URI) over stringref(0), a repeated URI as cbor2 writes it
+            CborException ex = Assert.Throws<CborException>(() => Helper.Read<CborValue>("D820D81900"));
+
+            Assert.Contains("semantic tag 25", ex.Message);
         }
 
         /// <summary>
