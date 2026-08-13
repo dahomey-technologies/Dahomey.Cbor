@@ -87,7 +87,6 @@ namespace Dahomey.Cbor.Serialization
 
         // http://cbor.schmorp.de/stringref - not supported, see RejectStringRef.
         private const ulong STRINGREF_TAG = 25;
-        private const ulong STRINGREF_NAMESPACE_TAG = 256;
 
         /// <summary>Widest scale a <see cref="decimal"/> holds.</summary>
         private const int MAX_DECIMAL_SCALE = 28;
@@ -452,7 +451,7 @@ namespace Dahomey.Cbor.Serialization
                 return null;
             }
 
-            ExpectTextString();
+            Expect(CborMajorType.TextString);
             return Encoding.UTF8.GetString(ReadSizeAndBytes(allowScratchBuffer: true));
         }
 
@@ -486,7 +485,7 @@ namespace Dahomey.Cbor.Serialization
                 return null;
             }
 
-            ExpectTextString();
+            Expect(CborMajorType.TextString);
             return ReadSizeAndBytes(allowScratchBuffer: false);
         }
 
@@ -1604,6 +1603,11 @@ namespace Dahomey.Cbor.Serialization
         /// value, and <see cref="ObjectModel.CborValue.SemanticTag"/> holds one tag. A lost tag is the
         /// intended shortfall; a value decoded from the wrong bytes was not.
         /// </para>
+        /// <para>
+        /// One tag is not lost but refused, since losing it is what decodes the wrong bytes: see
+        /// <see cref="RejectStringRef"/>. <see cref="SkipDataItem"/> uses
+        /// <see cref="SkipSemanticTagUnchecked"/> instead, having no bytes to decode wrongly.
+        /// </para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void SkipSemanticTag()
@@ -1617,27 +1621,35 @@ namespace Dahomey.Cbor.Serialization
         }
 
         /// <summary>
-        /// Throws on the two string reference tags, which are not supported.
+        /// Throws on a string reference, which cannot be resolved, when the item it stands for is
+        /// about to be used.
         /// </summary>
         /// <remarks>
         /// Stringref (http://cbor.schmorp.de/stringref, issue #142) replaces a repeated string with
         /// tag 25 over its index into a table of the strings already seen, the table being scoped by a
-        /// tag 256 around the document. Reading it is not a matter of decoding one more tag: the table
-        /// is built from every string in document order, including the ones a decode never
-        /// materialises, so <see cref="SkipDataItem"/> - which <c>ObjectConverter</c> runs over every
-        /// unmapped member - would have to decode what it currently steps over, or every later index
-        /// would refer to the wrong string.
+        /// tag 256 around the document. It is not supported, and supporting it is not a matter of
+        /// decoding one more tag: the table is built from every string in document order, including
+        /// the ones a decode never materialises, so <see cref="SkipDataItem"/> - which
+        /// <c>ObjectConverter</c> runs over every unmapped member - would have to decode what it
+        /// currently steps over, or every later index would refer to the wrong string.
         /// <para>
-        /// So the tag is refused rather than half-honoured, and refused by name. Skipping it silently
-        /// is what produced the report: the tag 256 disappeared, then the first tag 25 surfaced as
-        /// "Expected major type TextString" at whatever member happened to hold a repeated key, which
-        /// says nothing about stringref and points at the wrong part of the document. A caller who
-        /// controls the encoder wants to hear that the encoder is the thing to change.
+        /// What the tag cannot do is pass silently, which is what produced the report: it was skipped
+        /// like any unrecognised tag, leaving its index behind as the value. Over a string that
+        /// surfaced as "Expected major type TextString", which names neither stringref nor the tag;
+        /// over an <c>int</c> member it did not surface at all, and the member took the index as its
+        /// value. Both now say what the tag is and which encoder setting produces it.
+        /// </para>
+        /// <para>
+        /// Only tag 25 is refused, and only where the item is wanted. Tag 256 is skipped like any
+        /// other tag, since a namespace with no reference under it - which is what
+        /// <c>string_referencing=True</c> writes for a document that repeats nothing - is ordinary
+        /// CBOR; and <see cref="SkipDataItem"/> steps over a reference without complaint, since an
+        /// unmapped member is discarded whether or not its strings could have been resolved.
         /// </para>
         /// </remarks>
         private void RejectStringRef(ulong semanticTag)
         {
-            if (semanticTag == STRINGREF_TAG || semanticTag == STRINGREF_NAMESPACE_TAG)
+            if (semanticTag == STRINGREF_TAG)
             {
                 ThrowCbor(
                     $"Unsupported semantic tag {semanticTag}: CBOR string references "
@@ -1647,10 +1659,24 @@ namespace Dahomey.Cbor.Serialization
             }
         }
 
+        /// <summary>
+        /// <see cref="SkipSemanticTag"/> for an item whose content is discarded, which passes over a
+        /// string reference rather than refusing it - see <see cref="RejectStringRef"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void SkipSemanticTagUnchecked()
+        {
+            while (Accept(CborMajorType.SemanticTag))
+            {
+                ReadInteger();
+                _state = CborReaderState.Data;
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SkipDataItem()
         {
-            SkipSemanticTag();
+            SkipSemanticTagUnchecked();
 
             CborReaderHeader header = GetHeader();
 
@@ -1675,7 +1701,7 @@ namespace Dahomey.Cbor.Serialization
                     break;
 
                 case CborMajorType.SemanticTag:
-                    // Impossible - SkipSemanticTag above takes the whole stack. It used to take one,
+                    // Impossible - the skip above takes the whole stack. It used to take one,
                     // which made this arm reachable for a nested tag and this method return with the
                     // tagged item unread, leaving the buffer one item out of step.
                     break;
@@ -1812,33 +1838,6 @@ namespace Dahomey.Cbor.Serialization
             {
                 ThrowCbor($"Expected major type {majorType} ({(byte)majorType})");
             }
-        }
-
-        /// <summary>
-        /// <see cref="Expect(CborMajorType)"/> for a text string, naming stringref when that is what
-        /// stands in the way.
-        /// </summary>
-        /// <remarks>
-        /// The two text string reads are the ones that do not begin with <see cref="SkipSemanticTag"/>,
-        /// so a tag 25 in front of a string - a repeated map key, which is exactly where stringref puts
-        /// them - arrives here as a major type mismatch instead of passing through
-        /// <see cref="RejectStringRef"/>. The tag is read only once the read has already failed, so the
-        /// path that finds its string pays nothing for the better message.
-        /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ExpectTextString()
-        {
-            if (Accept(CborMajorType.TextString))
-            {
-                return;
-            }
-
-            if (_header.MajorType == CborMajorType.SemanticTag)
-            {
-                RejectStringRef(ReadInteger());
-            }
-
-            ThrowCbor($"Expected major type {CborMajorType.TextString} ({(byte)CborMajorType.TextString})");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

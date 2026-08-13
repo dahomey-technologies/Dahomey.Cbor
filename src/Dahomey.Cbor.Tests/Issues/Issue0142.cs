@@ -5,18 +5,16 @@ namespace Dahomey.Cbor.Tests.Issues
 {
     /// <summary>
     /// Issue #142: a document encoded with string references — <c>cbor2.dumps(..., string_referencing=True)</c>,
-    /// http://cbor.schmorp.de/stringref — failed with a message about the wrong thing.
+    /// http://cbor.schmorp.de/stringref — failed with a message about the wrong thing, or read a
+    /// table index as if it were the value.
     /// </summary>
     /// <remarks>
-    /// Stringref is not supported and these tests do not ask for it to be. What they pin is the
-    /// diagnosis: the tags are refused by name, at the tag, instead of being skipped and surfacing
-    /// later as "Expected major type TextString" at whichever member first repeated a key — an error
-    /// that names neither stringref nor the tag that caused it, and points at a part of the document
-    /// that is perfectly well formed.
-    /// <para>
-    /// Refusing is not a narrowing: every one of these documents already threw, since dropping tag 256
-    /// and then meeting tag 25 over an index is a type error whatever the reader does with it.
-    /// </para>
+    /// Stringref is not supported and these tests do not ask for it to be. What they pin is that a
+    /// reference is named where it matters and stepped over where it does not: tag 25 is refused, by
+    /// name, when the item it stands for is about to be used, while tag 256 and any reference inside a
+    /// member nobody reads are skipped like any unrecognised tag. A namespace on its own is ordinary
+    /// CBOR, and a discarded member is discarded whether or not its strings could have been resolved,
+    /// so refusing either would reject documents that used to read correctly.
     /// </remarks>
     public class Issue0142
     {
@@ -39,19 +37,15 @@ namespace Dahomey.Cbor.Tests.Issues
         private const string StringRefDocument = "D9010082A16B74656D706572617475726501A1D8190002";
 
         [Fact]
-        public void TheNamespaceTagIsRefusedByName()
+        public void AStringReferenceIsRefusedByName()
         {
             CborException ex = Assert.Throws<CborException>(() => Helper.Read<Measurement[]>(StringRefDocument));
 
-            Assert.Contains("semantic tag 256", ex.Message);
+            Assert.Contains("semantic tag 25", ex.Message);
             Assert.Contains("cbor.schmorp.de/stringref", ex.Message);
         }
 
-        /// <summary>
-        /// The reference itself, reached without its namespace: a map key is read by a path that does
-        /// not skip tags, so this one arrives as a major type mismatch rather than at the tag. It is
-        /// named too, which is the case that produced the misleading message in the report.
-        /// </summary>
+        /// <summary>The reference on its own, reached without the namespace around it.</summary>
         [Fact]
         public void AStringReferenceUsedAsAKeyIsRefusedByName()
         {
@@ -63,8 +57,51 @@ namespace Dahomey.Cbor.Tests.Issues
         }
 
         /// <summary>
-        /// Only these two tags are refused. Unrecognised tags are still skipped, which is what lets a
-        /// document carrying the self-described CBOR tag read as the value underneath it.
+        /// A reference standing where a number belongs is refused too. This is the case that used to
+        /// pass silently: the tag was skipped like any other, so the member took the table index as
+        /// its value — <c>Temperature = 0</c>, from a document that states no temperature at all.
+        /// </summary>
+        [Fact]
+        public void AStringReferenceUsedAsAValueIsRefusedByName()
+        {
+            // a1 6b "temperature" d8 19 00 -- {"temperature": stringref(0)}
+            CborException ex = Assert.Throws<CborException>(
+                () => Helper.Read<Measurement>("A16B74656D7065726174757265D81900"));
+
+            Assert.Contains("semantic tag 25", ex.Message);
+        }
+
+        /// <summary>
+        /// The namespace tag alone is not refused: <c>string_referencing=True</c> writes it around
+        /// every document, including one that repeats nothing, and such a document is ordinary CBOR.
+        /// </summary>
+        [Fact]
+        public void ANamespaceWithoutAReferenceStillReads()
+        {
+            // d9 0100 a1 6b "temperature" 01
+            Measurement value = Helper.Read<Measurement>("D90100A16B74656D706572617475726501");
+
+            Assert.NotNull(value);
+            Assert.Equal(1, value.Temperature);
+        }
+
+        /// <summary>
+        /// A reference inside a member the type does not map is skipped, not refused. Nothing needs
+        /// resolving to discard it, and it read correctly before this was diagnosed at all.
+        /// </summary>
+        [Fact]
+        public void AStringReferenceInsideAnUnmappedMemberIsStillSkipped()
+        {
+            // a2 6b "temperature" 01 61 78 d8 19 00 -- {"temperature": 1, "x": stringref(0)}
+            Measurement value = Helper.Read<Measurement>("A26B74656D7065726174757265016178D81900");
+
+            Assert.NotNull(value);
+            Assert.Equal(1, value.Temperature);
+        }
+
+        /// <summary>
+        /// Only tag 25 is refused. Unrecognised tags are still skipped, which is what lets a document
+        /// carrying the self-described CBOR tag read as the value underneath it.
         /// </summary>
         [Fact]
         public void AnUnrelatedTagIsStillSkipped()

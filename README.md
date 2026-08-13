@@ -246,12 +246,20 @@ specification rather than from RFC 8949, and are **not supported**. Python `cbor
 `dumps(..., string_referencing=True)`, which is not its default; `System.Formats.Cbor` does not read them
 either.
 
-Both tags raise a `CborException` naming them, instead of being skipped the way an unrecognised tag is. A
-skipped tag 256 leaves the first reference to surface as a type error at whichever member happened to
-repeat a key, which describes neither the cause nor the place. Reading them is not a matter of decoding
-one more tag: the table is built from every string in document order, including the ones a decode never
-materialises, so stepping over an unmapped member would have to decode it anyway or every later index
-would refer to the wrong string.
+Supporting them is not a matter of decoding one more tag: the table is built from every string in
+document order, including the ones a decode never materialises, so stepping over an unmapped member would
+have to decode it anyway or every later index would refer to the wrong string.
+
+What a reference no longer does is pass silently. Tag 25 raises a `CborException` naming stringref
+wherever the item it stands for is about to be used — as a string it used to surface as `Expected major
+type TextString`, which names neither the tag nor the document that carries it, and over a numeric member
+it did not surface at all: the tag was skipped like any other and the member took the table index as its
+value. Tag 256 is skipped, since a namespace with no reference under it is ordinary CBOR, and so is a
+reference inside a member the type does not map, since nothing needs resolving to discard it.
+
+The refusal is in the reader, so it covers deserialization into your own types. The object model is
+unchanged: `CborValue` carries a tag it does not model as data — as it does for typed arrays — so a
+document read into one keeps tag 25 in `CborValue.SemanticTag` over the index, rather than throwing.
 
 If the aim is compactness rather than interoperability with a producer you do not control,
 `CborObjectFormat.IntKeyMap` writes each key as a small integer and `CborObjectFormat.Array` drops the
