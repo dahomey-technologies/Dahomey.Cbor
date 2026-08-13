@@ -93,7 +93,7 @@ namespace Dahomey.Cbor
                 return 0.0;
             }
 
-            long magnitude = (long)Mantissa.ToByteArray().Length * 8 + Exponent;
+            long magnitude = MantissaBitLength() + Exponent;
 
             if (magnitude > 1100)
             {
@@ -184,6 +184,24 @@ namespace Dahomey.Cbor
             }
 
             return (negative ? -mantissa : mantissa, exponent);
+        }
+
+        /// <summary>
+        /// Bits in the mantissa's magnitude, which is what the magnitude bound above needs.
+        /// </summary>
+        /// <remarks>
+        /// Not <c>ToByteArray().Length * 8</c>: that copies the whole mantissa -- 33 KB of it for a
+        /// document that size -- to learn a number the value already knows. <c>netstandard2.0</c> has no
+        /// <c>GetBitLength</c>, so it pays the copy, and the byte count over-estimates by at most seven
+        /// bits, which the bound it feeds is deliberately loose enough to absorb.
+        /// </remarks>
+        private long MantissaBitLength()
+        {
+#if NET8_0_OR_GREATER
+            return (long)BigInteger.Abs(Mantissa).GetBitLength();
+#else
+            return (long)Mantissa.ToByteArray().Length * 8;
+#endif
         }
 
         /// <summary>

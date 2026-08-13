@@ -2,6 +2,7 @@ using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Numerics;
 using Xunit;
 
@@ -260,6 +261,79 @@ namespace Dahomey.Cbor.Tests
 
             // And a digit that is not zero still refuses, rather than the reduction quietly dropping it.
             Assert.Throws<OverflowException>(() => new CborDecimalFraction(tenToThe100000 + 1, -100028).ToDecimal());
+        }
+
+        /// <summary>
+        /// <see cref="CborDecimalFraction.ToDouble"/> renders at most a bounded number of significant
+        /// digits, and that cap has to be invisible. Compared against the whole mantissa rendered
+        /// exactly, over a spread of sizes either side of the cap.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="BigInteger.ToString()"/> is a base conversion and quadratic in the digit count:
+        /// measured on net10.0 Release, rendering 20,000 digits took 5 ms, 40,000 took 23 ms and 80,000
+        /// took 92 ms. Capped, the same three conversions are 0, 6 and 7 ms. The cost is paid on a
+        /// mantissa a caller decoded rather than on anything it chose, which is what makes it worth
+        /// bounding rather than documenting.
+        /// </remarks>
+        [Theory]
+        [InlineData(20)]
+        [InlineData(1199)]
+        [InlineData(1200)]
+        [InlineData(1201)]
+        [InlineData(4000)]
+        public void CappingTheRenderedDigitsDoesNotChangeTheDouble(int digits)
+        {
+            // A mantissa of `digits` digits with no trailing zeros, so nothing reduces away, and an
+            // exponent putting the value near one.
+            BigInteger mantissa = BigInteger.Parse("1" + new string('7', digits - 1));
+            int exponent = -(digits - 1);
+
+            string wholeThing = mantissa.ToString(CultureInfo.InvariantCulture)
+                + "E" + exponent.ToString(CultureInfo.InvariantCulture);
+            double exact = double.Parse(wholeThing, NumberStyles.Float, CultureInfo.InvariantCulture);
+
+            Assert.Equal(exact, new CborDecimalFraction(mantissa, exponent).ToDouble());
+        }
+
+        /// <summary>
+        /// The case the cap's trailing marker exists for: a value a hair above the midpoint between two
+        /// doubles, where the hair is further out than the cap keeps.
+        /// </summary>
+        /// <remarks>
+        /// The midpoint itself is exactly representable as a decimal fraction — it is an odd multiple of
+        /// a power of two, and <c>2^-n = 5^n × 10^-n</c> — and rounds to even, which is <c>1.0</c> here.
+        /// Adding one unit 2,000 digits further down leaves a value that must round the other way, to
+        /// the double above. A truncation that dropped those digits silently would land back on the
+        /// midpoint and round to even, one ulp low; the appended non-zero digit is what prevents it.
+        /// </remarks>
+        [Fact]
+        public void AValueJustAboveAMidpointStillRoundsAwayFromIt()
+        {
+            // The double above 1.0 is 1 + 2^-52, so the midpoint is 1 + 2^-53 = (2^53 + 1) * 2^-53.
+            // Built as a decimal fraction rather than through a double, so nothing has rounded yet:
+            // (2^53 + 1) * 5^53 * 10^-53 is that value exactly.
+            const int binaryExponent = 53;
+            BigInteger midpointMantissa =
+                ((BigInteger.One << binaryExponent) + 1) * BigInteger.Pow(5, binaryExponent);
+            int midpointExponent = -binaryExponent;
+
+            // Exactly on the midpoint: ties go to even, and 1.0 is the even one.
+            Assert.Equal(1.0, new CborDecimalFraction(midpointMantissa, midpointExponent).ToDouble());
+
+            // One unit 2,000 decimal places below that, which is well past the cap: the value is above
+            // the midpoint and must round to the double above.
+            BigInteger justAbove = midpointMantissa * BigInteger.Pow(10, 2000) + 1;
+
+            Assert.Equal(
+                Math.BitIncrement(1.0),
+                new CborDecimalFraction(justAbove, midpointExponent - 2000).ToDouble());
+
+            // The same construction one unit below the midpoint rounds down to 1.0, which is the
+            // assertion that fails if the marker is appended unconditionally rather than only when
+            // something was dropped.
+            BigInteger justBelow = midpointMantissa * BigInteger.Pow(10, 2000) - 1;
+
+            Assert.Equal(1.0, new CborDecimalFraction(justBelow, midpointExponent - 2000).ToDouble());
         }
 
         [Theory]

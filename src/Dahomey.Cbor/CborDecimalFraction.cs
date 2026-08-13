@@ -178,12 +178,20 @@ namespace Dahomey.Cbor
         /// would round twice and hand-rolling the round-to-nearest would be a numeric kernel to get
         /// wrong. On .NET Core 3.0 and later that step is correctly rounded; on the .NET Framework a
         /// <c>netstandard2.0</c> consumer reaches an older parser that may differ in the last place.
+        /// <para>
+        /// The rendering is capped, because <see cref="BigInteger.ToString()"/> is a base conversion and
+        /// so quadratic in the digit count: an 80,000-digit mantissa took 93 ms to render against 5 ms
+        /// for 20,000, and the cost is paid on data a caller decoded rather than on anything it chose.
+        /// The cap cannot change the answer -- see <see cref="SignificantDigitsForDouble"/>.
+        /// </para>
         /// </remarks>
         public double ToDouble()
         {
-            string exact = Mantissa.ToString(CultureInfo.InvariantCulture)
+            (BigInteger mantissa, int exponent) = WithDigitsCappedForDouble();
+
+            string exact = mantissa.ToString(CultureInfo.InvariantCulture)
                 + "E"
-                + Exponent.ToString(CultureInfo.InvariantCulture);
+                + exponent.ToString(CultureInfo.InvariantCulture);
 
             // Older parsers throw where newer ones saturate, so both outcomes have to become the same
             // OverflowException.
@@ -206,6 +214,70 @@ namespace Dahomey.Cbor
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Significant digits kept when rendering for <see cref="ToDouble"/>. Comfortably more than any
+        /// answer can depend on, and enough that the cap is provably invisible.
+        /// </summary>
+        /// <remarks>
+        /// Which <see cref="double"/> a decimal value rounds to is decided by where it falls relative to
+        /// the midpoints between adjacent doubles. Every such midpoint is a dyadic rational -- an odd
+        /// multiple of 2^-1075 at the smallest -- and its exact decimal expansion therefore has at most
+        /// about 770 significant digits. So a midpoint cannot agree with a value in its first 1,200
+        /// significant digits and then differ beyond them: there are no digits left for it to differ in.
+        /// Truncating past 1,200 digits and marking that something was dropped leaves the rounded result
+        /// identical, and the marking is what keeps a value that was <em>above</em> a midpoint above it.
+        /// </remarks>
+        private const int SignificantDigitsForDouble = 1200;
+
+        /// <summary>
+        /// This value with no more than <see cref="SignificantDigitsForDouble"/> significant digits: as
+        /// it stands where it already has fewer, and otherwise truncated with a trailing non-zero digit
+        /// standing for everything dropped.
+        /// </summary>
+        /// <remarks>
+        /// The digit count comes from <see cref="BigInteger.Log10"/>, which reads the leading bits rather
+        /// than every digit, so nothing is rendered to find out how long it is. One
+        /// <see cref="BigInteger.DivRem"/> does the truncation. An exact truncation -- every dropped
+        /// digit a zero -- needs no marker and is left exact.
+        /// </remarks>
+        private (BigInteger Mantissa, int Exponent) WithDigitsCappedForDouble()
+        {
+            if (Mantissa.IsZero)
+            {
+                return (Mantissa, Exponent);
+            }
+
+            BigInteger magnitude = BigInteger.Abs(Mantissa);
+            long digits = (long)BigInteger.Log10(magnitude) + 1;
+
+            if (digits <= SignificantDigitsForDouble)
+            {
+                return (Mantissa, Exponent);
+            }
+
+            long drop = digits - SignificantDigitsForDouble;
+
+            // The exponent grows by what the mantissa loses, so the value is unchanged apart from the
+            // digits dropped. It cannot overflow: dropping digits only ever moves the exponent towards
+            // zero from below, and a positive exponent this large is refused by the range check either
+            // way once the parse sees it.
+            BigInteger kept = BigInteger.DivRem(
+                Mantissa, BigInteger.Pow(10, (int)drop), out BigInteger dropped);
+            long exponent = Exponent + drop;
+
+            if (dropped.IsZero)
+            {
+                return (kept, (int)Math.Min(exponent, int.MaxValue));
+            }
+
+            // A non-zero remainder means the true value is strictly beyond the truncation, so one
+            // non-zero digit is appended to say so rather than leaving it looking exact -- otherwise a
+            // value just above a midpoint would round as though it were on it.
+            BigInteger marked = kept * 10 + (kept.Sign < 0 ? -1 : 1);
+
+            return (marked, (int)Math.Min(exponent - 1, int.MaxValue));
         }
 
         /// <summary>
@@ -246,7 +318,9 @@ namespace Dahomey.Cbor
 
             if (exponent >= 0)
             {
-                return new CborDecimalFraction(mantissa * BigInteger.Pow(2, exponent), 0);
+                // A shift rather than a power of two multiplied out, which is the same value without
+                // building the power first.
+                return new CborDecimalFraction(mantissa << exponent, 0);
             }
 
             return new CborDecimalFraction(mantissa * BigInteger.Pow(5, -exponent), exponent);
