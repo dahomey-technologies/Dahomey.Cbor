@@ -83,6 +83,7 @@ namespace Dahomey.Cbor.Serialization
 
         // RFC 8949 §3.4.4.
         private const ulong DECIMAL_FRACTION_TAG = 4;
+        private const ulong BIGFLOAT_TAG = 5;
 
         /// <summary>Widest scale a <see cref="decimal"/> holds.</summary>
         private const int MAX_DECIMAL_SCALE = 28;
@@ -676,7 +677,7 @@ namespace Dahomey.Cbor.Serialization
 
             if (isDecimalFraction)
             {
-                return ReadDecimalFraction();
+                return ReadDecimalFractionAsDecimal();
             }
 
             CborReaderHeader header = GetHeader();
@@ -745,7 +746,7 @@ namespace Dahomey.Cbor.Serialization
         /// neither of which reads a container, so this cannot recurse and has no stack to bound.
         /// </para>
         /// </remarks>
-        private decimal ReadDecimalFraction()
+        private decimal ReadDecimalFractionAsDecimal()
         {
             Expect(CborMajorType.Array);
 
@@ -996,6 +997,105 @@ namespace Dahomey.Cbor.Serialization
                     ThrowCbor($"Invalid major type {header.MajorType}");
                     return default; // Unreachable
             }
+        }
+
+        /// <summary>
+        /// Reads an RFC 8949 §3.4.4 decimal fraction, tag 4.
+        /// </summary>
+        public CborDecimalFraction ReadDecimalFraction()
+        {
+            (BigInteger mantissa, int exponent) = ReadFractionParts(DECIMAL_FRACTION_TAG, "decimal fraction");
+
+            return new CborDecimalFraction(mantissa, exponent);
+        }
+
+        /// <summary>
+        /// Reads an RFC 8949 §3.4.4 bigfloat, tag 5.
+        /// </summary>
+        public CborBigFloat ReadBigFloat()
+        {
+            (BigInteger mantissa, int exponent) = ReadFractionParts(BIGFLOAT_TAG, "bigfloat");
+
+            return new CborBigFloat(mantissa, exponent);
+        }
+
+        /// <summary>
+        /// The <c>[exponent, mantissa]</c> pair behind tag 4 or tag 5, which encode identically and
+        /// differ only in the base the exponent applies to.
+        /// </summary>
+        /// <remarks>
+        /// The tag is required rather than merely accepted: it is the only thing distinguishing either
+        /// value from the plain two-element array it is encoded as, so reading one without it would make
+        /// the two indistinguishable. The whole tag stack is read, as everywhere since #183, and the
+        /// innermost of tags 4 and 5 decides -- the tag nearest the data is the one describing it, so a
+        /// document tagged as the other kind is refused rather than reinterpreted.
+        /// <para>
+        /// The exponent goes through <see cref="ReadInt32"/>, which gives §3.4.4's requirement that it
+        /// be a basic integer for free -- a bignum-tagged exponent is a byte string and fails on major
+        /// type -- and turns an exponent outside <see cref="int"/> into a <see cref="CborException"/>.
+        /// The mantissa goes through <see cref="ReadBigInteger"/>, so a bignum mantissa works, and a
+        /// foreign tag on either item is skipped there as it is anywhere else.
+        /// </para>
+        /// <para>
+        /// An indefinite-length content array is accepted, since §3.4.4 does not forbid one and the
+        /// reader is lenient about indefinite lengths everywhere else. Any length other than two is a
+        /// <see cref="CborException"/>, in both forms.
+        /// </para>
+        /// </remarks>
+        private (BigInteger Mantissa, int Exponent) ReadFractionParts(ulong expectedTag, string name)
+        {
+            bool tagged = false;
+            ulong innermostTag = 0;
+
+            while (IsSemanticTag())
+            {
+                TryReadSemanticTag(out ulong tag);
+
+                if (tag == DECIMAL_FRACTION_TAG || tag == BIGFLOAT_TAG)
+                {
+                    tagged = true;
+                    innermostTag = tag;
+                }
+            }
+
+            if (!tagged || innermostTag != expectedTag)
+            {
+                ThrowCbor($"Expected semantic tag {expectedTag} for a {name}");
+            }
+
+            ReadBeginArray();
+            int size = ReadSize();
+
+            if (size != -1 && size != 2)
+            {
+                ThrowCbor($"Expected CBOR array of size 2 for a {name}");
+            }
+
+            if (size == -1 && IsBreak())
+            {
+                ThrowCbor($"Expected CBOR array of size 2 for a {name}");
+            }
+
+            int exponent = ReadInt32();
+
+            if (size == -1 && IsBreak())
+            {
+                ThrowCbor($"Expected CBOR array of size 2 for a {name}");
+            }
+
+            BigInteger mantissa = ReadBigInteger();
+
+            if (size == -1)
+            {
+                if (!IsBreak())
+                {
+                    ThrowCbor($"Expected CBOR array of size 2 for a {name}");
+                }
+
+                ConsumeBreak();
+            }
+
+            return (mantissa, exponent);
         }
 
         /// <summary>

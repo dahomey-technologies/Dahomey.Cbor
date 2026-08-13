@@ -34,6 +34,8 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Support for RFC 8949 §3.4.3 bignums (tags 2 and 3) as System.Numerics.BigInteger
 * Reads RFC 8949 §3.4.4 decimal fractions (tag 4) into decimal, and writes them on request
   (CborOptions.DecimalFormat)
+* Support for RFC 8949 §3.4.4 decimal fractions (tag 4) and bigfloats (tag 5) as their own types,
+  CborDecimalFraction and CborBigFloat, for values no decimal holds
 * Duplicate map keys rejected on every decode target, with a last-wins opt-out (CborOptions.DuplicateKeyMode)
 * Reads RFC 8949 indefinite-length (chunked) byte and text strings; writes definite-length only
 * Ambiguous mappings — two members of a type under one CBOR name — refused when the mapping is built
@@ -268,9 +270,9 @@ through the stack and the innermost bignum tag decides. A text string, on the ot
 rather than parsed — there is no span overload of `BigInteger.Parse` on netstandard2.0, so accepting one
 would mean picking an encoding on a path nothing asks for.
 
-Tag 5 (bigfloat) is not decoded semantically and still surfaces as a two-element array. Tracked as
-https://github.com/dahomey-technologies/Dahomey.Cbor/issues/170. Tag 4 (decimal fraction) reads into a
-`decimal`, which the next section is about; it has no object-model type of its own either.
+Tags 4 and 5 (decimal fraction and bigfloat) reach a member typed as one of them, which the two sections
+below are about: tag 4 also reads into a `decimal`, and both read into a type of their own for values no
+`decimal` holds. Neither has an object-model type, so a DOM read still gives a tagged `CborArray`.
 
 ### Decimals (RFC 8949 §3.4.4)
 
@@ -323,8 +325,71 @@ has no decimal fraction of its own: a `CborDecimal` *writes* as tag 4 like any o
 reading those bytes back gives a `CborArray` tagged 4 rather than a `CborDecimal`. What is lost is the
 node's type and nothing else — such a value writes back byte-identically, tag included, so DOM code
 still carries a peer's decimals faithfully. It also carries the ones no `decimal` can hold, which is
-why narrowing tag 4 onto the type here would cost more than it gives; that trade-off belongs to
-[#170](https://github.com/dahomey-technologies/Dahomey.Cbor/issues/170).
+why narrowing tag 4 onto the type here would cost more than it gives. A value that needs more than a
+`decimal` has a type of its own — the next section.
+
+### Decimal fractions and bigfloats (RFC 8949 §3.4.4)
+
+A member typed `CborDecimalFraction` reads and writes tag 4, and one typed `CborBigFloat` reads and writes
+tag 5. Both are `readonly struct`s holding a `BigInteger` mantissa and an `int` exponent — the value is
+`Mantissa × 10^Exponent` and `Mantissa × 2^Exponent` respectively.
+
+```csharp
+public class Reading
+{
+    public CborDecimalFraction Value { get; set; }   // tag 4
+    public CborBigFloat Scale { get; set; }          // tag 5
+}
+```
+
+```csharp
+// new CborDecimalFraction(27315, -2)  -> C4 82 21 19 6AB3  (273.15, the §3.4.4 example)
+// new CborBigFloat(3, -1)             -> C5 82 20 03       (1.5, likewise)
+// mantissa past a basic integer       -> C4 82 20 C2 49 010000000000000000
+```
+
+**These types and `decimal` divide the work rather than competing.** A `decimal` covers everything a
+`decimal` holds, in either encoding, and that is what most documents want — declare `decimal` and set
+`DecimalFormat`. These cover what it cannot: a mantissa wider than 96 bits, a scale past 28, and tag 5,
+for which `decimal` has no encoding at all. Holding the whole of what each tag can express is what makes
+read and write symmetric here and leaves no range policy to pick.
+
+The two overlap deliberately and harmlessly. Under `DecimalFormat.DecimalFraction` a `decimal` member and
+a `CborDecimalFraction` member write **the same tag 4 bytes** for the same value, and each reads what the
+other wrote as far as its own type reaches. Which converter runs is settled by the declared type, so
+neither shadows the other. **Nothing about what `double`, `float` or `Half` read or write changes.**
+
+The mantissa goes through the same writer as a `BigInteger`, so it takes a bignum tag only where it does
+not fit a basic integer. The tag itself is unconditional in both directions: it is the only thing
+separating either value from the plain two-element array it is encoded as, so an untagged array is refused,
+and where tags 4 and 5 are stacked the innermost decides. A foreign tag anywhere in the stack is skipped,
+as elsewhere. An indefinite-length content array is accepted; any length other than two is a
+`CborException`.
+
+**The exponent is narrower than the format allows.** §3.4.4 requires a basic integer, which reaches ±2^64,
+where these types hold an `int`: a conforming document with an exponent beyond ±2^31 is refused with a
+`CborException` rather than read. That is deliberate — such an exponent describes a number with more digits
+than there is memory to render it in.
+
+Conversions are explicit and never silent:
+
+```csharp
+decimal exact = new CborDecimalFraction(27315, -2).ToDecimal();   // 273.15m, or OverflowException
+double near  = new CborDecimalFraction(27315, -2).ToDouble();     // 273.15,  rounds
+var fraction = (CborDecimalFraction)273.15m;                      // exact
+var bigfloat = (CborBigFloat)1.5;                                 // exact, [-1, 3]
+```
+
+`ToDecimal` is exact or throws — it never rounds, since a silent rounding is what these types exist to
+avoid. `ToDouble` rounds, and throws only when the magnitude is past what a `double` holds. Every finite
+`double` converts exactly into either type, because `2^-n = 5^n × 10^-n`; **there is no conversion from
+`decimal` to `CborBigFloat`**, because one tenth is not any integer over a power of two, so the operator
+could only round.
+
+Equality is structural over the pair as encoded, so `10e0` and `1e1` are the same number and are *not*
+equal, and neither is normalised on the way out — a document round-trips byte for byte. Two encodings of
+one number are therefore two distinct dictionary keys, and under `CborOptions.Deterministic` they sort as
+the different byte strings they are.
 
 ### Custom converters
 

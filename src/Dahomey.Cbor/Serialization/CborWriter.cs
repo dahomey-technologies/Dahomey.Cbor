@@ -32,6 +32,7 @@ namespace Dahomey.Cbor.Serialization
 
         // RFC 8949 §3.4.4.
         private const ulong DECIMAL_FRACTION_TAG = 4;
+        private const ulong BIGFLOAT_TAG = 5;
 
         /// <summary>
         /// Default nesting limit, matching <see cref="CborOptions.MaxDepth"/> and
@@ -302,6 +303,42 @@ namespace Dahomey.Cbor.Serialization
 
             WriteSemanticTag(NEGATIVE_BIGNUM_TAG);
             WriteByteString(BigIntegerToBigEndianBytes(magnitude));
+        }
+
+        /// <summary>
+        /// Writes an RFC 8949 §3.4.4 decimal fraction, tag 4 over <c>[exponent, mantissa]</c>.
+        /// </summary>
+        /// <remarks>
+        /// The tag is unconditional, unlike a bignum's: there is no shorter basic form of a decimal
+        /// fraction to prefer, so tag 4 is its only encoding. The mantissa goes through
+        /// <see cref="WriteBigInteger"/>, which spends a bignum tag only where the value does not fit a
+        /// basic integer, so the common case is the compact form §3.4.4 shows.
+        /// </remarks>
+        public void WriteDecimalFraction(CborDecimalFraction value)
+        {
+            WriteFractionParts(DECIMAL_FRACTION_TAG, value.Exponent, value.Mantissa);
+        }
+
+        /// <summary>
+        /// Writes an RFC 8949 §3.4.4 bigfloat, tag 5 over <c>[exponent, mantissa]</c>.
+        /// </summary>
+        public void WriteBigFloat(CborBigFloat value)
+        {
+            WriteFractionParts(BIGFLOAT_TAG, value.Exponent, value.Mantissa);
+        }
+
+        /// <summary>
+        /// The definite-length two-element array both tags carry. Definite-length unconditionally: the
+        /// pair has a known arity, and an indefinite length here would be refused outright under
+        /// <c>CborOptions.Deterministic</c>.
+        /// </summary>
+        private void WriteFractionParts(ulong tag, int exponent, BigInteger mantissa)
+        {
+            WriteSemanticTag(tag);
+            WriteBeginArray(2);
+            WriteInt32(exponent);
+            WriteBigInteger(mantissa);
+            WriteEndArray(2);
         }
 
         /// <summary>

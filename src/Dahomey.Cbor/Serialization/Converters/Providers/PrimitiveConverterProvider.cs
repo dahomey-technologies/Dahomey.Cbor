@@ -53,6 +53,16 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 return new BigIntegerConverter();
             }
 
+            if (type == typeof(CborDecimalFraction))
+            {
+                return new DecimalFractionConverter();
+            }
+
+            if (type == typeof(CborBigFloat))
+            {
+                return new BigFloatConverter();
+            }
+
             if (type == typeof(ReadOnlyMemory<byte>))
             {
                 return new ReadOnlyMemoryConverter();

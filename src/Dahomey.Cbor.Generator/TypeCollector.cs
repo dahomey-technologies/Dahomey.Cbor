@@ -610,10 +610,15 @@ namespace Dahomey.Cbor.Generator
 
             // BigInteger has no SpecialType, but PrimitiveConverterProvider does resolve it to a
             // concrete BigIntegerConverter, so it belongs with the cases above rather than with the
-            // unsupported types below.
-            if (type.ToDisplayString() == "System.Numerics.BigInteger")
+            // unsupported types below. The same holds for the two RFC 8949 §3.4.4 types: without an
+            // entry here they are collected as objects and a generated context writes their Mantissa
+            // and Exponent as members, which is a green build and the wrong bytes.
+            switch (type.ToDisplayString())
             {
-                return true;
+                case "System.Numerics.BigInteger":
+                case "Dahomey.Cbor.CborDecimalFraction":
+                case "Dahomey.Cbor.CborBigFloat":
+                    return true;
             }
 
             // System.Half, System.Guid, System.DateTimeOffset and System.Object are deliberately absent.
