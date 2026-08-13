@@ -238,6 +238,40 @@ and maps, not to strings, so what this library emits is unchanged.
 A chunk whose major type differs from the enclosing string, and a nested indefinite-length string, are
 both malformed and raise a `CborException`.
 
+### String references (tag 25)
+
+String references — tag 25 over an index into a table of the strings already seen, the table scoped by a
+tag 256 around the document — come from the [cbor.schmorp.de](http://cbor.schmorp.de/stringref)
+specification rather than from RFC 8949, and are **not supported**. Python `cbor2` emits them on
+`dumps(..., string_referencing=True)`, which is not its default; `System.Formats.Cbor` does not read them
+either.
+
+Supporting them is not a matter of decoding one more tag: the table is built from every string in
+document order, including the ones a decode never materialises, so stepping over an unmapped member would
+have to decode it anyway or every later index would refer to the wrong string.
+
+What a reference no longer does is pass silently. Tag 25 raises a `CborException` naming stringref
+wherever the item it stands for is about to be used — as a string it used to surface as `Expected major
+type TextString`, which names neither the tag nor the document that carries it, and over a numeric member
+it did not surface at all: the tag was skipped like any other and the member took the table index as its
+value. Tag 256 is skipped, since a namespace with no reference under it is ordinary CBOR, and so is a
+reference inside a member the type does not map, since nothing needs resolving to discard it.
+
+The refusal is in the reader, so it covers deserialization into your own types, including the members
+whose readers walk the tag stack themselves — `decimal`, `BigInteger`, `CborDecimalFraction`,
+`CborBigFloat`.
+
+The object model is unchanged, and reads a reference where it can. `CborValue` carries a tag it does not
+model as data — as it does for typed arrays — so a document read into one keeps tag 25 in
+`CborValue.SemanticTag` over the index rather than throwing. `CborValue.SemanticTag` holds one tag, so
+that applies to an outermost reference only: a tag 25 nested under another tag is read as the value
+underneath, which refuses it.
+
+If the aim is compactness rather than interoperability with a producer you do not control,
+`CborObjectFormat.IntKeyMap` writes each key as a small integer and `CborObjectFormat.Array` drops the
+keys altogether. Both compress a document of repeated keys harder than string references do, in plain
+RFC 8949.
+
 ### Bignums (RFC 8949 §3.4.3)
 
 A member typed `System.Numerics.BigInteger` reads and writes integers of any width. Values that fit in 64

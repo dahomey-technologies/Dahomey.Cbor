@@ -85,6 +85,9 @@ namespace Dahomey.Cbor.Serialization
         private const ulong DECIMAL_FRACTION_TAG = 4;
         private const ulong BIGFLOAT_TAG = 5;
 
+        // http://cbor.schmorp.de/stringref - not supported, see RejectStringRef.
+        private const ulong STRINGREF_TAG = 25;
+
         /// <summary>Widest scale a <see cref="decimal"/> holds.</summary>
         private const int MAX_DECIMAL_SCALE = 28;
 
@@ -668,6 +671,7 @@ namespace Dahomey.Cbor.Serialization
             while (IsSemanticTag())
             {
                 TryReadSemanticTag(out ulong tag);
+                RejectStringRef(tag);
 
                 if (tag == DECIMAL_FRACTION_TAG)
                 {
@@ -964,6 +968,7 @@ namespace Dahomey.Cbor.Serialization
             while (IsSemanticTag())
             {
                 TryReadSemanticTag(out ulong tag);
+                RejectStringRef(tag);
 
                 if (tag == UNSIGNED_BIGNUM_TAG || tag == NEGATIVE_BIGNUM_TAG)
                 {
@@ -1050,6 +1055,7 @@ namespace Dahomey.Cbor.Serialization
             while (IsSemanticTag())
             {
                 TryReadSemanticTag(out ulong tag);
+                RejectStringRef(tag);
 
                 if (tag == DECIMAL_FRACTION_TAG || tag == BIGFLOAT_TAG)
                 {
@@ -1600,9 +1606,75 @@ namespace Dahomey.Cbor.Serialization
         /// value, and <see cref="ObjectModel.CborValue.SemanticTag"/> holds one tag. A lost tag is the
         /// intended shortfall; a value decoded from the wrong bytes was not.
         /// </para>
+        /// <para>
+        /// One tag is not lost but refused, since losing it is what decodes the wrong bytes: see
+        /// <see cref="RejectStringRef"/>. <see cref="SkipDataItem"/> uses
+        /// <see cref="SkipSemanticTagUnchecked"/> instead, having no bytes to decode wrongly.
+        /// </para>
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void SkipSemanticTag()
+        {
+            while (Accept(CborMajorType.SemanticTag))
+            {
+                ulong tag = ReadInteger();
+                _state = CborReaderState.Data;
+                RejectStringRef(tag);
+            }
+        }
+
+        /// <summary>
+        /// Throws on a string reference, which cannot be resolved, when the item it stands for is
+        /// about to be used.
+        /// </summary>
+        /// <remarks>
+        /// Stringref (http://cbor.schmorp.de/stringref, issue #142) replaces a repeated string with
+        /// tag 25 over its index into a table of the strings already seen, the table being scoped by a
+        /// tag 256 around the document. It is not supported, and supporting it is not a matter of
+        /// decoding one more tag: the table is built from every string in document order, including
+        /// the ones a decode never materialises, so <see cref="SkipDataItem"/> - which
+        /// <c>ObjectConverter</c> runs over every unmapped member - would have to decode what it
+        /// currently steps over, or every later index would refer to the wrong string.
+        /// <para>
+        /// What the tag cannot do is pass silently, which is what produced the report: it was skipped
+        /// like any unrecognised tag, leaving its index behind as the value. Over a string that
+        /// surfaced as "Expected major type TextString", which names neither stringref nor the tag;
+        /// over an <c>int</c> member it did not surface at all, and the member took the index as its
+        /// value. Both now say what the tag is and which encoder setting produces it.
+        /// </para>
+        /// <para>
+        /// Only tag 25 is refused, and only where the item is wanted. Tag 256 is skipped like any
+        /// other tag, since a namespace with no reference under it - which is what
+        /// <c>string_referencing=True</c> writes for a document that repeats nothing - is ordinary
+        /// CBOR; and <see cref="SkipDataItem"/> steps over a reference without complaint, since an
+        /// unmapped member is discarded whether or not its strings could have been resolved.
+        /// </para>
+        /// <para>
+        /// The readers that walk the tag stack themselves - <see cref="ReadDecimal"/>,
+        /// <see cref="ReadBigInteger"/> and <see cref="ReadFractionParts"/>, which take their tags
+        /// through <see cref="TryReadSemanticTag"/> rather than through the skip - call this on every
+        /// tag they take, or a reference over one of those members would keep taking the table index
+        /// for its value.
+        /// </para>
+        /// </remarks>
+        private void RejectStringRef(ulong semanticTag)
+        {
+            if (semanticTag == STRINGREF_TAG)
+            {
+                ThrowCbor(
+                    $"Unsupported semantic tag {semanticTag}: CBOR string references "
+                    + "(http://cbor.schmorp.de/stringref) are not implemented. Re-encode the document "
+                    + "without them - with Python cbor2, that is dumps(..., string_referencing=False), "
+                    + "which is the default.");
+            }
+        }
+
+        /// <summary>
+        /// <see cref="SkipSemanticTag"/> for an item whose content is discarded, which passes over a
+        /// string reference rather than refusing it - see <see cref="RejectStringRef"/>.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void SkipSemanticTagUnchecked()
         {
             while (Accept(CborMajorType.SemanticTag))
             {
@@ -1614,7 +1686,7 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void SkipDataItem()
         {
-            SkipSemanticTag();
+            SkipSemanticTagUnchecked();
 
             CborReaderHeader header = GetHeader();
 
@@ -1639,7 +1711,7 @@ namespace Dahomey.Cbor.Serialization
                     break;
 
                 case CborMajorType.SemanticTag:
-                    // Impossible - SkipSemanticTag above takes the whole stack. It used to take one,
+                    // Impossible - the skip above takes the whole stack. It used to take one,
                     // which made this arm reachable for a nested tag and this method return with the
                     // tagged item unread, leaving the buffer one item out of step.
                     break;
