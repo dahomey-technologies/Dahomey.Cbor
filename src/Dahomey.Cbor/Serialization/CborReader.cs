@@ -85,6 +85,10 @@ namespace Dahomey.Cbor.Serialization
         private const ulong DECIMAL_FRACTION_TAG = 4;
         private const ulong BIGFLOAT_TAG = 5;
 
+        // http://cbor.schmorp.de/stringref - not supported, see RejectStringRef.
+        private const ulong STRINGREF_TAG = 25;
+        private const ulong STRINGREF_NAMESPACE_TAG = 256;
+
         /// <summary>Widest scale a <see cref="decimal"/> holds.</summary>
         private const int MAX_DECIMAL_SCALE = 28;
 
@@ -448,7 +452,7 @@ namespace Dahomey.Cbor.Serialization
                 return null;
             }
 
-            Expect(CborMajorType.TextString);
+            ExpectTextString();
             return Encoding.UTF8.GetString(ReadSizeAndBytes(allowScratchBuffer: true));
         }
 
@@ -482,7 +486,7 @@ namespace Dahomey.Cbor.Serialization
                 return null;
             }
 
-            Expect(CborMajorType.TextString);
+            ExpectTextString();
             return ReadSizeAndBytes(allowScratchBuffer: false);
         }
 
@@ -1606,8 +1610,40 @@ namespace Dahomey.Cbor.Serialization
         {
             while (Accept(CborMajorType.SemanticTag))
             {
-                ReadInteger();
+                ulong tag = ReadInteger();
                 _state = CborReaderState.Data;
+                RejectStringRef(tag);
+            }
+        }
+
+        /// <summary>
+        /// Throws on the two string reference tags, which are not supported.
+        /// </summary>
+        /// <remarks>
+        /// Stringref (http://cbor.schmorp.de/stringref, issue #142) replaces a repeated string with
+        /// tag 25 over its index into a table of the strings already seen, the table being scoped by a
+        /// tag 256 around the document. Reading it is not a matter of decoding one more tag: the table
+        /// is built from every string in document order, including the ones a decode never
+        /// materialises, so <see cref="SkipDataItem"/> - which <c>ObjectConverter</c> runs over every
+        /// unmapped member - would have to decode what it currently steps over, or every later index
+        /// would refer to the wrong string.
+        /// <para>
+        /// So the tag is refused rather than half-honoured, and refused by name. Skipping it silently
+        /// is what produced the report: the tag 256 disappeared, then the first tag 25 surfaced as
+        /// "Expected major type TextString" at whatever member happened to hold a repeated key, which
+        /// says nothing about stringref and points at the wrong part of the document. A caller who
+        /// controls the encoder wants to hear that the encoder is the thing to change.
+        /// </para>
+        /// </remarks>
+        private void RejectStringRef(ulong semanticTag)
+        {
+            if (semanticTag == STRINGREF_TAG || semanticTag == STRINGREF_NAMESPACE_TAG)
+            {
+                ThrowCbor(
+                    $"Unsupported semantic tag {semanticTag}: CBOR string references "
+                    + "(http://cbor.schmorp.de/stringref) are not implemented. Re-encode the document "
+                    + "without them - with Python cbor2, that is dumps(..., string_referencing=False), "
+                    + "which is the default.");
             }
         }
 
@@ -1776,6 +1812,33 @@ namespace Dahomey.Cbor.Serialization
             {
                 ThrowCbor($"Expected major type {majorType} ({(byte)majorType})");
             }
+        }
+
+        /// <summary>
+        /// <see cref="Expect(CborMajorType)"/> for a text string, naming stringref when that is what
+        /// stands in the way.
+        /// </summary>
+        /// <remarks>
+        /// The two text string reads are the ones that do not begin with <see cref="SkipSemanticTag"/>,
+        /// so a tag 25 in front of a string - a repeated map key, which is exactly where stringref puts
+        /// them - arrives here as a major type mismatch instead of passing through
+        /// <see cref="RejectStringRef"/>. The tag is read only once the read has already failed, so the
+        /// path that finds its string pays nothing for the better message.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ExpectTextString()
+        {
+            if (Accept(CborMajorType.TextString))
+            {
+                return;
+            }
+
+            if (_header.MajorType == CborMajorType.SemanticTag)
+            {
+                RejectStringRef(ReadInteger());
+            }
+
+            ThrowCbor($"Expected major type {CborMajorType.TextString} ({(byte)CborMajorType.TextString})");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

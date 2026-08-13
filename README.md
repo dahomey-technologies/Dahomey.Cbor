@@ -238,6 +238,26 @@ and maps, not to strings, so what this library emits is unchanged.
 A chunk whose major type differs from the enclosing string, and a nested indefinite-length string, are
 both malformed and raise a `CborException`.
 
+### String references (tag 25)
+
+String references — tag 25 over an index into a table of the strings already seen, the table scoped by a
+tag 256 around the document — come from the [cbor.schmorp.de](http://cbor.schmorp.de/stringref)
+specification rather than from RFC 8949, and are **not supported**. Python `cbor2` emits them on
+`dumps(..., string_referencing=True)`, which is not its default; `System.Formats.Cbor` does not read them
+either.
+
+Both tags raise a `CborException` naming them, instead of being skipped the way an unrecognised tag is. A
+skipped tag 256 leaves the first reference to surface as a type error at whichever member happened to
+repeat a key, which describes neither the cause nor the place. Reading them is not a matter of decoding
+one more tag: the table is built from every string in document order, including the ones a decode never
+materialises, so stepping over an unmapped member would have to decode it anyway or every later index
+would refer to the wrong string.
+
+If the aim is compactness rather than interoperability with a producer you do not control,
+`CborObjectFormat.IntKeyMap` writes each key as a small integer and `CborObjectFormat.Array` drops the
+keys altogether. Both compress a document of repeated keys harder than string references do, in plain
+RFC 8949.
+
 ### Bignums (RFC 8949 §3.4.3)
 
 A member typed `System.Numerics.BigInteger` reads and writes integers of any width. Values that fit in 64
