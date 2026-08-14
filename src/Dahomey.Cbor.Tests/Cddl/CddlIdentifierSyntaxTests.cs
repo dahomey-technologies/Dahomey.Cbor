@@ -96,13 +96,25 @@ namespace Dahomey.Cbor.Tests.Cddl
         }
 
         /// <summary>The left-hand side of every rule in the schema.</summary>
+        /// <remarks>
+        /// A comment is excluded by its leading <c>;</c> rather than by the assumption that no comment
+        /// contains <c>" = "</c>. None does today, so this changes nothing now; it stops the day a header
+        /// line gains one, at which point the comment would be scanned as a rule name and the assertion
+        /// would fail for a reason that has nothing to do with rule names.
+        /// </remarks>
         private static IEnumerable<string> RuleNames(string schema)
         {
             foreach (string line in schema.Split('\n'))
             {
+                if (line.StartsWith(" ", StringComparison.Ordinal)
+                    || line.StartsWith(";", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
                 int assignment = line.IndexOf(" = ", StringComparison.Ordinal);
 
-                if (assignment > 0 && !line.StartsWith(" ", StringComparison.Ordinal))
+                if (assignment > 0)
                 {
                     yield return line.Substring(0, assignment);
                 }
