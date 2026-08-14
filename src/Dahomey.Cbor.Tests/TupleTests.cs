@@ -305,6 +305,108 @@ namespace Dahomey.Cbor.Tests
             Assert.Null(Helper.Read<(int, int, int, int, int, int, int, int, int)?>("F6"));
         }
 
+        /// <summary>
+        /// An indefinite-length tuple ends where its arity says it does, at every arity and in both
+        /// length forms. The definite-length half already held, from <c>size != N</c>; the
+        /// indefinite-length half had no check after the last item at all, so the extra items were
+        /// silently dropped.
+        /// </summary>
+        /// <remarks>
+        /// Ported from #210 unchanged. The check itself is stated once here, in
+        /// <c>TupleReader.ReadEndArray</c>, rather than once per arity — but it applies at arities two
+        /// through seven exactly as it does past seven, and
+        /// <see cref="AnIndefiniteLengthTuplePastSevenIsReadAndLeavesNothingBehind"/> only covers the
+        /// new ground.
+        /// </remarks>
+        [Fact]
+        public void ATupleWithTooManyItemsIsRefusedAtEveryArity()
+        {
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int)>("9F010203FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int)>("9F01020304FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int)>("9F0102030405FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int)>("9F010203040506FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int, int)>("9F01020304050607FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int, int, int, int, int)>("9F0102030405060708FF".HexToBytes()));
+
+            // The definite-length form of the same document, which the arity check already refused.
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int)>("83010203".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int)>("8401020304".HexToBytes()));
+
+            // And too few, which the per-item break check refuses — the mirror of the end check, and
+            // the reason the end check can assume anything that is not a break is an item too many.
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int)>("9F01FF".HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<(int, int, int)>("9F0102FF".HexToBytes()));
+        }
+
+        /// <summary>
+        /// The other side of that check: a well-formed indefinite-length tuple still reads, at every
+        /// arity. Refusing one would be the easy way to make the test above pass.
+        /// </summary>
+        /// <remarks>Ported from #210 unchanged.</remarks>
+        [Fact]
+        public void AnIndefiniteLengthTupleIsStillReadAtEveryArity()
+        {
+            Assert.Equal((1, 2), Helper.Read<(int, int)>("9F0102FF"));
+            Assert.Equal((1, 2, 3), Helper.Read<(int, int, int)>("9F010203FF"));
+            Assert.Equal((1, 2, 3, 4), Helper.Read<(int, int, int, int)>("9F01020304FF"));
+            Assert.Equal((1, 2, 3, 4, 5), Helper.Read<(int, int, int, int, int)>("9F0102030405FF"));
+            Assert.Equal((1, 2, 3, 4, 5, 6), Helper.Read<(int, int, int, int, int, int)>("9F010203040506FF"));
+            Assert.Equal((1, 2, 3, 4, 5, 6, 7), Helper.Read<(int, int, int, int, int, int, int)>("9F01020304050607FF"));
+        }
+
+        /// <summary>
+        /// Where the unconsumed break did its damage: the closing <c>FF</c> was left in the buffer, so
+        /// whatever followed the tuple read it instead. An indefinite-length tuple was therefore only
+        /// usable as a whole document — as a map member the break was read as the next key, and as an
+        /// array element as the next element's head.
+        /// </summary>
+        /// <remarks>Ported from #210 unchanged.</remarks>
+        [Fact]
+        public void AnIndefiniteLengthTupleLeavesNothingBehind()
+        {
+            // {"a": [_ 1, 2], "b": 7}
+            TupleMember member = Cbor.Deserialize<TupleMember>("A261619F0102FF616207".HexToBytes());
+
+            Assert.Equal((1, 2), member.A);
+            Assert.Equal(7, member.B);
+
+            // [[_ 1, 2], [_ 3, 4]]
+            List<(int, int)> list = Cbor.Deserialize<List<(int, int)>>("829F0102FF9F0304FF".HexToBytes());
+
+            Assert.Equal(new[] { (1, 2), (3, 4) }, list);
+        }
+
+        /// <summary>
+        /// The sharpest statement of what the unconsumed break cost: with
+        /// <c>ArrayLengthMode.IndefiniteLength</c> the library could not read back what it had just
+        /// written, for any tuple in any container, with nothing hand-written involved.
+        /// </summary>
+        /// <remarks>
+        /// The documents in the tests above are typed by hand, so they say the reader is wrong without
+        /// saying that the writer produces exactly those documents. This is the only case here where
+        /// both halves are the library's own.
+        /// </remarks>
+        [Fact]
+        public void ATupleWrittenIndefiniteLengthReadsBack()
+        {
+            CborOptions options = new CborOptions { ArrayLengthMode = LengthMode.IndefiniteLength };
+            List<(int, int)> value = new List<(int, int)> { (1, 2), (3, 4) };
+
+            string hex = Helper.Write(value, options);
+
+            Assert.Equal("9F9F0102FF9F0304FFFF", hex, ignoreCase: true);
+            Assert.Equal(value, Cbor.Deserialize<List<(int, int)>>(hex.HexToBytes()));
+
+            // Past seven as well, where the flattening and the break meet: one array, nine items, and
+            // the break that ends it consumed by the tuple that opened it.
+            string longHex = Helper.Write((1, 2, 3, 4, 5, 6, 7, 8, 9), options);
+
+            Assert.Equal("9F010203040506070809FF", longHex, ignoreCase: true);
+            Assert.Equal(
+                (1, 2, 3, 4, 5, 6, 7, 8, 9),
+                Cbor.Deserialize<(int, int, int, int, int, int, int, int, int)>(longHex.HexToBytes()));
+        }
+
         [Fact]
         public void WriteTuple()
         {
