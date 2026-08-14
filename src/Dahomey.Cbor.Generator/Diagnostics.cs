@@ -146,6 +146,14 @@ namespace Dahomey.Cbor.Generator
         /// that cannot be instantiated at all -- an abstract class or an interface -- since a concrete
         /// class with no subtypes is simply described by its own rule.
         /// </summary>
+        public static readonly DiagnosticDescriptor IncompletePolymorphicSchema = new(
+            id: "CBOR1012",
+            title: "Polymorphic schema is incomplete",
+            messageFormat: "'{0}' is polymorphic but no subtype carrying a discriminator is reachable from this context; declare each subtype with [CborSerializable] and give it a [CborDiscriminator] or [CborIntDiscriminator] so the type choice can tell them apart",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         /// <summary>
         /// Two members under one CBOR name. An error rather than a warning because the type cannot
         /// serialize at all -- since #186 the reflection path refuses the mapping when it is built, so
@@ -177,14 +185,6 @@ namespace Dahomey.Cbor.Generator
             id: "CBOR1014",
             title: "Two members map to one CBOR index",
             messageFormat: "'{0}' maps both '{1}' and '{2}' to CBOR index {3}; a document can only carry one of them, so give one a different [CborProperty] index",
-            Category,
-            defaultSeverity: DiagnosticSeverity.Error,
-            isEnabledByDefault: true);
-
-        public static readonly DiagnosticDescriptor IncompletePolymorphicSchema = new(
-            id: "CBOR1012",
-            title: "Polymorphic schema is incomplete",
-            messageFormat: "'{0}' is polymorphic but no subtype carrying a discriminator is reachable from this context; declare each subtype with [CborSerializable] and give it a [CborDiscriminator] or [CborIntDiscriminator] so the type choice can tell them apart",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
