@@ -19,26 +19,6 @@ namespace Dahomey.Cbor.Tests
             return Cbor.Deserialize<T>(hexBuffer.HexToBytes(), options);
         }
 
-        /// <summary>
-        /// Converter construction happens through <see cref="Activator"/>, so a <see cref="CborException"/>
-        /// raised while building an object mapping surfaces wrapped in a <see cref="TargetInvocationException"/>.
-        /// </summary>
-        private static CborException AssertThrowsCborException(Action action)
-        {
-            Exception exception = Assert.ThrowsAny<Exception>(action);
-
-            for (Exception? current = exception; current != null; current = current.InnerException)
-            {
-                if (current is CborException cborException)
-                {
-                    return cborException;
-                }
-            }
-
-            throw new Xunit.Sdk.XunitException(
-                $"Expected a {nameof(CborException)} somewhere in the exception chain, got: {exception}");
-        }
-
         public interface IIntBaseInterface
         {
             int Id { get; set; }
@@ -369,7 +349,7 @@ namespace Dahomey.Cbor.Tests
         {
             CborOptions options = new CborOptions();
 
-            CborException exception = AssertThrowsCborException(
+            CborException exception = Assert.Throws<CborException>(
                 () => Helper.Write<IntBaseObject>(new BothDiscriminatorsObject(), options));
 
             Assert.Contains(nameof(CborDiscriminatorAttribute), exception.Message);
@@ -449,7 +429,7 @@ namespace Dahomey.Cbor.Tests
             // {"_t": "StringDisc", "Name": "foo", "Id": 1} read through the int-claimed base type
             const string hexBuffer = "A3625F746A537472696E6744697363644E616D6563666F6F62496401";
 
-            CborException exception = AssertThrowsCborException(
+            CborException exception = Assert.Throws<CborException>(
                 () => Deserialize<IntBaseObject>(hexBuffer, options));
 
             Assert.Contains("Invalid major type", exception.Message);

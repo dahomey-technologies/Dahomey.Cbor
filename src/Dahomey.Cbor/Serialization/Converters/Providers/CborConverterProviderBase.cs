@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Dahomey.Cbor.Util;
+using System;
 using System.Reflection;
 
 namespace Dahomey.Cbor.Serialization.Converters.Providers
@@ -12,7 +13,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
             ConstructorInfo? constructorInfo = converterType.GetConstructor(new[] { typeof(CborOptions) });
             if (constructorInfo != null)
             {
-                ICborConverter? converter = (ICborConverter?)Activator.CreateInstance(converterType, options);
+                ICborConverter? converter = (ICborConverter?)ReflectionActivator.CreateInstance(converterType, options);
 
                 if (converter == null)
                 {
@@ -25,7 +26,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
             constructorInfo = converterType.GetConstructor(new Type[0]);
             if (constructorInfo != null)
             {
-                ICborConverter? converter = (ICborConverter?)Activator.CreateInstance(converterType);
+                ICborConverter? converter = (ICborConverter?)ReflectionActivator.CreateInstance(converterType);
 
                 if (converter == null)
                 {

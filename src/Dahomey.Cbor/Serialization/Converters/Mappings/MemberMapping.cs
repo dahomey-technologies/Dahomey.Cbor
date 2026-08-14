@@ -91,7 +91,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _converterRegistry = converterRegistry;
             MemberInfo = memberInfo;
             MemberType = memberType;
-            DefaultValue = (memberType.IsClass || memberType.IsInterface) ? null : Activator.CreateInstance(memberType);
+            DefaultValue = (memberType.IsClass || memberType.IsInterface) ? null : ReflectionActivator.CreateInstance(memberType);
         }
 
         public MemberMapping<T> SetMemberName(string memberName)
@@ -176,7 +176,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
 
             IMemberConverter? memberConverter = 
-                (IMemberConverter?)Activator.CreateInstance(type, _converterRegistry, this);
+                (IMemberConverter?)ReflectionActivator.CreateInstance(type, _converterRegistry, this);
 
             if (memberConverter == null)
             {
@@ -232,7 +232,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     Type converterType = converterAttribute.ConverterType;
                     VerifyMemberConverterType(converterType);
 
-                    _converter = (ICborConverter?)Activator.CreateInstance(converterType);
+                    _converter = (ICborConverter?)ReflectionActivator.CreateInstance(converterType);
 
                     if (_converter == null)
                     {
