@@ -263,6 +263,21 @@ namespace Dahomey.Cbor.Generator
                             $"new DictionaryConverter<{FullName(model.Symbol)}, {FullName(model.ElementType!)}, {FullName(model.ValueType!)}>(options)");
                         break;
 
+                    // One converter per arity, named with the tuple's own type arguments -- so the
+                    // instantiation is written out here rather than made at run time, which is the whole
+                    // point: the reflection provider reaches MakeGenericType, and a tuple was therefore
+                    // the one shape a generated context had to refuse.
+                    //
+                    // The eighth argument is the Rest rather than an eighth element, and Tuple8Converter
+                    // recurses into it. The Rest is registered too, by its own model, which the
+                    // dependency ordering puts first.
+                    case TypeKind.Tuple:
+                        EmitSimpleRegistration(builder, indent, model.Symbol,
+                            $"new Tuple{model.TupleArguments.Count}Converter<"
+                                + string.Join(", ", model.TupleArguments.Select(FullName))
+                                + ">(options)");
+                        break;
+
                     case TypeKind.Object:
                         EmitObjectRegistration(builder, indent, model);
                         break;

@@ -18,6 +18,12 @@ namespace Dahomey.Cbor.Tests.Cddl
         public BigInteger Big { get; set; }
         public CborDecimalFraction Price { get; set; }
         public CborBigFloat Scale { get; set; }
+
+        /// <summary>
+        /// A tuple, which is a fixed heterogeneous array rather than a collection of one type -- the one
+        /// shape <c>[* X]</c> cannot describe.
+        /// </summary>
+        public (int, string) Pair { get; set; }
     }
 
     [CborSerializable(typeof(CddlScalars))]
@@ -70,6 +76,24 @@ namespace Dahomey.Cbor.Tests.Cddl
             Assert.Contains("\"Scale\": #6.5([int, (int / #6.2(bstr) / #6.3(bstr))]),", schema);
         }
 
+        /// <summary>
+        /// A tuple is a fixed, heterogeneous array: one entry per element, in order, with the
+        /// <c>Rest</c> chain flattened because that is what the writer emits. <c>[* X]</c> would say any
+        /// length of one type, which is the one shape a tuple is not.
+        /// </summary>
+        /// <remarks>
+        /// The <c>string</c> element renders <c>tstr / nil</c> because this test project is
+        /// nullable-oblivious, and an element inside a tuple follows the same rule as a member: the
+        /// annotation is the contract, and its absence admits null.
+        /// </remarks>
+        [Fact]
+        public void ATupleIsAFixedHeterogeneousArray()
+        {
+            Assert.Contains(
+                "\"Pair\": [-2147483648..2147483647, tstr / nil],",
+                CddlScalarsContext.CddlSchema.Replace("\r\n", "\n"));
+        }
+
         [CddlFact]
         public void SerializerOutputValidatesAgainstTheSchema()
         {
@@ -81,6 +105,7 @@ namespace Dahomey.Cbor.Tests.Cddl
                 // A mantissa past a basic integer, so the instance exercises the bignum arm of the
                 // mantissa's choice rather than only the int one.
                 Scale = new CborBigFloat(BigInteger.Parse("18446744073709551616"), -1),
+                Pair = (7, "seven"),
             };
 
             byte[] cbor = Helper.Write(value, Context.Options).HexToBytes();

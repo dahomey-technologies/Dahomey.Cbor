@@ -1476,7 +1476,7 @@ namespace Dahomey.Cbor.Serialization
         /// been consumed". <c>Data</c> matches what <see cref="SkipDataItem"/> does for a break.
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ConsumeBreak()
+        internal void ConsumeBreak()
         {
             GetHeader();
             _state = CborReaderState.Data;

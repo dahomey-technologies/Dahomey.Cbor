@@ -139,6 +139,29 @@ namespace Dahomey.Cbor.Generator
                     break;
                 }
 
+                // A fixed, heterogeneous array: one entry per element, in order, with the Rest chain
+                // flattened because that is what the writer emits -- a nine-element tuple is nine items.
+                // Not `[* X]`, which would say any length of one type.
+                case TypeKind.Tuple:
+                {
+                    List<string> elements = new List<string>();
+
+                    foreach (ITypeSymbol element in TypeCollector.FlattenTupleElements((INamedTypeSymbol)type))
+                    {
+                        string? renderedElement = Render(element, byKey, ruleNames, options, Position.Value);
+
+                        if (renderedElement is null)
+                        {
+                            return null;
+                        }
+
+                        elements.Add(renderedElement);
+                    }
+
+                    rendered = "[" + string.Join(", ", elements) + "]";
+                    break;
+                }
+
                 default:
                     return null;
             }

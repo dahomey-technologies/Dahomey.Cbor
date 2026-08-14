@@ -23,6 +23,13 @@ namespace Dahomey.Cbor.Generator
         Dictionary,
         Object,
 
+        /// <summary>
+        /// A <c>ValueTuple</c>, which is one flat CBOR array of its elements. Kept apart from
+        /// <see cref="Collection"/> because its elements are heterogeneous and its converter takes one
+        /// type argument per element rather than a single element type.
+        /// </summary>
+        Tuple,
+
         /// <summary>Cannot be handled; the caller reports a diagnostic.</summary>
         Unsupported,
     }
@@ -92,6 +99,15 @@ namespace Dahomey.Cbor.Generator
 
         /// <summary>Object format, when <see cref="Kind"/> is <see cref="TypeKind.Object"/>.</summary>
         public string ObjectFormat { get; set; } = "StringKeyMap";
+
+        /// <summary>
+        /// A tuple's type arguments, when <see cref="Kind"/> is <see cref="TypeKind.Tuple"/>: one per
+        /// element up to seven, and for a longer tuple the seven plus the <c>Rest</c> holding the
+        /// overflow. These are the converter's type arguments, so the eighth is the <c>Rest</c>'s own
+        /// type rather than an element -- <c>Tuple8Converter</c> recurses into it, which is what covers
+        /// every arity with eight converters.
+        /// </summary>
+        public List<ITypeSymbol> TupleArguments { get; } = new List<ITypeSymbol>();
 
         /// <summary>Rendered C# literal for the discriminator, or null when the type has none.</summary>
         public string? Discriminator { get; set; }

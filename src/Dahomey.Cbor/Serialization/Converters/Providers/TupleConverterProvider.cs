@@ -26,6 +26,12 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 FieldInfo[] fields = type.GetFields();
                 switch (fields.Length)
                 {
+                    // Only reachable as the Rest of an eight-element tuple: C# has no one-element
+                    // tuple literal. It is a tuple all the same, and its converter is what the arity
+                    // below delegates to.
+                    case 1:
+                        return CreateGenericConverter(options, typeof(Tuple1Converter<>), fields[0].FieldType);
+
                     case 2:
                         return CreateGenericConverter(options, typeof(Tuple2Converter<,>), fields.Select(field => field.FieldType).ToArray());
 
@@ -44,9 +50,13 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                     case 7:
                         return CreateGenericConverter(options, typeof(Tuple7Converter<,,,,,,>), fields.Select(field => field.FieldType).ToArray());
 
+                    // Eight fields is seven items and a Rest, whatever the tuple's real arity: the
+                    // eighth type argument is the Rest's own type, and Tuple8Converter recurses into
+                    // it. So this case covers every arity from eight upwards, and the field count
+                    // never exceeds eight because that is how C# represents a tuple.
                     case 8:
                         return CreateGenericConverter(options, typeof(Tuple8Converter<,,,,,,,>), fields.Select(field => field.FieldType).ToArray());
-                    
+
                     default:
                         throw new CborException($"Tuples of length {fields.Length} are not supported");
                 }
