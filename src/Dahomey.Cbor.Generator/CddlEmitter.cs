@@ -30,9 +30,12 @@ namespace Dahomey.Cbor.Generator
                 byKey[model.Symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)] = model;
             }
 
-            IReadOnlyDictionary<string, string> ruleNames = TypeNames.BuildRuleNames(ordered);
-            Dictionary<string, PolymorphicShape> shapes =
-                CddlPolymorphism.BuildShapes(ordered, byKey, ruleNames);
+            // Shapes first, because a polymorphic type is emitted under a second rule name derived from
+            // its first, and the uniqueness pass has to reserve both together. Only the order of a
+            // choice's arms depends on the names, so that one step waits.
+            Dictionary<string, PolymorphicShape> shapes = CddlPolymorphism.BuildShapes(ordered, byKey);
+            IReadOnlyDictionary<string, string> ruleNames = TypeNames.BuildRuleNames(ordered, shapes);
+            CddlPolymorphism.SortArms(shapes, ruleNames);
 
             // Use sites resolve through their own name table: a member declared as a base type names
             // that base's `-poly` rule, a member declared as a leaf names the leaf's bare rule. Keeping

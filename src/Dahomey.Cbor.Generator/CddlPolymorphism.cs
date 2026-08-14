@@ -70,6 +70,27 @@ namespace Dahomey.Cbor.Generator
         {
             return EmitsPoly ? ruleName + "-poly" : ruleName;
         }
+
+        /// <summary>
+        /// The second rule name this type occupies, or null when it is emitted under one name only.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="ArmName"/> and <see cref="ReferenceName"/> mint this from a rule name that has
+        /// already been handed out, so it is never a candidate the uniqueness pass sees -- which is why
+        /// <see cref="TypeNames.BuildRuleNames"/> asks for it and reserves the two names together. A
+        /// type whose own declaration name reads <c>X-poly</c> would otherwise be free to take the
+        /// derived form of a polymorphic <c>X</c>, and two rules would be emitted under one name.
+        /// <para>
+        /// An over-approximation by one case: a type reported by CBOR1012 is skipped before either rule
+        /// is emitted, so its reservation holds a name nothing uses. That costs another type a suffix in
+        /// a compilation that already carries an error, which is cheaper than making the reservation
+        /// depend on diagnostics that have not run yet.
+        /// </para>
+        /// </remarks>
+        public string? DerivedRuleName(string ruleName)
+        {
+            return EmitsPoly ? ArmName(ruleName) : null;
+        }
     }
 
     /// <summary>
@@ -78,10 +99,15 @@ namespace Dahomey.Cbor.Generator
     /// </summary>
     internal static class CddlPolymorphism
     {
+        /// <remarks>
+        /// Takes no rule names, and that is what makes the ordering work: <see cref="TypeNames.BuildRuleNames"/>
+        /// needs to know which types emit a <c>-poly</c> rule *before* it hands names out, so the one
+        /// thing here that does depend on a name -- the order of a choice's arms -- is settled afterwards
+        /// by <see cref="SortArms"/>. Nothing else in a shape is derived from a rule name.
+        /// </remarks>
         public static Dictionary<string, PolymorphicShape> BuildShapes(
             IReadOnlyList<TypeModel> ordered,
-            IReadOnlyDictionary<string, TypeModel> byKey,
-            IReadOnlyDictionary<string, string> ruleNames)
+            IReadOnlyDictionary<string, TypeModel> byKey)
         {
             Dictionary<string, PolymorphicShape> shapes = new Dictionary<string, PolymorphicShape>();
 
@@ -119,11 +145,6 @@ namespace Dahomey.Cbor.Generator
 
             foreach (PolymorphicShape shape in shapes.Values)
             {
-                // Ordered by rule name rather than by collection order, so the emitted choice is a pure
-                // function of the source and the schema stays byte-stable across builds.
-                shape.Subtypes.Sort((left, right) => string.CompareOrdinal(
-                    ruleNames[Key(left.Symbol)], ruleNames[Key(right.Symbol)]));
-
                 shape.EmitsBare = shape.IsInstantiable
                     && !(shape.WritesDiscriminator && shape.Policy == "Always");
                 shape.EmitsPoly = shape.Subtypes.Count > 0
@@ -136,6 +157,21 @@ namespace Dahomey.Cbor.Generator
             }
 
             return shapes;
+        }
+
+        /// <summary>
+        /// Orders each type choice's arms by rule name rather than by collection order, so the emitted
+        /// choice is a pure function of the source and the schema stays byte-stable across builds.
+        /// </summary>
+        public static void SortArms(
+            IReadOnlyDictionary<string, PolymorphicShape> shapes,
+            IReadOnlyDictionary<string, string> ruleNames)
+        {
+            foreach (PolymorphicShape shape in shapes.Values)
+            {
+                shape.Subtypes.Sort((left, right) => string.CompareOrdinal(
+                    ruleNames[Key(left.Symbol)], ruleNames[Key(right.Symbol)]));
+            }
         }
 
         /// <summary>

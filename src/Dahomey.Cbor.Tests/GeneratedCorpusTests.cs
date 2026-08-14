@@ -89,6 +89,21 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            if (type == typeof(Cddl.Größe))
+            {
+                return new Cddl.Größe { Value = 3 };
+            }
+
+            if (type == typeof(Cddl.Café))
+            {
+                return new Cddl.Café { Name = "four" };
+            }
+
+            if (type == typeof(Cddl.Caf_00E9))
+            {
+                return new Cddl.Caf_00E9 { Value = 5 };
+            }
+
             if (type == typeof(GeneratedPerson))
             {
                 return new GeneratedPerson
@@ -449,6 +464,31 @@ namespace Dahomey.Cbor.Tests
             if (type == typeof(Cddl.CddlRuleNamingOtherHolder))
             {
                 return new Cddl.CddlRuleNamingOtherHolder { Value = new N.Other.Inner { Value = 2 } };
+            }
+
+            if (type == typeof(Cddl.Left.X))
+            {
+                return new Cddl.Left.X { Id = 6 };
+            }
+
+            if (type == typeof(Cddl.Left.X.poly))
+            {
+                return new Cddl.Left.X.poly { Value = 7 };
+            }
+
+            if (type == typeof(Cddl.Left.XSub))
+            {
+                return new Cddl.Left.XSub { Id = 8, Extra = 9 };
+            }
+
+            if (type == typeof(Cddl.Right.X))
+            {
+                return new Cddl.Right.X { Id = 10 };
+            }
+
+            if (type == typeof(Cddl.Right.poly))
+            {
+                return new Cddl.Right.poly { Value = 11 };
             }
 
             if (type == typeof(Cddl.CddlScalars))

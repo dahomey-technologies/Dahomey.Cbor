@@ -33,13 +33,10 @@ namespace N
 namespace Dahomey.Cbor.Tests.Cddl
 {
     // N.Other.Inner is reached transitively through this member rather than declared as its own
-    // [CborSerializable] root. Emitter.cs's accessor generation (a separate, unrelated code path
-    // that also calls TypeNames.AccessorName, with no disambiguation of its own) only emits one
-    // accessor per *root*, keyed on the same colliding short name -- declaring both N.Outer.Inner
-    // and N.Other.Inner as roots reproduces that pre-existing accessor-name collision too and the
-    // generated context fails to compile (CS0102) before the schema is ever reached. Routing one of
-    // the pair in as a plain member sidesteps that unrelated bug while still putting both types in
-    // the same context's TypeModel list, which is all TypeNames.BuildRuleNames needs to collide on.
+    // [CborSerializable] root, which keeps the fixture to the one collision it is about: routing one
+    // of the pair in as a plain member still puts both types in the same context's TypeModel list,
+    // which is all TypeNames.BuildRuleNames needs to collide on, without also exercising the separate
+    // accessor-name collision that Emitter.UniqueAccessorName resolves for two same-short-named roots.
     public class CddlRuleNamingOtherHolder
     {
         public N.Other.Inner Value { get; set; }
@@ -59,8 +56,9 @@ namespace Dahomey.Cbor.Tests.Cddl
     /// same-named nested types in different namespaces collide in that short name --
     /// <c>N.Outer.Inner</c> and <c>N.Other.Inner</c> are both just <c>Inner</c> -- so
     /// <c>BuildRuleNames</c> must fall back to a namespace- and containing-type-qualified name for
-    /// every member of the collision. Without that fallback the gem would silently accept two rules
-    /// with the same name in one schema file, one of them shadowing the other.
+    /// every member of the collision. Without that fallback the schema carries two rules under one
+    /// name, which the gem accepts silently when their bodies are identical, the second shadowing the
+    /// first.
     /// </summary>
     public class CddlRuleNamingTests
     {
