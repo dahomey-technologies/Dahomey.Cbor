@@ -1,5 +1,7 @@
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization;
+using System;
+using System.Collections.Generic;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests.Cddl
@@ -14,10 +16,15 @@ namespace Dahomey.Cbor.Tests.Cddl
         public int Value { get; set; }
     }
 
-    /// <summary>The same, with one escape, and the pair below asks for one rule name.</summary>
+    /// <summary>
+    /// The same, with one escape, and the pair below asks for one rule name. Its member differs from
+    /// <see cref="Caf_00E9"/>'s deliberately: two rules with identical bodies are indistinguishable in
+    /// the emitted schema, so which of the pair keeps the bare name would be unassertable, and the gem
+    /// would take a duplicate between them as a warning rather than an error.
+    /// </summary>
     public class Café
     {
-        public int Value { get; set; }
+        public string Name { get; set; }
     }
 
     /// <summary>
@@ -41,23 +48,31 @@ namespace Dahomey.Cbor.Tests.Cddl
     /// <summary>
     /// A rule name has to be an RFC 8610 <c>id</c>, and no two rules in one schema may share one.
     /// Neither is a preference: the gem stops on a non-ASCII rule name with a parse error and exit 65,
-    /// and it reads a file whose second definition of a rule shadows the first without saying anything
-    /// at all.
+    /// and what it does with a duplicate depends on the two bodies — an identical redefinition is a
+    /// warning on stderr and exit 0, differing bodies a <c>RuntimeError</c> and exit 1.
     /// </summary>
     /// <remarks>
-    /// The second is the failure worth having a test for, because it is the one that stays quiet. A
-    /// schema whose rules collide describes something other than the types it was generated from, and
-    /// every instance check run against it passes or fails on the surviving rule.
+    /// The identical case is the failure worth having a test for, because it is the one that stays
+    /// quiet: a schema whose rules collide describes something other than the types it was generated
+    /// from, and every instance check run against it passes or fails on the surviving rule.
     /// </remarks>
     public class CddlIdentifierSyntaxTests
     {
+        /// <summary>
+        /// Asserted over the rule names rather than the whole schema: CDDL text literals accept
+        /// <c>NONASCII</c>, so a member named <c>Grüße</c> reaches the output as itself and is no
+        /// evidence either way.
+        /// </summary>
         [Fact]
         public void EveryCharacterOutsideAsciiIsEscapedInARuleName()
         {
             string schema = CddlIdentifierSyntaxContext.CddlSchema.Replace("\r\n", "\n");
 
-            Assert.DoesNotContain("ö", schema);
-            Assert.DoesNotContain("ß", schema);
+            foreach (string ruleName in RuleNames(schema))
+            {
+                Assert.All(ruleName, character => Assert.InRange(character, (char)0x20, (char)0x7E));
+            }
+
             Assert.Contains("Gr_00F6_00DFe = {\n", schema);
         }
 
@@ -67,13 +82,31 @@ namespace Dahomey.Cbor.Tests.Cddl
         /// them in — two builds of one context have to agree, since a schema is compared against other
         /// copies of itself. <c>_</c> sorts below <c>é</c>, so the type spelling the escape out keeps it.
         /// </summary>
+        /// <remarks>
+        /// The bodies say which is which. Asserting only that both names are present would pass with the
+        /// tie-break reversed, which is the one regression the ordinal ordering exists to prevent.
+        /// </remarks>
         [Fact]
         public void TwoTypesAskingForOneRuleNameEachGetTheirOwn()
         {
             string schema = CddlIdentifierSyntaxContext.CddlSchema.Replace("\r\n", "\n");
 
-            Assert.Contains("Caf_00E9 = {\n", schema);
-            Assert.Contains("Caf_00E9-2 = {\n", schema);
+            Assert.Contains("Caf_00E9 = {\n  \"Value\"", schema);
+            Assert.Contains("Caf_00E9-2 = {\n  \"Name\"", schema);
+        }
+
+        /// <summary>The left-hand side of every rule in the schema.</summary>
+        private static IEnumerable<string> RuleNames(string schema)
+        {
+            foreach (string line in schema.Split('\n'))
+            {
+                int assignment = line.IndexOf(" = ", StringComparison.Ordinal);
+
+                if (assignment > 0 && !line.StartsWith(" ", StringComparison.Ordinal))
+                {
+                    yield return line.Substring(0, assignment);
+                }
+            }
         }
 
         /// <summary>

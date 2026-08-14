@@ -65,12 +65,20 @@ namespace Dahomey.Cbor.Generator
         /// <remarks>
         /// The last step is what makes the guarantee unconditional, and it is load-bearing rather than
         /// defensive: escaping folds a character outside ASCII onto a <c>_</c> sequence that a C# name
-        /// is free to contain literally, so <c>Café</c> and <c>Caf_00E9</c> reach it as one name. A
-        /// duplicate rule name is the one malformation an emitted schema can carry without any tool
-        /// complaining -- the gem reads a file whose second definition of a rule silently shadows the
-        /// first -- so it cannot be left to the shape of the names.
+        /// is free to contain literally, so <c>Café</c> and <c>Caf_00E9</c> reach it as one name. What a
+        /// duplicate rule name then costs depends on the two bodies, and the quiet case is the reason to
+        /// settle it here: the gem takes an *identical* redefinition as a warning on stderr and exits 0,
+        /// so a schema whose rules collide can pass every check downstream while describing something
+        /// other than the types it came from. Differing bodies are a <c>RuntimeError</c> and exit 1.
+        /// <para>
+        /// <paramref name="shapes"/> is what a type is emitted under rather than what it asks for: a
+        /// polymorphic type occupies a second name (<see cref="PolymorphicShape.DerivedRuleName"/>) that
+        /// is minted from the first, so the two are reserved together.
+        /// </para>
         /// </remarks>
-        public static IReadOnlyDictionary<string, string> BuildRuleNames(IReadOnlyList<TypeModel> ordered)
+        public static IReadOnlyDictionary<string, string> BuildRuleNames(
+            IReadOnlyList<TypeModel> ordered,
+            IReadOnlyDictionary<string, PolymorphicShape> shapes)
         {
             Dictionary<string, List<TypeModel>> byShortName = new Dictionary<string, List<TypeModel>>();
 
@@ -99,7 +107,7 @@ namespace Dahomey.Cbor.Generator
                 }
             }
 
-            return ResolveRemainingCollisions(candidates);
+            return ResolveRemainingCollisions(candidates, shapes);
         }
 
         /// <summary>
@@ -115,9 +123,18 @@ namespace Dahomey.Cbor.Generator
         /// of one context disagree. A suffixed name is checked against the names already handed out
         /// rather than assumed free, since a candidate elsewhere in the schema may already read
         /// <c>X-2</c>.
+        /// <para>
+        /// The names a type occupies are taken together or not at all, because a polymorphic type is
+        /// emitted under two: rejecting <c>X</c> for a type that would then have had to give up
+        /// <c>X-poly</c> is what keeps the two rules of one type from being split across a suffix. That
+        /// is also why the uncontested pass can suffix: two candidates that differ can still contend,
+        /// one of them reading <c>X-poly</c> where the other is <c>X</c>, so it walks in ordinal order
+        /// like the contested one rather than in dictionary order.
+        /// </para>
         /// </remarks>
         private static IReadOnlyDictionary<string, string> ResolveRemainingCollisions(
-            IReadOnlyDictionary<string, string> candidates)
+            IReadOnlyDictionary<string, string> candidates,
+            IReadOnlyDictionary<string, PolymorphicShape> shapes)
         {
             Dictionary<string, List<string>> keysByCandidate =
                 new Dictionary<string, List<string>>(StringComparer.Ordinal);
@@ -138,13 +155,14 @@ namespace Dahomey.Cbor.Generator
 
             // Uncontested candidates first, and all of them, so a suffix minted below cannot take a
             // name that some other type was always going to hold.
-            foreach (KeyValuePair<string, List<string>> entry in keysByCandidate)
+            IEnumerable<string> uncontested = keysByCandidate
+                .Where(entry => entry.Value.Count == 1)
+                .Select(entry => entry.Key)
+                .OrderBy(candidate => candidate, StringComparer.Ordinal);
+
+            foreach (string candidate in uncontested)
             {
-                if (entry.Value.Count == 1)
-                {
-                    names[entry.Value[0]] = entry.Key;
-                    used.Add(entry.Key);
-                }
+                Take(keysByCandidate[candidate][0], candidate, names, used, shapes);
             }
 
             IEnumerable<string> contested = keysByCandidate
@@ -159,18 +177,47 @@ namespace Dahomey.Cbor.Generator
 
                 foreach (string key in keys)
                 {
-                    string name = candidate;
-
-                    for (int suffix = 2; !used.Add(name); suffix++)
-                    {
-                        name = candidate + "-" + suffix.ToString(CultureInfo.InvariantCulture);
-                    }
-
-                    names[key] = name;
+                    Take(key, candidate, names, used, shapes);
                 }
             }
 
             return names;
+        }
+
+        /// <summary>
+        /// Gives one type the first form of <paramref name="candidate"/> whose every name is free, and
+        /// records all of them as taken.
+        /// </summary>
+        private static void Take(
+            string key,
+            string candidate,
+            Dictionary<string, string> names,
+            HashSet<string> used,
+            IReadOnlyDictionary<string, PolymorphicShape> shapes)
+        {
+            shapes.TryGetValue(key, out PolymorphicShape? shape);
+
+            string name = candidate;
+
+            for (int suffix = 2; ; suffix++)
+            {
+                string? derived = shape?.DerivedRuleName(name);
+
+                if (!used.Contains(name) && (derived is null || !used.Contains(derived)))
+                {
+                    used.Add(name);
+
+                    if (derived is not null)
+                    {
+                        used.Add(derived);
+                    }
+
+                    names[key] = name;
+                    return;
+                }
+
+                name = candidate + "-" + suffix.ToString(CultureInfo.InvariantCulture);
+            }
         }
 
         /// <summary>
@@ -187,6 +234,12 @@ namespace Dahomey.Cbor.Generator
         /// character instead would collapse <c>Café</c> and <c>Cafe</c> onto one rule. A character
         /// outside the BMP is one code point arriving as a surrogate pair, so the pair is escaped
         /// together rather than as two lone surrogates.
+        /// <para>
+        /// The escape is not injective, and does not need to be: a hex run is not self-delimiting, so
+        /// <c>U+1F60</c> followed by a literal <c>0</c> and <c>U+1F600</c> both fold to <c>_1F600</c>.
+        /// That is the same collision <c>Café</c> and <c>Caf_00E9</c> reach by another route, and
+        /// <see cref="ResolveRemainingCollisions"/> is what settles both.
+        /// </para>
         /// </remarks>
         private static string SanitizeRuleName(string name)
         {
