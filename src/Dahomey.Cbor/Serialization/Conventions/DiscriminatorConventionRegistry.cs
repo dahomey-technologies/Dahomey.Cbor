@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -53,6 +54,18 @@ namespace Dahomey.Cbor.Serialization.Conventions
         {
             return _conventions.Count != 0;
         }
+
+        /// <summary>
+        /// The registered conventions, most recently registered first.
+        /// </summary>
+        /// <remarks>
+        /// For asking a document what it carries when no convention resolved for the declared type,
+        /// which is exactly the case where a subtype was never registered: the type says nothing, so
+        /// the only way to tell a missing registration from a genuinely undiscriminated document is to
+        /// look for what each convention would have written. Not public, because it exposes registration
+        /// order, and nothing outside the read path has a use for it.
+        /// </remarks>
+        internal IEnumerable<IDiscriminatorConvention> Conventions => _conventions;
 
         /// <summary>
         /// Registers the convention.This behaves like a stack, so the 

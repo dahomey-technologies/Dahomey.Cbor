@@ -1,4 +1,5 @@
 ﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.ObjectModel;
 using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Serialization.Converters.Mappings;
@@ -811,6 +812,16 @@ namespace Dahomey.Cbor.Serialization.Converters
                     }
                     else
                     {
+                        // No convention resolved for the declared type, which for an interface or an
+                        // abstract class is what a subtype nobody registered looks like from here: the
+                        // document may carry a discriminator and nothing above has looked for one. Asked
+                        // before CreateInstance so the caller is told which registration is missing
+                        // rather than that a CreatorMapping is.
+                        if (_isInterfaceOrAbstract)
+                        {
+                            ThrowIfADiscriminatorIsPresent(ref reader);
+                        }
+
                         context.converter = this;
                     }
 
@@ -1108,6 +1119,86 @@ namespace Dahomey.Cbor.Serialization.Converters
                     ? MapKeyErrors.Duplicate(key)
                     : MapKeyErrors.Rejected(key, exception.Message));
             }
+        }
+
+        /// <summary>
+        /// Refuses a document carrying a discriminator that no convention resolved for
+        /// <typeparamref name="T"/>, naming the registration that would resolve it.
+        /// </summary>
+        /// <remarks>
+        /// Only reachable where this converter cannot instantiate its own type and no convention was
+        /// found for it — a base declared abstract or as an interface, whose subtype was never passed to
+        /// <c>DiscriminatorConventionRegistry.RegisterType</c>. Writing needs no registration, because it
+        /// goes through the runtime type and registers as a side effect of building that type's
+        /// converter; reading only ever names the declared type, so the asymmetry is easy to walk into
+        /// and the document looks complete.
+        /// <para>
+        /// Every registered convention is asked, since which one would have written the key is exactly
+        /// what is not known here. Where none of them finds anything the document really is
+        /// undiscriminated, and the missing <c>CreatorMapping</c> that <see cref="CreateInstance"/>
+        /// reports is the right answer.
+        /// </para>
+        /// </remarks>
+        private void ThrowIfADiscriminatorIsPresent(ref CborReader reader)
+        {
+            foreach (IDiscriminatorConvention convention in _registry.DiscriminatorConventionRegistry.Conventions)
+            {
+                CborReaderBookmark bookmark = reader.GetBookmark();
+                CborValue? discriminator = TryReadDiscriminator(ref reader, convention);
+                reader.ReturnToBookmark(bookmark);
+
+                if (discriminator != null)
+                {
+                    throw new CborException(
+                        MemberMappingErrors.UnregisteredDiscriminatedSubtype(typeof(T), discriminator));
+                }
+            }
+        }
+
+        /// <summary>
+        /// The discriminator value this document carries for <paramref name="convention"/>, or null.
+        /// </summary>
+        /// <remarks>
+        /// Read as a <see cref="CborValue"/> rather than through the convention, which would resolve it
+        /// to a <see cref="Type"/> and fail for the very value being reported. That also renders a
+        /// string and an integer discriminator without this method knowing which it is.
+        /// <para>
+        /// The three arms mirror where each format puts the discriminator, as the resolution above does:
+        /// a named member, index 0, and the first item behind a semantic tag.
+        /// </para>
+        /// </remarks>
+        private CborValue? TryReadDiscriminator(ref CborReader reader, IDiscriminatorConvention convention)
+        {
+            switch (_objectMapping.ObjectFormat)
+            {
+                case CborObjectFormat.StringKeyMap:
+                    if (!FindItem(ref reader, convention.MemberName))
+                    {
+                        return null;
+                    }
+
+                    break;
+
+                case CborObjectFormat.IntKeyMap:
+                    if (!FindItem(ref reader, 0)) // discriminator index is always 0
+                    {
+                        return null;
+                    }
+
+                    break;
+
+                case CborObjectFormat.Array:
+                default:
+                    if (!reader.TryReadSemanticTag(out ulong semanticTag)
+                        || semanticTag != _options.DiscriminatorSemanticTag)
+                    {
+                        return null;
+                    }
+
+                    break;
+            }
+
+            return _registry.ConverterRegistry.Lookup<CborValue>().Read(ref reader);
         }
 
         private static bool FindItem(ref CborReader reader, ReadOnlySpan<byte> name)

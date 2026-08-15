@@ -36,5 +36,21 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             return $"class/struct {objectType.Name} holds duplicated MemberIndex fields/properties";
         }
+
+        /// <summary>
+        /// A document carrying a discriminator for a subtype the registry does not know.
+        /// </summary>
+        /// <remarks>
+        /// Names the value as well as the remedy, because the remedy is per subtype: a caller reading a
+        /// hierarchy has to register each concrete type, and the value is what says which one this
+        /// document needed. Kept here so the message stays one string if a second caller ever raises it.
+        /// </remarks>
+        public static string UnregisteredDiscriminatedSubtype(Type objectType, object discriminator)
+        {
+            return $"no type is registered for the discriminator {discriminator} carried by this document, "
+                + $"so it cannot be read as {objectType.Name}; call "
+                + $"CborOptions.Registry.DiscriminatorConventionRegistry.RegisterType<T>() for the concrete "
+                + "type that discriminator denotes";
+        }
     }
 }
