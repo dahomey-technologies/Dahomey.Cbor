@@ -617,21 +617,16 @@ namespace Dahomey.Cbor
                         // this one would never be returned until the writer wrote more or completed.
                         SequencePosition end = buffer.GetPosition(offset: consumed);
                         reader.AdvanceTo(end, examined: end);
-                        result = default;
                         return item;
                     }
-                    else
-                    {
-                        if (result.IsCompleted)
-                        {
-                            // Nothing more is coming, so the failure that stopped the read is the
-                            // answer. Rethrown rather than replaced, to keep its message and its path;
-                            // captured here rather than where it was caught, since every speculative
-                            // attempt catches one and only this branch has any use for it.
-                            ExceptionDispatchInfo.Capture(failure).Throw();
-                        }
 
-                        result = default;
+                    if (result.IsCompleted)
+                    {
+                        // Nothing more is coming, so the failure that stopped the read is the answer.
+                        // Rethrown rather than replaced, to keep its message and its path; captured
+                        // here rather than where it was caught, since every speculative attempt
+                        // catches one and only this branch has any use for it.
+                        ExceptionDispatchInfo.Capture(failure).Throw();
                     }
                 }
                 catch (Exception) when (!result.IsCompleted)
@@ -642,8 +637,6 @@ namespace Dahomey.Cbor
                     // wrong (IOException)
                     // 
                     // Anyways, if the pipe is complete, the exception will not be catched (see filter)
-
-                    result = default;
                 }
                 finally
                 {
