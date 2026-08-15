@@ -634,7 +634,7 @@ namespace Dahomey.Cbor
 
                 try
                 {
-                    item = converter.Read(ref reader);
+                    item = RootReader.Read(ref reader, converter);
                     consumed = reader.GetBookmark().currentPos;
                     failure = null;
                     return true;

@@ -45,8 +45,8 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Assert.StartsWith("this creator refuses 12", exception.Message);
 
-            // Rethrown rather than wrapped, so the path the converters enriched on the way out survives
-            // too - the same "$" Cbor.Deserialize reports for these bytes.
+            // Rethrown rather than wrapped, so the path collected on the way out survives too - the
+            // same "$" Cbor.Deserialize reports for these bytes.
             Assert.Equal("$", exception.Path);
         }
 
@@ -65,7 +65,34 @@ namespace Dahomey.Cbor.Tests.Issues
             CborException exception = await Assert.ThrowsAsync<CborException>(
                 async () => await Cbor.ReadNextItemAsync<RefusedByItsConverter>(pipeReader, options));
 
-            Assert.Equal("this converter refuses what it read", exception.Message);
+            Assert.StartsWith("this converter refuses what it read", exception.Message);
+            Assert.Equal("$", exception.Path);
+        }
+
+        /// <summary>
+        /// The path is the root reader's doing, not the object converter's: a failure on the root value
+        /// itself - a document that contradicts the requested type outright, with no member or index to
+        /// name - is placed at <c>$</c> here exactly as <c>Cbor.Deserialize</c> places it.
+        /// </summary>
+        /// <remarks>
+        /// Worth its own case because the two tests above pass either way: their types are objects, and
+        /// <c>ObjectConverter</c> marks the path itself on the way out. A primitive at the root passes
+        /// through no such converter, so it is the one that pins <c>RootReader</c> being on this path.
+        /// </remarks>
+        [Fact]
+        public async Task AFailureOnTheRootValueIsPlacedAtTheRootAsync()
+        {
+            byte[] bytes = OneWholeItem.HexToBytes();   // a map, where an int was asked for
+
+            CborException direct = Assert.Throws<CborException>(() => Cbor.Deserialize<int>(bytes));
+
+            PipeReader pipeReader = PipeReader.Create(new ReadOnlySequence<byte>(bytes));
+            CborException piped = await Assert.ThrowsAsync<CborException>(
+                async () => await Cbor.ReadNextItemAsync<int>(pipeReader));
+
+            Assert.Equal("$", piped.Path);
+            Assert.Equal(direct.Path, piped.Path);
+            Assert.Equal(direct.Message, piped.Message);
         }
 
         /// <summary>
