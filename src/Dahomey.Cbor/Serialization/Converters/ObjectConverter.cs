@@ -21,6 +21,20 @@ namespace Dahomey.Cbor.Serialization.Converters
         IReadOnlyList<IMemberConverter> MemberConvertersForWrite { get; }
         ByteBufferDictionary<MemberReadEntry> MemberConvertersForRead { get; }
         Dictionary<int, MemberReadEntry> MemberConvertersForReadByIndex { get; }
+
+        /// <summary>
+        /// The declared member index occupying each position of a
+        /// <see cref="CborObjectFormat.Array"/> document, in the order the members are written. Empty
+        /// for every other object format, which name their members in the document itself.
+        /// </summary>
+        /// <remarks>
+        /// An array carries no keys, so the only thing a position can be resolved against is the
+        /// member list, and this is that list reduced to what the read needs from it. Exposed on the
+        /// interface for the same reason as <see cref="MemberConvertersForReadByIndex"/>: on a
+        /// polymorphic read the positions belong to the resolved type, which the declared type's
+        /// converter reaches only through here.
+        /// </remarks>
+        IReadOnlyList<int> MemberIndexesByPosition { get; }
         IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead { get; }
         IObjectMapping ObjectMapping { get; }
     }
@@ -47,7 +61,19 @@ namespace Dahomey.Cbor.Serialization.Converters
             public Dictionary<int, object>? creatorValuesByIndex;
             public Dictionary<int, object>? regularValuesByIndex;
             public MemberReadState readState;
-            public int memberIndex;
+
+            /// <summary>
+            /// How many members of a <see cref="CborObjectFormat.Array"/> document this read has
+            /// already consumed, and so which position the next item holds. Unused by the map
+            /// formats, which read their key from the document.
+            /// </summary>
+            /// <remarks>
+            /// A position, not a member index: the two coincide only for a type whose declared
+            /// indexes start at zero and run consecutively, and treating this as an index is what
+            /// lost the members of every type that did not. <see cref="MemberIndexesByPosition"/>
+            /// turns it into one.
+            /// </remarks>
+            public int memberPosition;
         }
 
         public struct WriterContext
@@ -100,6 +126,15 @@ namespace Dahomey.Cbor.Serialization.Converters
         private int _nextReadOrdinal = 1;
         public List<IMemberConverter> _requiredMemberConvertersForRead = new List<IMemberConverter>();
         private readonly List<IMemberConverter> _memberConvertersForWrite;
+
+        /// <inheritdoc cref="IObjectConverter.MemberIndexesByPosition"/>
+        /// <remarks>
+        /// Built alongside <see cref="_memberConvertersForWrite"/> and from the same mappings in the
+        /// same pass, because the positions this describes are the ones that list produces: the write
+        /// emits those members in order and nothing else, so any list assembled separately could only
+        /// drift from what is actually on the wire.
+        /// </remarks>
+        private readonly int[] _memberIndexesByPosition;
         private List<IMemberConverter>? _deterministicMemberConvertersForWrite;
         private readonly CborOptions _options;
         private readonly SerializationRegistry _registry;
@@ -169,6 +204,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         public ByteBufferDictionary<MemberReadEntry> MemberConvertersForRead => _memberConvertersForRead;
         public Dictionary<int, MemberReadEntry> MemberConvertersForReadByIndex => _memberConvertersForReadByIndex;
         public IReadOnlyList<IMemberConverter> RequiredMemberConvertersForRead => _requiredMemberConvertersForRead;
+        public IReadOnlyList<int> MemberIndexesByPosition => _memberIndexesByPosition;
         public IObjectMapping ObjectMapping => _objectMapping;
 
         public ObjectConverter(CborOptions options)
@@ -195,6 +231,11 @@ namespace Dahomey.Cbor.Serialization.Converters
             _objectMapping = _registry.ObjectMappingRegistry.Lookup<T>();
 
             _memberConvertersForWrite = new List<IMemberConverter>();
+
+            // Positions exist only in the Array format; every other format keys its members in the
+            // document, so there is nothing for a position to resolve against and nothing to collect.
+            List<int>? memberIndexesByPosition =
+                _objectMapping.ObjectFormat == CborObjectFormat.Array ? new List<int>() : null;
 
             foreach (IMemberMapping memberMapping in _objectMapping.GetMemberMappingsForConverter(this))
             {
@@ -288,8 +329,27 @@ namespace Dahomey.Cbor.Serialization.Converters
                 if (memberMapping.CanBeSerialized)
                 {
                     _memberConvertersForWrite.Add(memberConverter);
+
+                    // The discriminator holds a position of its own when it is written, but it is not
+                    // a member and is resolved by its semantic tag rather than by counting -- see the
+                    // Array arm of ReadItem, which consumes that item before any position is counted.
+                    // Leaving it out is also what makes the count independent of whether the policy
+                    // wrote one for this particular document.
+                    //
+                    // A member that can be written but not read still takes a position: the writer
+                    // emits it, so every member after it sits one place further along, and dropping it
+                    // here would shift them all. It resolves to an index no read lookup holds, which
+                    // skips the item and leaves the positions intact.
+                    if (memberIndexesByPosition != null
+                        && memberMapping is not IDiscriminatorMapping
+                        && memberConverter.MemberIndex.HasValue)
+                    {
+                        memberIndexesByPosition.Add(memberConverter.MemberIndex.Value);
+                    }
                 }
             }
+
+            _memberIndexesByPosition = memberIndexesByPosition?.ToArray() ?? Array.Empty<int>();
 
             _isInterfaceOrAbstract = typeof(T).IsInterface || typeof(T).IsAbstract;
             _isStruct = typeof(T).IsStruct();
@@ -725,8 +785,14 @@ namespace Dahomey.Cbor.Serialization.Converters
                                         context.converter = this;
                                     }
 
-                                    // increment to skip discriminator index even when the semantic tag is not present
-                                    context.memberIndex++;
+                                    // No position is counted here, in either branch. The discriminator
+                                    // is not one of the members positions are counted over, so when it
+                                    // was present this call consumed its item and the next call is
+                                    // still at position 0; when it was absent, the item this call is
+                                    // looking at IS position 0. Counting one here instead made the
+                                    // read start at the second member of a type whose declared indexes
+                                    // did not happen to begin at 1, and made that offset depend on
+                                    // whether some other type in the hierarchy had been registered.
                                 }
                                 break;
                         }
@@ -860,38 +926,60 @@ namespace Dahomey.Cbor.Serialization.Converters
                     }
                     break;
                 case CborObjectFormat.Array:
-                    try
                     {
-                        if (context.creatorValuesByIndex == null)
-                        {
-                            if (_isStruct)
-                            {
-                                ReadValueForStruct(ref reader, ref context.obj, context.memberIndex, ref context.readState);
-                            }
-                            else
-                            {
-                                context.converter.ReadValue(ref reader, context.obj!, context.memberIndex, ref context.readState);
-                            }
-                        }
-                        else if (context.converter.ReadValue(ref reader, context.memberIndex, ref context.readState, out object? value))
-                        {
-                            if (context.converter.ObjectMapping.IsCreatorMember(context.memberIndex))
-                            {
-                                AddMemberValue(ref reader, context.readState.Mode, context.creatorValuesByIndex, context.memberIndex, value);
-                            }
-                            else
-                            {
-                                AddMemberValue(ref reader, context.readState.Mode, context.regularValuesByIndex!, context.memberIndex, value);
-                            }
-                        }
-                    }
-                    catch (CborException exception)
-                    {
-                        PushMemberSegment(exception, context.converter, context.memberIndex);
-                        throw;
-                    }
+                        // An array names nothing, so what the document supplies is a position, and the
+                        // member holding that position is the one the type declares there. The declared
+                        // index is then what everything downstream is keyed on -- the read lookups, the
+                        // creator's member list, the failure path -- exactly as in the map formats,
+                        // because that index is what those were built from. Reading the position itself
+                        // as the index is what made a type whose indexes did not start at 0 and run
+                        // consecutively lose its members, since only then are the two the same number.
+                        IReadOnlyList<int> memberIndexesByPosition = context.converter.MemberIndexesByPosition;
+                        int position = context.memberPosition++;
 
-                    context.memberIndex++;
+                        if (position >= memberIndexesByPosition.Count)
+                        {
+                            // More items than the type has members to put in them. There is no declared
+                            // index to name, so the position is reported instead - the only thing about
+                            // this item the type has anything to say about.
+                            HandleUnknownIndex(ref reader, typeof(T), position);
+                            reader.SkipDataItem();
+                            break;
+                        }
+
+                        int memberIndex = memberIndexesByPosition[position];
+
+                        try
+                        {
+                            if (context.creatorValuesByIndex == null)
+                            {
+                                if (_isStruct)
+                                {
+                                    ReadValueForStruct(ref reader, ref context.obj, memberIndex, ref context.readState);
+                                }
+                                else
+                                {
+                                    context.converter.ReadValue(ref reader, context.obj!, memberIndex, ref context.readState);
+                                }
+                            }
+                            else if (context.converter.ReadValue(ref reader, memberIndex, ref context.readState, out object? value))
+                            {
+                                if (context.converter.ObjectMapping.IsCreatorMember(memberIndex))
+                                {
+                                    AddMemberValue(ref reader, context.readState.Mode, context.creatorValuesByIndex, memberIndex, value);
+                                }
+                                else
+                                {
+                                    AddMemberValue(ref reader, context.readState.Mode, context.regularValuesByIndex!, memberIndex, value);
+                                }
+                            }
+                        }
+                        catch (CborException exception)
+                        {
+                            PushMemberSegment(exception, context.converter, memberIndex);
+                            throw;
+                        }
+                    }
                     break;
             }
         }

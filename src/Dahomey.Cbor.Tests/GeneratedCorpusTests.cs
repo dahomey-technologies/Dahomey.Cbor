@@ -615,20 +615,21 @@ namespace Dahomey.Cbor.Tests
         /// with a reason attached and not something a shape can drift into.
         /// </summary>
         /// <remarks>
-        /// Both entries were reproduced against a plain <c>new CborOptions()</c> with no generated
-        /// context in play, so they are pre-existing library defects rather than anything source
-        /// generation does differently. All of them stay in
-        /// <see cref="GeneratedBytesMatchReflectionBytes"/>, which they pass: the two writers agree
+        /// The entry was reproduced against a plain <c>new CborOptions()</c> with no generated
+        /// context in play, so it is a pre-existing library defect rather than anything source
+        /// generation does differently. It stays in
+        /// <see cref="GeneratedBytesMatchReflectionBytes"/>, which it passes: the two writers agree
         /// byte for byte and it is the shared reader that cannot consume the result.
         /// <list type="bullet">
         /// <item><description>A member declared as an abstract class or an interface. The
         /// discriminator is written -- <c>"_t": "circle"</c> is in the bytes -- but reading such a
         /// member asks for a <c>CreatorMapping</c> instead of resolving it.</description></item>
-        /// <item><description><c>Array</c> object format on a type carrying no discriminator. The
-        /// writer packs the first member into slot 0 while the reader treats slot 0 as the
-        /// discriminator's, so <c>CddlRow { Id = 2, Name = "row" }</c> writes <c>[2, "row"]</c> and
-        /// reads <c>"row"</c> back as <c>Id</c>.</description></item>
         /// </list>
+        /// <para>
+        /// The <c>Array</c> object format entries -- <c>CddlRow</c>, <c>CddlArrayBase</c> and
+        /// <c>CddlArrayDerived</c>, whose declared indexes start at 1 rather than 0 -- were removed
+        /// once #222 was fixed, and now round-trip here rather than being excluded from the theory.
+        /// </para>
         /// </remarks>
         private static readonly HashSet<Type> NotReadBackByEitherPath = new HashSet<Type>
         {
@@ -636,9 +637,6 @@ namespace Dahomey.Cbor.Tests
             typeof(Cddl.CddlEventLog),
             typeof(Cddl.CddlOutbox),
             typeof(Cddl.CddlEscapedHolder),
-            typeof(Cddl.CddlRow),
-            typeof(Cddl.CddlArrayBase),
-            typeof(Cddl.CddlArrayDerived),
         };
 
         public static IEnumerable<object[]> RoundTrippableTypes()
