@@ -584,25 +584,27 @@ namespace Dahomey.Cbor
                 ReadOnlySequence<byte> buffer = result.Buffer;
                 if (buffer.IsEmpty)
                 {
+                    reader.AdvanceTo(buffer.Start, examined: buffer.End);
                     return default;
                 }
+
+                // Every route out of the read below ends it, including the ones that throw. A
+                // PipeReader left between a ReadAsync and its AdvanceTo answers every later call with
+                // "Reading is already in progress" rather than with what actually happened, so a
+                // failure reported once would be masked from then on.
+                bool advanced = false;
 
                 try
                 {
                     if (TryReadItem(buffer, options ?? CborOptions.Default, out TItem? item, out var consumed, out ExceptionDispatchInfo? failure))
                     {
+                        advanced = true;
                         reader.AdvanceTo(buffer.GetPosition(offset: consumed), examined: buffer.End);
                         result = default;
                         return item;
                     }
                     else
                     {
-                        // Consumes nothing either way: the item that stopped the read is left where it
-                        // is. On the throwing branch this is what ends the pending read - a PipeReader
-                        // left mid-read answers every later call with "Reading is already in progress"
-                        // rather than with the failure below.
-                        reader.AdvanceTo(buffer.Start, examined: buffer.End);
-
                         if (result.IsCompleted)
                         {
                             // Nothing more is coming, so the failure that stopped the read is the
@@ -622,8 +624,15 @@ namespace Dahomey.Cbor
                     // 
                     // Anyways, if the pipe is complete, the exception will not be catched (see filter)
 
-                    reader.AdvanceTo(buffer.Start, examined: buffer.End);
                     result = default;
+                }
+                finally
+                {
+                    if (!advanced)
+                    {
+                        // Consumes nothing: whatever stopped the read is left exactly where it is.
+                        reader.AdvanceTo(buffer.Start, examined: buffer.End);
+                    }
                 }
             }
 

@@ -131,6 +131,47 @@ namespace Dahomey.Cbor.Tests.Issues
         }
 
         /// <summary>
+        /// The same for a converter that throws something other than a <see cref="CborException"/>,
+        /// which #216 made a supported thing to do. That one is not caught anywhere on the way out, so
+        /// it leaves the read pending by a different route than the one above.
+        /// </summary>
+        [Fact]
+        public async Task TheReaderIsLeftUsableAfterAFailureOfAnotherTypeAsync()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ConverterRegistry.RegisterConverter(typeof(RefusedByItsConverter), new ThrowingConverter());
+
+            Pipe pipe = new Pipe();
+            await pipe.Writer.WriteAsync(OneWholeItem.HexToBytes());
+            await pipe.Writer.CompleteAsync();
+
+            InvalidOperationException first = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await Cbor.ReadNextItemAsync<RefusedByItsConverter>(pipe.Reader, options));
+            InvalidOperationException second = await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await Cbor.ReadNextItemAsync<RefusedByItsConverter>(pipe.Reader, options));
+
+            Assert.Equal("not a CborException", first.Message);
+            Assert.Equal(first.Message, second.Message);
+        }
+
+        /// <summary>
+        /// And the ordinary way out: the end of the sequence. It is the most common exit of all, and it
+        /// left the read pending too - a consumer polling a drained pipe got one <c>null</c> and then
+        /// "Reading is already in progress".
+        /// </summary>
+        [Fact]
+        public async Task TheReaderIsLeftUsableAtTheEndOfTheSequenceAsync()
+        {
+            Pipe pipe = new Pipe();
+            await pipe.Writer.WriteAsync("0C".HexToBytes());   // one item, then nothing
+            await pipe.Writer.CompleteAsync();
+
+            Assert.Equal(12, await Cbor.ReadNextItemAsync<int?>(pipe.Reader));
+            Assert.Null(await Cbor.ReadNextItemAsync<int?>(pipe.Reader));
+            Assert.Null(await Cbor.ReadNextItemAsync<int?>(pipe.Reader));
+        }
+
+        /// <summary>
         /// A stream that really is truncated still fails, and now says so in the reader's own words
         /// rather than in a message invented one frame up. The distinction the fix restores is between
         /// two failures that were both reported as this one.
@@ -192,6 +233,15 @@ namespace Dahomey.Cbor.Tests.Issues
 
         public class RefusedByItsConverter
         {
+        }
+
+        public class ThrowingConverter : CborConverterBase<RefusedByItsConverter>
+        {
+            public override RefusedByItsConverter Read(ref CborReader reader)
+                => throw new InvalidOperationException("not a CborException");
+
+            public override void Write(ref CborWriter writer, RefusedByItsConverter value)
+                => throw new NotSupportedException();
         }
 
         public class RefusingConverter : CborConverterBase<RefusedByItsConverter>
