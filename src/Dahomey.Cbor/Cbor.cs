@@ -9,6 +9,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -564,6 +565,17 @@ namespace Dahomey.Cbor
         /// <param name="cancellationToken">The cancellation token</param>
         /// <returns>The next item in the sequence. default(TItem) is returned when no more items are available</returns>
         /// <exception cref="CborException">Thrown if the reader does not contain a valid cbor sequence</exception>
+        /// <remarks>
+        /// Reading is speculative: while the pipe is open, a failure is indistinguishable from an item
+        /// whose remaining bytes have not arrived yet, so it is discarded and the read is retried on
+        /// more data. Once the pipe is complete, the failure that stopped the last attempt reaches the
+        /// caller as itself - the reader running out of bytes, or a converter refusing what it read.
+        /// <para>
+        /// A failure consumes nothing, so it is not a position the sequence moves past: calling again
+        /// re-reads the same bytes and raises the same failure. There is no skip-and-continue here, and
+        /// a consumer that catches and loops will spin. Treat a throw as the end of the sequence.
+        /// </para>
+        /// </remarks>
         public static async ValueTask<TItem?> ReadNextItemAsync<TItem>(PipeReader reader, CborOptions? options = null, CancellationToken cancellationToken = default)
         {
             while (true)
@@ -571,32 +583,50 @@ namespace Dahomey.Cbor
                 ReadResult result = await reader.ReadAsync(cancellationToken: cancellationToken);
                 if (result.IsCanceled)
                 {
-                    await Task.FromCanceled(cancellationToken);
+                    // Ends this read before reporting, as every route below does. A cancelled result
+                    // is not always a cancelled token: PipeReader.CancelPendingRead cancels the read
+                    // alone, and handing that token to Task.FromCanceled raised an
+                    // ArgumentOutOfRangeException about a parameter the caller never passed.
+                    reader.AdvanceTo(result.Buffer.Start, examined: result.Buffer.Start);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    throw new OperationCanceledException("The read was canceled through CancelPendingRead.");
                 }
 
                 ReadOnlySequence<byte> buffer = result.Buffer;
                 if (buffer.IsEmpty)
                 {
+                    reader.AdvanceTo(buffer.Start, examined: buffer.End);
                     return default;
                 }
 
+                // Every route out of the read below ends it, including the ones that throw. A
+                // PipeReader left between a ReadAsync and its AdvanceTo answers every later call with
+                // "Reading is already in progress" rather than with what actually happened, so a
+                // failure reported once would be masked from then on.
+                bool advanced = false;
+
                 try
                 {
-                    if (TryReadItem(buffer, options ?? CborOptions.Default, out TItem? item, out var consumed))
+                    if (TryReadItem(buffer, options ?? CborOptions.Default, out TItem? item, out var consumed, out CborException? failure))
                     {
-                        reader.AdvanceTo(buffer.GetPosition(offset: consumed), examined: buffer.End);
-                        result = default;
+                        advanced = true;
+
+                        // Examined stops where consumed stops, not at buffer.End. Reporting the rest
+                        // of the buffer as examined tells the pipe this read has already seen it, so
+                        // the next one waits for bytes beyond it - and items already flushed behind
+                        // this one would never be returned until the writer wrote more or completed.
+                        SequencePosition end = buffer.GetPosition(offset: consumed);
+                        reader.AdvanceTo(end, examined: end);
                         return item;
                     }
-                    else
-                    {
-                        if (result.IsCompleted)
-                        {
-                            throw new CborException("Reader has completed with some buffer bytes but no item was read");
-                        }
 
-                        reader.AdvanceTo(buffer.Start, examined: buffer.End);
-                        result = default;
+                    if (result.IsCompleted)
+                    {
+                        // Nothing more is coming, so the failure that stopped the read is the answer.
+                        // Rethrown rather than replaced, to keep its message and its path; captured
+                        // here rather than where it was caught, since every speculative attempt
+                        // catches one and only this branch has any use for it.
+                        ExceptionDispatchInfo.Capture(failure).Throw();
                     }
                 }
                 catch (Exception) when (!result.IsCompleted)
@@ -607,9 +637,14 @@ namespace Dahomey.Cbor
                     // wrong (IOException)
                     // 
                     // Anyways, if the pipe is complete, the exception will not be catched (see filter)
-
-                    reader.AdvanceTo(buffer.Start, examined: buffer.End);
-                    result = default;
+                }
+                finally
+                {
+                    if (!advanced)
+                    {
+                        // Consumes nothing: whatever stopped the read is left exactly where it is.
+                        reader.AdvanceTo(buffer.Start, examined: buffer.End);
+                    }
                 }
             }
 
@@ -617,21 +652,24 @@ namespace Dahomey.Cbor
                 in ReadOnlySequence<byte> sequence,
                 CborOptions options,
                 out TItem? item,
-                out int consumed)
+                out int consumed,
+                [NotNullWhen(false)] out CborException? failure)
             {
                 CborReader reader = new CborReader(sequence, options.MaxDepth);
                 ICborConverter<TItem> converter = options.Registry.ConverterRegistry.Lookup<TItem>();
 
                 try
                 {
-                    item = converter.Read(ref reader);
+                    item = RootReader.Read(ref reader, converter);
                     consumed = reader.GetBookmark().currentPos;
+                    failure = null;
                     return true;
                 }
-                catch (CborException)
+                catch (CborException exception)
                 {
                     item = default;
                     consumed = 0;
+                    failure = exception;
                     return false;
                 }
             }
