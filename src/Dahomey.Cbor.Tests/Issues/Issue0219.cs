@@ -5,6 +5,7 @@ using Dahomey.Cbor.Tests.Extensions;
 using System;
 using System.Buffers;
 using System.IO.Pipelines;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -46,8 +47,10 @@ namespace Dahomey.Cbor.Tests.Issues
             Assert.StartsWith("this creator refuses 12", exception.Message);
 
             // Rethrown rather than wrapped, so the path collected on the way out survives too - the
-            // same "$" Cbor.Deserialize reports for these bytes.
+            // same "$" Cbor.Deserialize reports for these bytes - and so does the frame it was thrown
+            // from, which is what rethrowing through ExceptionDispatchInfo buys over `throw failure`.
             Assert.Equal("$", exception.Path);
+            Assert.Contains(nameof(RefusedByItsCreator), exception.StackTrace);
         }
 
         /// <summary>
@@ -213,6 +216,42 @@ namespace Dahomey.Cbor.Tests.Issues
             CborException exception = await Assert.ThrowsAsync<CborException>(() => reading);
 #pragma warning restore VSTHRD003
             Assert.StartsWith("this creator refuses 12", exception.Message);
+        }
+
+        /// <summary>
+        /// A read reports as examined only what it consumed. Reporting the rest of the buffer would
+        /// tell the pipe this read had already seen it, and the next read would wait for bytes beyond
+        /// it - so items already flushed behind this one would hang until the writer wrote more.
+        /// </summary>
+        [Fact]
+        public async Task ItemsAlreadyFlushedBehindThisOneAreReadableAsync()
+        {
+            Pipe pipe = new Pipe();
+            await pipe.Writer.WriteAsync("0C0D".HexToBytes());   // 12 then 13, in one flush, writer left open
+
+            using CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(12, await Cbor.ReadNextItemAsync<int?>(pipe.Reader, cancellationToken: timeout.Token));
+            Assert.Equal(13, await Cbor.ReadNextItemAsync<int?>(pipe.Reader, cancellationToken: timeout.Token));
+        }
+
+        /// <summary>
+        /// A cancelled read is not always a cancelled token: <see cref="PipeReader.CancelPendingRead"/>
+        /// cancels the read alone, and handing that token to <c>Task.FromCanceled</c> raised an
+        /// <see cref="ArgumentOutOfRangeException"/> about a parameter the caller never passed.
+        /// </summary>
+        [Fact]
+        public async Task ACancelledReadReportsAsCancelledAsync()
+        {
+            Pipe pipe = new Pipe();
+            await pipe.Writer.WriteAsync(OneWholeItem.HexToBytes());
+            pipe.Reader.CancelPendingRead();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                async () => await Cbor.ReadNextItemAsync<Plain>(pipe.Reader));
+
+            // And the read it cancelled is over, so the reader still works.
+            Assert.Equal(12, (await Cbor.ReadNextItemAsync<Plain>(pipe.Reader))!.Id);
         }
 
         public class Plain
