@@ -18,6 +18,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     public class ObjectMapping<T> : IObjectMapping
     {
         private bool _isInitialized = false;
+        private readonly object _lock = new object();
         private readonly SerializationRegistry _registry;
         private readonly CborOptions _options;
         private List<IMemberMapping> _memberMappings = new List<IMemberMapping>();
@@ -354,7 +355,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             if (!_isInitialized)
             {
-                lock (this)
+                lock (_lock)
                 {
                     if (!_isInitialized)
                     {

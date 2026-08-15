@@ -9,6 +9,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     public class MemberMapping<T> : IMemberMapping
     {
         private bool _isInitialized = false;
+        private readonly object _lock = new object();
         private readonly IObjectMapping _objectMapping;
         private readonly CborConverterRegistry _converterRegistry;
         private string? _memberName = null;
@@ -50,7 +51,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 // lookup now completes.
                 if (_converter == null)
                 {
-                    lock (this)
+                    lock (_lock)
                     {
                         _converter ??= _converterRegistry.Lookup(MemberType);
                     }
@@ -146,7 +147,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             if (!_isInitialized)
             {
-                lock (this)
+                lock (_lock)
                 {
                     if (!_isInitialized)
                     {

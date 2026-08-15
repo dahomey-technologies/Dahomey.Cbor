@@ -11,6 +11,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     public class CreatorMapping : ICreatorMapping
     {
         private bool _isInitialized = false;
+        private readonly object _lock = new object();
         private readonly IObjectMapping _objectMapping;
         private readonly Delegate _delegate;
         private readonly ParameterInfo[] _parameters;
@@ -131,7 +132,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         {
             if (!_isInitialized)
             {
-                lock (this)
+                lock (_lock)
                 {
                     if (!_isInitialized)
                     {
