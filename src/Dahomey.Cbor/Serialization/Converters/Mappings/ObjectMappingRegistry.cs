@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Dahomey.Cbor.Util;
+using System;
 using System.Collections.Concurrent;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
@@ -55,7 +56,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             Type objectMappingType = typeof(ObjectMapping<>).MakeGenericType(type);
 
             IObjectMapping? objectMapping =
-                (IObjectMapping?)Activator.CreateInstance(objectMappingType, _registry, _options);
+                (IObjectMapping?)ReflectionActivator.CreateInstance(objectMappingType, new object?[] { _registry, _options });
 
             if (objectMapping == null)
             {

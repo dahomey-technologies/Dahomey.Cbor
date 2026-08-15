@@ -215,51 +215,32 @@ namespace Dahomey.Cbor.Tests
                 Helper.Read<float[]>("D851483FC0000040200000", TypedArrayOptions()));
         }
 
-        private static CborException AssertThrowsCborException(Action action)
-        {
-            // Converters are built through Activator.CreateInstance, so a CborException thrown while
-            // building a mapping arrives wrapped in TargetInvocationException.
-            Exception exception = Record.Exception(action);
-            Assert.NotNull(exception);
-
-            for (Exception current = exception; current != null; current = current.InnerException)
-            {
-                if (current is CborException cborException)
-                {
-                    return cborException;
-                }
-            }
-
-            Assert.Fail($"Expected a CborException, got {exception}");
-            return null;
-        }
-
         [Fact]
         public void PayloadLengthNotAMultipleOfElementSizeThrows()
         {
             // D855 tag(85) 43 bytes(3) -- 3 is not divisible by 4
-            AssertThrowsCborException(() => Helper.Read<float[]>("D85543000000", TypedArrayOptions()));
+            Assert.Throws<CborException>(() => Helper.Read<float[]>("D85543000000", TypedArrayOptions()));
         }
 
         [Fact]
         public void WrongElementTypeThrows()
         {
             // D856 tag(86) is binary64; reading it into float[] is corrupt data, not a conversion
-            AssertThrowsCborException(() => Helper.Read<float[]>("D85648000000000000F83F", TypedArrayOptions()));
+            Assert.Throws<CborException>(() => Helper.Read<float[]>("D85648000000000000F83F", TypedArrayOptions()));
         }
 
         [Fact]
         public void ReservedTag76Throws()
         {
             // D84C tag(76) is reserved by RFC 8746
-            AssertThrowsCborException(() => Helper.Read<short[]>("D84C4401000200", TypedArrayOptions()));
+            Assert.Throws<CborException>(() => Helper.Read<short[]>("D84C4401000200", TypedArrayOptions()));
         }
 
         [Fact]
         public void Binary128TagThrows()
         {
             // D853 tag(83) 40 bytes(0) -- binary128, which has no .NET type
-            AssertThrowsCborException(() => Helper.Read<double[]>("D85340", TypedArrayOptions()));
+            Assert.Throws<CborException>(() => Helper.Read<double[]>("D85340", TypedArrayOptions()));
         }
 
         [Fact]
@@ -597,7 +578,7 @@ namespace Dahomey.Cbor.Tests
 
             // D855 tag(85) 48 bytes(8) -> 1.5f, 2.5f little endian. The tag is skipped like any other
             // unrecognised tag, leaving a byte string where an array is required.
-            AssertThrowsCborException(() => Helper.Read<float[]>("D855480000C03F00002040", options));
+            Assert.Throws<CborException>(() => Helper.Read<float[]>("D855480000C03F00002040", options));
 
             // 82 array(2) F93E00 1.5 F94100 2.5 -- ordinary arrays are unaffected, in both directions
             Helper.TestWrite(new[] { 1.5f, 2.5f }, "82F93E00F94100", null, options);
@@ -634,7 +615,7 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(new[] { 1.5f, 2.5f }, "D855480000C03F00002040", null, options);
 
             // and, being write-only, these options cannot read back what they just wrote
-            AssertThrowsCborException(() => Helper.Read<float[]>("D855480000C03F00002040", options));
+            Assert.Throws<CborException>(() => Helper.Read<float[]>("D855480000C03F00002040", options));
         }
 
         public class ListSamplesHolder
@@ -699,11 +680,11 @@ namespace Dahomey.Cbor.Tests
             CborOptions options = TypedArrayOptions();
 
             // tag 86 is binary64, so it cannot fill a List<float>
-            AssertThrowsCborException(
+            Assert.Throws<CborException>(
                 () => Cbor.Deserialize<List<float>>("D85648000000000000F83F".HexToBytes(), options));
 
             // and a List<string> has no typed array form at all
-            AssertThrowsCborException(
+            Assert.Throws<CborException>(
                 () => Cbor.Deserialize<List<string>>("D855480000C03F00002040".HexToBytes(), options));
         }
 
@@ -714,7 +695,7 @@ namespace Dahomey.Cbor.Tests
             // exactly what it read before typed arrays existed.
             CborOptions options = new CborOptions();
 
-            AssertThrowsCborException(
+            Assert.Throws<CborException>(
                 () => Cbor.Deserialize<List<float>>("D855480000C03F00002040".HexToBytes(), options));
             Assert.Equal(
                 new[] { 1.5f, 2.5f },

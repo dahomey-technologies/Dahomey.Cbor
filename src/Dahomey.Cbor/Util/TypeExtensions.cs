@@ -12,7 +12,7 @@ namespace Dahomey.Cbor.Util
                 return null;
             }
 
-            return Activator.CreateInstance(type);
+            return ReflectionActivator.CreateInstance(type);
         }
 
         public static bool IsAnonymous(this Type type)

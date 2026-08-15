@@ -100,7 +100,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 }
             }
 
-            return _delegate.DynamicInvoke(args) ?? throw new InvalidOperationException($"Cannot instantiate type ({_objectMapping.ObjectType})");
+            return ReflectionActivator.Invoke(_delegate, args) ?? throw new InvalidOperationException($"Cannot instantiate type ({_objectMapping.ObjectType})");
         }
 
         object ICreatorMapping.CreateInstance(Dictionary<int, object> values)
@@ -124,7 +124,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                 }
             }
 
-            return _delegate.DynamicInvoke(args) ?? throw new InvalidOperationException($"Cannot instantiate type ({_objectMapping.ObjectType})");
+            return ReflectionActivator.Invoke(_delegate, args) ?? throw new InvalidOperationException($"Cannot instantiate type ({_objectMapping.ObjectType})");
         }
 
         private void EnsureInitialize()

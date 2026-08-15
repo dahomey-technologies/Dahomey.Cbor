@@ -43,7 +43,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
             if (namingConventionType != null)
             {
-                INamingConvention? namingConvention = (INamingConvention?)Activator.CreateInstance(namingConventionType);
+                INamingConvention? namingConvention = (INamingConvention?)ReflectionActivator.CreateInstance(namingConventionType);
 
                 if (namingConvention == null)
                 {
