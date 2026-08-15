@@ -107,7 +107,39 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly Func<T>? _constructor;
         private readonly bool _isInterfaceOrAbstract;
         private readonly bool _isStruct;
-        private readonly IDiscriminatorConvention? _discriminatorConvention = null;
+
+        /// <summary>
+        /// The convention resolving this type's discriminator, or null while no type in its hierarchy
+        /// carries one.
+        /// </summary>
+        /// <remarks>
+        /// Not readonly, and not final at construction. A converter is built once per type and cached
+        /// for the lifetime of the options, so resolving this only in the constructor froze the answer
+        /// at whatever was registered the first time the type was touched. For a type read as an
+        /// abstract base or an interface that answer is null by construction - the base carries no
+        /// discriminator of its own, only its subtypes do - so a <c>RegisterType</c> for the subtype
+        /// after the first read had no way to reach this field, and the read kept failing as though the
+        /// call had never been made.
+        /// <para>
+        /// Re-resolved only while null, and only when the registry reports a registration since the
+        /// last attempt, so the steady state is a field read and an int compare rather than a lookup.
+        /// See <see cref="_discriminatorConventionVersion"/> for why the unsynchronized write is safe.
+        /// </para>
+        /// </remarks>
+        private IDiscriminatorConvention? _discriminatorConvention = null;
+
+        /// <summary>
+        /// The <see cref="DiscriminatorConventionRegistry.Version"/> at which
+        /// <see cref="_discriminatorConvention"/> was last resolved to null.
+        /// </summary>
+        /// <remarks>
+        /// The pair is written without a lock, and a torn write costs nothing worse than resolving
+        /// again. Resolution is monotone - null becomes a convention and never the reverse - so the
+        /// stale value a race can leave behind is a null with an old version, which the next read
+        /// answers by asking the registry once more. Two threads resolving at once compute the same
+        /// answer, and once the field is non-null neither writes again.
+        /// </remarks>
+        private int _discriminatorConventionVersion;
 
         /// <summary>
         /// Whether this type's own mapping carries a discriminator, as opposed to merely resolving a
@@ -314,7 +346,40 @@ namespace Dahomey.Cbor.Serialization.Converters
                 _constructor = defaultConstructorInfo.CreateDelegate<T>();
             }
 
-            _discriminatorConvention = _registry.DiscriminatorConventionRegistry.GetConvention(typeof(T));
+            ResolveDiscriminatorConvention();
+        }
+
+        /// <summary>
+        /// The convention for this type, asking the registry again if the last answer was null and
+        /// something has been registered since.
+        /// </summary>
+        /// <remarks>
+        /// The version is sampled before the lookup, never after: a registration landing between the
+        /// two would otherwise be stamped as already accounted for and never looked at again.
+        /// </remarks>
+        private IDiscriminatorConvention? GetDiscriminatorConvention()
+        {
+            IDiscriminatorConvention? convention = _discriminatorConvention;
+
+            if (convention != null
+                || _discriminatorConventionVersion == _registry.DiscriminatorConventionRegistry.Version)
+            {
+                return convention;
+            }
+
+            return ResolveDiscriminatorConvention();
+        }
+
+        private IDiscriminatorConvention? ResolveDiscriminatorConvention()
+        {
+            int version = _registry.DiscriminatorConventionRegistry.Version;
+            IDiscriminatorConvention? convention =
+                _registry.DiscriminatorConventionRegistry.GetConvention(typeof(T));
+
+            _discriminatorConvention = convention;
+            _discriminatorConventionVersion = version;
+
+            return convention;
         }
 
         public T CreateInstance()
@@ -635,7 +700,9 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (context.converter == null)
                 {
-                    if (_discriminatorConvention != null)
+                    IDiscriminatorConvention? discriminatorConvention = GetDiscriminatorConvention();
+
+                    if (discriminatorConvention != null)
                     {
                         switch (_objectMapping.ObjectFormat)
                         {
@@ -643,10 +710,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                                 {
                                     CborReaderBookmark bookmark = reader.GetBookmark();
 
-                                    if (FindItem(ref reader, _discriminatorConvention.MemberName))
+                                    if (FindItem(ref reader, discriminatorConvention.MemberName))
                                     {
                                         // discriminator value
-                                        Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
+                                        Type actualType = discriminatorConvention.ReadDiscriminator(ref reader);
 
                                         if (!_objectMapping.ObjectType.IsAssignableFrom(actualType))
                                         {
@@ -673,7 +740,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                                     if (FindItem(ref reader, 0)) // discriminator index is always 0
                                     {
                                         // discriminator value
-                                        Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
+                                        Type actualType = discriminatorConvention.ReadDiscriminator(ref reader);
 
                                         if (!_objectMapping.ObjectType.IsAssignableFrom(actualType))
                                         {
@@ -703,7 +770,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                                     if (reader.TryReadSemanticTag(out ulong semanticTag) && semanticTag == _options.DiscriminatorSemanticTag)
                                     {
                                         // discriminator value
-                                        Type actualType = _discriminatorConvention.ReadDiscriminator(ref reader);
+                                        Type actualType = discriminatorConvention.ReadDiscriminator(ref reader);
 
                                         if (!_objectMapping.ObjectType.IsAssignableFrom(actualType))
                                         {
