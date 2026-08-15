@@ -3,6 +3,7 @@ using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Serialization.Converters;
 using Dahomey.Cbor.Serialization.Converters.Providers;
+using Dahomey.Cbor.Tests.Extensions;
 using System;
 using Xunit;
 
@@ -72,6 +73,47 @@ namespace Dahomey.Cbor.Tests.Issues
                 () => Helper.Write(new HolderWithARefusingNamingConvention()));
 
             Assert.Equal("this naming convention is refused", exception.Message);
+        }
+
+        /// <summary>
+        /// A <c>[CborConstructor]</c> the caller wrote, running while a document is read rather than
+        /// while a mapping is built. <c>CreatorMapping</c> reaches it through
+        /// <c>Delegate.DynamicInvoke</c>, which wraps a constructor's exception exactly as
+        /// <c>Activator</c> does.
+        /// </summary>
+        /// <remarks>
+        /// The closest of these to an ordinary user: nothing here is a converter, a provider or a
+        /// convention — it is a constructor on their own type, refusing the values a document carried.
+        /// </remarks>
+        [Fact]
+        public void ACreatorConstructorRefusingItsArgumentsThrowsCborException()
+        {
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<RefusedByItsCreator>("A16249640C".HexToBytes()));   // {"Id": 12}
+
+            Assert.StartsWith("this creator refuses 12", exception.Message);
+
+            // The path is the second thing the envelope cost. It is prepended by a `catch
+            // (CborException)` on the way out, which a TargetInvocationException did not match -- so
+            // before this fix a creator's refusal arrived with no path at all.
+            Assert.Equal("$", exception.Path);
+        }
+
+        /// <summary>The same through a factory method, which <c>MapCreator(MethodInfo)</c> reaches.</summary>
+        [Fact]
+        public void ACreatorFactoryRefusingItsArgumentsThrowsCborException()
+        {
+            CborOptions options = new CborOptions();
+            options.Registry.ObjectMappingRegistry.Register<RefusedByItsFactory>(map =>
+            {
+                map.AutoMap();
+                map.MapCreator(o => RefusedByItsFactory.Create(o.Id));
+            });
+
+            CborException exception = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<RefusedByItsFactory>("A16249640C".HexToBytes(), options));
+
+            Assert.StartsWith("this factory refuses 12", exception.Message);
         }
 
         /// <summary>
@@ -169,6 +211,27 @@ namespace Dahomey.Cbor.Tests.Issues
 
             [CborProperty("x")]
             public int Second { get; set; }
+        }
+
+        public class RefusedByItsCreator
+        {
+            public int Id { get; set; }
+
+            [CborConstructor]
+            public RefusedByItsCreator(int id)
+            {
+                throw new CborException($"this creator refuses {id}");
+            }
+        }
+
+        public class RefusedByItsFactory
+        {
+            public int Id { get; set; }
+
+            public static RefusedByItsFactory Create(int id)
+            {
+                throw new CborException($"this factory refuses {id}");
+            }
         }
 
         public class RefusingNamingConvention : INamingConvention

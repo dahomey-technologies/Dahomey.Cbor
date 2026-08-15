@@ -56,7 +56,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             Type objectMappingType = typeof(ObjectMapping<>).MakeGenericType(type);
 
             IObjectMapping? objectMapping =
-                (IObjectMapping?)ReflectionActivator.CreateInstance(objectMappingType, _registry, _options);
+                (IObjectMapping?)ReflectionActivator.CreateInstance(objectMappingType, new object?[] { _registry, _options });
 
             if (objectMapping == null)
             {

@@ -176,7 +176,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
 
             IMemberConverter? memberConverter = 
-                (IMemberConverter?)ReflectionActivator.CreateInstance(type, _converterRegistry, this);
+                (IMemberConverter?)ReflectionActivator.CreateInstance(type, new object?[] { _converterRegistry, this });
 
             if (memberConverter == null)
             {

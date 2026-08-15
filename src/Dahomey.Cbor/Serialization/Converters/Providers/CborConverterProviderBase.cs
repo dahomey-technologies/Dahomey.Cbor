@@ -13,7 +13,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
             ConstructorInfo? constructorInfo = converterType.GetConstructor(new[] { typeof(CborOptions) });
             if (constructorInfo != null)
             {
-                ICborConverter? converter = (ICborConverter?)ReflectionActivator.CreateInstance(converterType, options);
+                ICborConverter? converter = (ICborConverter?)ReflectionActivator.CreateInstance(converterType, new object?[] { options });
 
                 if (converter == null)
                 {
