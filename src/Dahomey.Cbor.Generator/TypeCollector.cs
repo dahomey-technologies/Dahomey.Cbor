@@ -249,14 +249,11 @@ namespace Dahomey.Cbor.Generator
                 // formats -- the same split ObjectConverter's read lookup makes. Two members under one
                 // key cannot both be in a document, so the second is reported.
                 //
-                // Reported and still registered, deliberately. Dropping it would be invisible if the
-                // diagnostic were suppressed -- `dotnet_diagnostic.CBOR1013.severity = none` makes an
-                // error a no-op, and the build would then succeed with a member silently missing from
-                // the generated context and present in every document the reflection path writes.
-                // Registering both leaves the run-time check to give the same answer the reflection path
-                // gives for the same source: ObjectMapping.ValidateMemberNamesAndindexes throws while
-                // the context is being built. Loud in both configurations, rather than loud in one and
-                // silently wrong in the other.
+                // Reported and still registered, so that nothing here assumes the build stops. If
+                // emission ever proceeds past the diagnostic, both members reach
+                // ObjectMapping.ValidateMemberNamesAndindexes, which refuses the mapping exactly as it
+                // does for the same source on the reflection path. Registering one member fewer than the
+                // source declares would be silent instead.
                 if (model.ObjectFormat == "StringKeyMap")
                 {
                     if (membersByCborName.TryGetValue(cborName, out string? firstUnderName))
