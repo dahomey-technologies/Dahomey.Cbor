@@ -247,6 +247,152 @@ public partial class Context : CborSerializerContext { }
         }
 
         /// <summary>
+        /// Two members under one CBOR name. #186 made the reflection path refuse the mapping when it is
+        /// built, so such a type cannot serialize at all; the generator is where it can be said first,
+        /// against the second declaration rather than at the first construction of the context.
+        /// </summary>
+        [Fact]
+        public void TwoMembersUnderOneCborNameAreReported()
+        {
+            AssertReports("CBOR1013", @"
+public class Aliased
+{
+    [CborProperty(""X"")] public int First { get; set; }
+    [CborProperty(""X"")] public int Second { get; set; }
+}
+
+[CborSerializable(typeof(Aliased))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// The other route the generator can see, and the one worth catching early: a naming policy
+        /// folding two member names into one, where nothing is a duplicate as declared.
+        /// </summary>
+        /// <remarks>
+        /// The policy has to be the context-level one. A <c>[CborNamingConvention]</c> on the type is
+        /// already CBOR1007 — the generator does not reproduce it at all — so that route cannot reach
+        /// this check, and the run-time refusal remains the only thing covering it.
+        /// </remarks>
+        [Fact]
+        public void ANamingPolicyFoldingTwoNamesIntoOneIsReported()
+        {
+            AssertReports("CBOR1013", @"
+public class Folded
+{
+    public int Value { get; set; }
+    public int value { get; set; }
+}
+
+[CborSerializable(typeof(Folded))]
+[CborSourceGenerationOptions(
+    NamingConvention = typeof(Dahomey.Cbor.Serialization.Conventions.CamelCaseNamingConvention))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// The same failure where the wire key is the index rather than the name, which is what
+        /// <c>IntKeyMap</c> and <c>Array</c> are.
+        /// </summary>
+        [Fact]
+        public void TwoMembersUnderOneCborIndexAreReported()
+        {
+            AssertReports("CBOR1014", @"
+[CborObjectFormat(CborObjectFormat.IntKeyMap)]
+public class Indexed
+{
+    [CborProperty(1)] public int First { get; set; }
+    [CborProperty(1)] public int Second { get; set; }
+}
+
+[CborSerializable(typeof(Indexed))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// An overridden property is one member, not two. It is declared on both the base and the
+        /// derived type, so the member walk sees it twice, and reporting that would turn every type
+        /// with a virtual property into a build error — where the reflection path sees one property,
+        /// since <c>Type.GetProperties</c> collapses an override onto its base.
+        /// </summary>
+        [Fact]
+        public void AnOverriddenPropertyIsNotReported()
+        {
+            AssertClean(@"
+public class Shape { public virtual int Id { get; set; } }
+
+public class Circle : Shape { public override int Id { get; set; } }
+
+[CborSerializable(typeof(Circle))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// The same, under <c>Array</c>. The descriptor's summary claims both index-keyed formats and
+        /// the branch is reached through <c>ObjectFormat != "StringKeyMap"</c>, so <c>IntKeyMap</c>
+        /// alone leaves the other half of the claim resting on reading the condition.
+        /// </summary>
+        [Fact]
+        public void TwoMembersUnderOneCborIndexAreReportedUnderArrayFormatToo()
+        {
+            AssertReports("CBOR1014", @"
+[CborObjectFormat(CborObjectFormat.Array)]
+public class Indexed
+{
+    [CborProperty(1)] public int First { get; set; }
+    [CborProperty(1)] public int Second { get; set; }
+}
+
+[CborSerializable(typeof(Indexed))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// A member hiding a base member with <c>new</c> is two members, and stays reported. That is why
+        /// the collapse filters on <c>IsOverride</c> rather than on the name: <c>Type.GetProperties</c>
+        /// returns both declarations, so the reflection path sees two members under one name and refuses
+        /// the mapping, and the generator gives the same answer earlier. Widening the filter to names
+        /// would turn this into a silent drop of whichever declaration came second.
+        /// </summary>
+        [Fact]
+        public void AMemberHidingABaseMemberWithNewIsReported()
+        {
+            AssertReports("CBOR1013", @"
+public class Shape { public int Id { get; set; } }
+
+public class Circle : Shape { public new int Id { get; set; } }
+
+[CborSerializable(typeof(Circle))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// The collapse through a <em>constructed</em> generic base, which is the fragile half of the
+        /// mechanism: it leans on <c>OverriddenProperty</c> yielding the member of <c>Holder&lt;int&gt;</c>
+        /// and on <c>SymbolEqualityComparer.Default</c> matching that against what <c>GetMembers()</c>
+        /// returns for the same constructed type. Without it this is CBOR1013, and every generated
+        /// context over a type overriding a generic base member fails to build.
+        /// </summary>
+        [Fact]
+        public void AnOverrideThroughAGenericBaseIsNotReported()
+        {
+            AssertClean(@"
+public class Holder<T> { public virtual T Value { get; set; } }
+
+public class IntHolder : Holder<int> { public override int Value { get; set; } }
+
+[CborSerializable(typeof(IntHolder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
         /// An abstract base is never instantiated — its subtypes are — so it must not be reported.
         /// </summary>
         [Fact]

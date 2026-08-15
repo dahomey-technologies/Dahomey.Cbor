@@ -217,6 +217,26 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedTupleTests.Sample();
             }
 
+            if (type == typeof(GeneratedOverrideHolder))
+            {
+                return new GeneratedOverrideHolder { Id = 7, Name = "seven" };
+            }
+
+            if (type == typeof(GeneratedInheritedAttributeHolder))
+            {
+                return new GeneratedInheritedAttributeHolder
+                {
+                    Id = 7,
+                    Secret = "hidden",
+                    Name = "seven",
+                };
+            }
+
+            if (type == typeof(GeneratedGenericOverrideHolder))
+            {
+                return new GeneratedGenericOverrideHolder { Value = 3, Label = "three" };
+            }
+
             if (type == typeof(float[]))
             {
                 return new[] { 1.5f, -2.25f };

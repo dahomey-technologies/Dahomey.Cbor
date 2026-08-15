@@ -1,6 +1,8 @@
 ﻿using Microsoft.CodeAnalysis;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Linq;
 
 namespace Dahomey.Cbor.Generator
@@ -176,9 +178,12 @@ namespace Dahomey.Cbor.Generator
             ReadTypeLevelAttributes(type, model);
             ReportUnsupportedFeatures(type);
 
+            Dictionary<string, string> membersByCborName = new Dictionary<string, string>(StringComparer.Ordinal);
+            Dictionary<int, string> membersByCborIndex = new Dictionary<int, string>();
+
             foreach (ISymbol member in EnumerateMembers(type))
             {
-                if (HasAttribute(member, "CborIgnoreAttribute"))
+                if (HasInheritedAttribute(member, "CborIgnoreAttribute"))
                 {
                     continue;
                 }
@@ -238,6 +243,53 @@ namespace Dahomey.Cbor.Generator
                         member.Locations.FirstOrDefault(),
                         type.Name,
                         member.Name));
+                }
+
+                // The wire key, which is the name for StringKeyMap and the index for the other two
+                // formats -- the same split ObjectConverter's read lookup makes. Two members under one
+                // key cannot both be in a document, so the second is reported.
+                //
+                // Reported and still registered, deliberately. Dropping it would be invisible if the
+                // diagnostic were suppressed -- `dotnet_diagnostic.CBOR1013.severity = none` makes an
+                // error a no-op, and the build would then succeed with a member silently missing from
+                // the generated context and present in every document the reflection path writes.
+                // Registering both leaves the run-time check to give the same answer the reflection path
+                // gives for the same source: ObjectMapping.ValidateMemberNamesAndindexes throws while
+                // the context is being built. Loud in both configurations, rather than loud in one and
+                // silently wrong in the other.
+                if (model.ObjectFormat == "StringKeyMap")
+                {
+                    if (membersByCborName.TryGetValue(cborName, out string? firstUnderName))
+                    {
+                        _diagnostics.Add(DiagnosticInfo.Create(
+                            Diagnostics.DuplicateMemberName,
+                            member.Locations.FirstOrDefault(),
+                            type.Name,
+                            firstUnderName,
+                            member.Name,
+                            cborName));
+                    }
+                    else
+                    {
+                        membersByCborName[cborName] = member.Name;
+                    }
+                }
+                else
+                {
+                    if (membersByCborIndex.TryGetValue(cborIndex!.Value, out string? firstUnderIndex))
+                    {
+                        _diagnostics.Add(DiagnosticInfo.Create(
+                            Diagnostics.DuplicateMemberIndex,
+                            member.Locations.FirstOrDefault(),
+                            type.Name,
+                            firstUnderIndex,
+                            member.Name,
+                            cborIndex.Value.ToString(CultureInfo.InvariantCulture)));
+                    }
+                    else
+                    {
+                        membersByCborIndex[cborIndex.Value] = member.Name;
+                    }
                 }
 
                 model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite));
@@ -357,8 +409,25 @@ namespace Dahomey.Cbor.Generator
         /// Matching that order matters because it determines the order members appear on the wire, and
         /// the generated output is required to be byte-identical.
         /// </summary>
+        /// <remarks>
+        /// An overridden property is declared on both types and is one member, so the base declaration
+        /// is dropped once an override for it has been seen — the walk runs most-derived first, so the
+        /// override always comes first. <c>Type.GetProperties</c> collapses an override the same way,
+        /// which is what makes this a match for the reflection path rather than a preference: yielding
+        /// both put two mappings under one name, so the generated context wrote the key twice and, since
+        /// the mapping validation added in #186, threw while being built.
+        /// <para>
+        /// A member hiding a base member with <c>new</c> is deliberately not collapsed.
+        /// <c>GetProperties</c> returns both of those, so the reflection path sees two members under one
+        /// name and refuses the mapping; the generator reports <c>CBOR1013</c> for the same type, which
+        /// is the same answer given earlier.
+        /// </para>
+        /// </remarks>
         private IEnumerable<ISymbol> EnumerateMembers(ITypeSymbol type)
         {
+            HashSet<ISymbol> overriddenByADerivedMember =
+                new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+
             for (ITypeSymbol? current = type;
                  current is not null && current.SpecialType != SpecialType.System_Object;
                  current = current.BaseType)
@@ -368,6 +437,21 @@ namespace Dahomey.Cbor.Generator
                     if (member is not (IPropertySymbol or IFieldSymbol))
                     {
                         continue;
+                    }
+
+                    if (overriddenByADerivedMember.Contains(member))
+                    {
+                        continue;
+                    }
+
+                    if (member is IPropertySymbol { IsOverride: true } overriding)
+                    {
+                        for (IPropertySymbol? overridden = overriding.OverriddenProperty;
+                             overridden is not null;
+                             overridden = overridden.OverriddenProperty)
+                        {
+                            overriddenByADerivedMember.Add(overridden);
+                        }
                     }
 
                     if (member.DeclaredAccessibility == Accessibility.Public)
@@ -406,12 +490,12 @@ namespace Dahomey.Cbor.Generator
                 return false;
             }
 
-            if (HasAttribute(member, "CborIgnoreAttribute"))
+            if (HasInheritedAttribute(member, "CborIgnoreAttribute"))
             {
                 return false;
             }
 
-            if (HasAttribute(member, "CborPropertyAttribute"))
+            if (HasInheritedAttribute(member, "CborPropertyAttribute"))
             {
                 return true;
             }
@@ -518,7 +602,8 @@ namespace Dahomey.Cbor.Generator
 
         private (string name, int? index) ResolveMemberName(ISymbol member, TypeModel model)
         {
-            foreach (AttributeData attribute in member.GetAttributes())
+            foreach (AttributeData attribute in WithOverriddenDeclarations(member)
+                .SelectMany(declaration => declaration.GetAttributes()))
             {
                 if (attribute.AttributeClass?.Name != "CborPropertyAttribute")
                 {
@@ -778,6 +863,42 @@ namespace Dahomey.Cbor.Generator
         private static bool HasAttribute(ISymbol symbol, string attributeName)
         {
             return symbol.GetAttributes().Any(a => a.AttributeClass?.Name == attributeName);
+        }
+
+        /// <summary>
+        /// The same, over every declaration an attribute lookup on this member reaches: the member
+        /// itself, then the declaration it overrides, and so on to the base of the chain.
+        /// </summary>
+        /// <remarks>
+        /// The reflection path reads member attributes <em>with inheritance</em> — both
+        /// <c>MemberInfo.GetCustomAttribute&lt;T&gt;()</c> and <c>IsDefined(Type)</c> are the
+        /// <c>inherit: true</c> overloads — while <c>ISymbol.GetAttributes()</c> returns only what the
+        /// symbol itself declares. That difference is invisible until an override is collapsed onto its
+        /// most-derived declaration, which <see cref="EnumerateMembers"/> does to match
+        /// <c>Type.GetProperties</c>: the base declaration then goes away carrying the attributes the
+        /// member is mapped by, and a <c>[CborProperty("id")]</c> on a virtual base writes the key
+        /// <c>Id</c> from the generated path and <c>id</c> from the reflection path, with nothing said.
+        /// <para>
+        /// Nearest declaration first, so an override redeclaring the attribute wins, which is what
+        /// reflection does for an attribute that is not <c>AllowMultiple</c>. A field has no chain.
+        /// </para>
+        /// </remarks>
+        private static IEnumerable<ISymbol> WithOverriddenDeclarations(ISymbol member)
+        {
+            yield return member;
+
+            for (IPropertySymbol? overridden = (member as IPropertySymbol)?.OverriddenProperty;
+                 overridden is not null;
+                 overridden = overridden.OverriddenProperty)
+            {
+                yield return overridden;
+            }
+        }
+
+        private static bool HasInheritedAttribute(ISymbol member, string attributeName)
+        {
+            return WithOverriddenDeclarations(member)
+                .Any(declaration => HasAttribute(declaration, attributeName));
         }
 
         private static string Key(ITypeSymbol type)
