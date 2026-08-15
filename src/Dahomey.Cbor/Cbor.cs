@@ -9,6 +9,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -564,6 +565,12 @@ namespace Dahomey.Cbor
         /// <param name="cancellationToken">The cancellation token</param>
         /// <returns>The next item in the sequence. default(TItem) is returned when no more items are available</returns>
         /// <exception cref="CborException">Thrown if the reader does not contain a valid cbor sequence</exception>
+        /// <remarks>
+        /// Reading is speculative: while the pipe is open, a failure is indistinguishable from an item
+        /// whose remaining bytes have not arrived yet, so it is discarded and the read is retried on
+        /// more data. Once the pipe is complete, the failure that stopped the last attempt reaches the
+        /// caller as itself - the reader running out of bytes, or a converter refusing what it read.
+        /// </remarks>
         public static async ValueTask<TItem?> ReadNextItemAsync<TItem>(PipeReader reader, CborOptions? options = null, CancellationToken cancellationToken = default)
         {
             while (true)
@@ -582,7 +589,7 @@ namespace Dahomey.Cbor
 
                 try
                 {
-                    if (TryReadItem(buffer, options ?? CborOptions.Default, out TItem? item, out var consumed))
+                    if (TryReadItem(buffer, options ?? CborOptions.Default, out TItem? item, out var consumed, out ExceptionDispatchInfo? failure))
                     {
                         reader.AdvanceTo(buffer.GetPosition(offset: consumed), examined: buffer.End);
                         result = default;
@@ -592,7 +599,9 @@ namespace Dahomey.Cbor
                     {
                         if (result.IsCompleted)
                         {
-                            throw new CborException("Reader has completed with some buffer bytes but no item was read");
+                            // Nothing more is coming, so the failure that stopped the read is the
+                            // answer. Rethrown rather than replaced, to keep its message and its path.
+                            failure.Throw();
                         }
 
                         reader.AdvanceTo(buffer.Start, examined: buffer.End);
@@ -617,7 +626,8 @@ namespace Dahomey.Cbor
                 in ReadOnlySequence<byte> sequence,
                 CborOptions options,
                 out TItem? item,
-                out int consumed)
+                out int consumed,
+                [NotNullWhen(false)] out ExceptionDispatchInfo? failure)
             {
                 CborReader reader = new CborReader(sequence, options.MaxDepth);
                 ICborConverter<TItem> converter = options.Registry.ConverterRegistry.Lookup<TItem>();
@@ -626,12 +636,14 @@ namespace Dahomey.Cbor
                 {
                     item = converter.Read(ref reader);
                     consumed = reader.GetBookmark().currentPos;
+                    failure = null;
                     return true;
                 }
-                catch (CborException)
+                catch (CborException exception)
                 {
                     item = default;
                     consumed = 0;
+                    failure = ExceptionDispatchInfo.Capture(exception);
                     return false;
                 }
             }
