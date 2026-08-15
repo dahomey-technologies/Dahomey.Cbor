@@ -96,6 +96,41 @@ namespace Dahomey.Cbor.Tests.Issues
         }
 
         /// <summary>
+        /// The read that failed is over, and the pipe knows it: a <see cref="PipeReader"/> left between
+        /// a <c>ReadAsync</c> and its <c>AdvanceTo</c> answers every later call with "Reading is already
+        /// in progress" instead of with the failure, so the exception this fix restores would be
+        /// readable exactly once and masked from then on.
+        /// </summary>
+        /// <remarks>
+        /// Nothing is consumed, so asking again asks the same question and gets the same answer rather
+        /// than moving past the item that refused. Skipping it would mean deciding how many bytes a
+        /// failed read is deemed to have eaten, which is a question for an API that offers to continue,
+        /// not for the one that reports what stopped.
+        /// <para>
+        /// A real <see cref="Pipe"/> rather than <see cref="PipeReader.Create(ReadOnlySequence{byte})"/>
+        /// because only the former tracks the read state this is about; the sequence-backed reader
+        /// re-answers either way, which is why the tests above never noticed.
+        /// </para>
+        /// </remarks>
+        [Fact]
+        public async Task TheReaderIsLeftUsableAfterTheFailureAsync()
+        {
+            Pipe pipe = new Pipe();
+            await pipe.Writer.WriteAsync(OneWholeItem.HexToBytes());
+            await pipe.Writer.CompleteAsync();
+
+            CborException first = await Assert.ThrowsAsync<CborException>(
+                async () => await Cbor.ReadNextItemAsync<RefusedByItsCreator>(pipe.Reader));
+
+            // Not InvalidOperationException, and not a hang: the same refusal, reported again.
+            CborException second = await Assert.ThrowsAsync<CborException>(
+                async () => await Cbor.ReadNextItemAsync<RefusedByItsCreator>(pipe.Reader));
+
+            Assert.StartsWith("this creator refuses 12", first.Message);
+            Assert.Equal(first.Message, second.Message);
+        }
+
+        /// <summary>
         /// A stream that really is truncated still fails, and now says so in the reader's own words
         /// rather than in a message invented one frame up. The distinction the fix restores is between
         /// two failures that were both reported as this one.

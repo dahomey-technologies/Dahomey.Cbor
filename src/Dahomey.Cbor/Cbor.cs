@@ -597,6 +597,12 @@ namespace Dahomey.Cbor
                     }
                     else
                     {
+                        // Consumes nothing either way: the item that stopped the read is left where it
+                        // is. On the throwing branch this is what ends the pending read - a PipeReader
+                        // left mid-read answers every later call with "Reading is already in progress"
+                        // rather than with the failure below.
+                        reader.AdvanceTo(buffer.Start, examined: buffer.End);
+
                         if (result.IsCompleted)
                         {
                             // Nothing more is coming, so the failure that stopped the read is the
@@ -604,7 +610,6 @@ namespace Dahomey.Cbor
                             failure.Throw();
                         }
 
-                        reader.AdvanceTo(buffer.Start, examined: buffer.End);
                         result = default;
                     }
                 }
