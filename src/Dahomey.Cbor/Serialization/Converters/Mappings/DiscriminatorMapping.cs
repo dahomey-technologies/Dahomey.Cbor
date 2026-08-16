@@ -12,7 +12,15 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
     public class DiscriminatorMapping<T> : IDiscriminatorMapping
     {
-        private bool _isInitialized = false;
+        /// <remarks>
+        /// Volatile because <see cref="EnsureInitialize"/> reads it outside the lock and the caller
+        /// goes straight on to read <see cref="_memberName"/>. The two writes are ordered here and
+        /// have to be seen in that order by a reader that never takes the lock; without the barrier
+        /// a weak memory model may hand it the flag ahead of the name it stands for, and
+        /// <see cref="MemberName"/> answers <c>null</c> for a mapping that is in fact initialized.
+        /// </remarks>
+        private volatile bool _isInitialized = false;
+        private readonly object _lock = new object();
         private readonly CborOptions _options;
         private readonly DiscriminatorConventionRegistry _discriminatorConventionRegistry;
         private readonly IObjectMapping _objectMapping;
@@ -45,11 +53,19 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             _objectMapping = objectMapping;
         }
 
+        /// <remarks>
+        /// The flag latches on having <em>resolved a convention</em>, not on having looked for one.
+        /// The registry answers <c>null</c> for a type whose subtypes are not registered yet, and a
+        /// registration that arrives later has to reach this mapping; latching on the attempt would
+        /// freeze <see cref="MemberName"/> at <c>null</c> for the lifetime of the options. Once a
+        /// convention is in hand the answer no longer moves — the registry never displaces a
+        /// resolved convention with another one — so the name is safe to keep.
+        /// </remarks>
         public void EnsureInitialize()
         {
             if (!_isInitialized)
             {
-                lock (this)
+                lock (_lock)
                 {
                     if (!_isInitialized)
                     {
@@ -57,6 +73,8 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                         if (discriminatorConvention != null)
                         {
                             _memberName = Encoding.UTF8.GetString(discriminatorConvention.MemberName);
+
+                            _isInitialized = true;
                         }
                     }
                 }
@@ -71,8 +89,6 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             {
                 throw new CborException($"Cannot find a discriminator convention for type {_objectMapping.ObjectType}");
             }
-
-            int? memberIndex = _objectMapping.ObjectFormat == CborObjectFormat.Array ? 0 : null;
 
             IMemberConverter memberConverter = new DiscriminatorMemberConverter<T>(
                 _options, discriminatorConvention, _objectMapping.DiscriminatorPolicy, _objectMapping.ObjectFormat);
