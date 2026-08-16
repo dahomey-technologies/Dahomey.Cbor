@@ -133,6 +133,25 @@ namespace Dahomey.Cbor.Generator
         public ITypeSymbol? ElementType { get; set; }
 
         /// <summary>
+        /// The constructor a read builds this type through, when it cannot be built with
+        /// <c>new T()</c> — a <c>[CborConstructor]</c>, or the single constructor of a type that has no
+        /// parameterless one, which is what a positional record is.
+        /// </summary>
+        /// <remarks>
+        /// Each entry is the parameter's type and the CBOR name of the member it takes its value from,
+        /// in constructor order. The names are passed to <c>SetMemberNames</c> explicitly rather than
+        /// left to the parameter names of the emitted lambda: a CBOR name set by
+        /// <c>[CborProperty("my-name")]</c> or by a naming convention need not be a legal C#
+        /// identifier, and a lambda's parameters have to be.
+        /// </remarks>
+        public List<(string Type, string CborName)> CreatorParameters { get; } =
+            new List<(string Type, string CborName)>();
+
+        /// <summary>C# member name to CBOR name, for the members a creator supplies.</summary>
+        public Dictionary<string, string> CreatorMembers { get; } =
+            new Dictionary<string, string>();
+
+        /// <summary>
         /// True when <see cref="Kind"/> is <see cref="TypeKind.Array"/> and the element type is one of
         /// the RFC 8746 typed array element types, so the emitter registers
         /// <c>TypedArrayConverter&lt;T&gt;</c> instead of <c>ArrayConverter&lt;T&gt;</c>. The reflection

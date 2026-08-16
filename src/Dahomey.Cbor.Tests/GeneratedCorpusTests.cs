@@ -217,6 +217,16 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedTupleTests.Sample();
             }
 
+            if (type == typeof(GeneratedRecord))
+            {
+                return GeneratedCreatorTests.SampleRecord();
+            }
+
+            if (type == typeof(GeneratedCreatorHolder))
+            {
+                return GeneratedCreatorTests.SampleHolder();
+            }
+
             if (type == typeof(GeneratedOverrideHolder))
             {
                 return new GeneratedOverrideHolder { Id = 7, Name = "seven" };

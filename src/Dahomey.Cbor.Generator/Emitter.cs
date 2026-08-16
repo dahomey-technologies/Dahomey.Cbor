@@ -426,6 +426,27 @@ namespace Dahomey.Cbor.Generator
                 builder.AppendLine($"{indent}            }});");
             }
 
+            // A creator for a type `new T()` cannot build: a [CborConstructor], or the single
+            // constructor of a type with no parameterless one, which is what a positional record is.
+            // The member names are given explicitly rather than left to the lambda's parameter names,
+            // because a CBOR name need not be a legal C# identifier and a parameter must be.
+            if (model.CreatorParameters.Count > 0)
+            {
+                string parameters = string.Join(
+                    ", ", model.CreatorParameters.Select((p, i) => $"a{i}"));
+                string signature = string.Join(
+                    ", ", model.CreatorParameters.Select(p => p.Type).Concat(new[] { fullName }));
+                string names = string.Join(
+                    ", ",
+                    model.CreatorParameters.Select(
+                        p => Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(p.CborName, quote: true)));
+
+                builder.AppendLine(
+                    $"{indent}            objectMapping.MapCreator("
+                    + $"new System.Func<{signature}>(({parameters}) => new {fullName}({parameters})))");
+                builder.AppendLine($"{indent}                .SetMemberNames({names});");
+            }
+
             // SetDiscriminator inserts the discriminator entry at index 0 of the member list, so it
             // must run after SetMemberMappings, which replaces that list wholesale.
             if (model.Discriminator is not null)
