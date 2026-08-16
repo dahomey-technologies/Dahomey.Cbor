@@ -404,10 +404,14 @@ namespace Dahomey.Cbor.Generator
             builder.AppendLine($"{indent}        options.Registry.ObjectMappingRegistry.Register<{fullName}>(objectMapping =>");
             builder.AppendLine($"{indent}        {{");
 
-            if (model.ObjectFormat != "StringKeyMap")
-            {
-                builder.AppendLine($"{indent}            objectMapping.SetObjectFormat(CborObjectFormat.{model.ObjectFormat});");
-            }
+            // Stated unconditionally, including for StringKeyMap. The mapping's own default is the
+            // *options* format, not StringKeyMap, so a type that declares
+            // [CborObjectFormat(StringKeyMap)] under a context whose options say Array loses its
+            // declaration if this line is skipped -- and then fails as
+            // "expecting all fields/properties to get a member index", which names neither the type's
+            // attribute nor the option that overrode it. The reflection path calls SetObjectFormat
+            // whenever the attribute is present, so saying it always is what keeps the two in step.
+            builder.AppendLine($"{indent}            objectMapping.SetObjectFormat(CborObjectFormat.{model.ObjectFormat});");
 
             if (model.Members.Count == 0)
             {
