@@ -64,10 +64,28 @@ public partial class Context : CborSerializerContext { }
         [InlineData("object")]
         [InlineData("System.Guid")]
         [InlineData("System.DateTimeOffset")]
-        [InlineData("System.Half")]
         public void TypesWithNoConcreteConverterAreReported(string memberType)
         {
             AssertReports("CBOR1002", $@"
+public class Holder {{ public {memberType} Value {{ get; set; }} }}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+");
+        }
+
+        /// <summary>
+        /// <c>Half</c> was in the list above until <c>HalfConverter</c> existed. It is the reason that
+        /// list is kept in step with <c>PrimitiveConverterProvider</c> by hand rather than derived from
+        /// it: while it was absent there, the reflection path did not refuse a <c>Half</c> — it wrote the
+        /// struct's internal fields, so the generator's refusal was the better of the two behaviours.
+        /// </summary>
+        [Theory]
+        [InlineData("System.Half")]
+        [InlineData("System.Half[]")]
+        public void AHalfIsNotReported(string memberType)
+        {
+            AssertClean($@"
 public class Holder {{ public {memberType} Value {{ get; set; }} }}
 
 [CborSerializable(typeof(Holder))]

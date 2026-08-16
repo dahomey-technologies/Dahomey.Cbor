@@ -329,14 +329,17 @@ namespace Dahomey.Cbor.Generator
 
                 case "Dahomey.Cbor.CborBigFloat":
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
+
+                // Written as binary16 and nothing wider, so `float16` is exact here where `float` --
+                // which the single/double row needs, since those emit the shortest round-tripping form
+                // -- would be looser than the writer.
+                case "System.Half":
+                    return "float16";
             }
 
-            // Guid and DateTimeOffset have no scalar converter. Nor does System.Half: the only place
-            // the library references it is the RFC 8746 typed-array element path, which writes
-            // `#6.84(bstr)` -- a different representation entirely, not this method's concern.
-            // System.Decimal reaches here only in its default encoding, which is likewise
-            // indescribable. Each falls through to CBOR1011 rather than asserting a row no converter
-            // backs.
+            // Guid and DateTimeOffset have no scalar converter. System.Decimal reaches here only in
+            // its default encoding, which is likewise indescribable. Each falls through to CBOR1011
+            // rather than asserting a row no converter backs.
             return null;
         }
 

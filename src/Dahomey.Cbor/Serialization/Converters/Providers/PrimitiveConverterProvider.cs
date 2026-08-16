@@ -48,6 +48,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
             }
 
             // Not a TypeCode, so it cannot join the switch above.
+            if (type == typeof(Half))
+            {
+                return new HalfConverter();
+            }
+
             if (type == typeof(BigInteger))
             {
                 return new BigIntegerConverter();

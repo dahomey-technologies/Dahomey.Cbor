@@ -738,7 +738,7 @@ namespace Dahomey.Cbor.Generator
         private static bool HasNoConcreteConverter(ITypeSymbol type)
         {
             return type.SpecialType == SpecialType.System_Object
-                || type.ToDisplayString() is "System.Half" or "System.Guid" or "System.DateTimeOffset";
+                || type.ToDisplayString() is "System.Guid" or "System.DateTimeOffset";
         }
 
         private static bool IsPrimitive(ITypeSymbol type)
@@ -777,11 +777,21 @@ namespace Dahomey.Cbor.Generator
                     return true;
             }
 
-            // System.Half, System.Guid, System.DateTimeOffset and System.Object are deliberately absent.
+            // System.Guid, System.DateTimeOffset and System.Object are deliberately absent.
             // PrimitiveConverterProvider has no case for any of them, so at run time they fall through
             // to ObjectConverterProvider and reach MakeGenericType -- the exact failure a generated
             // context exists to prevent, and one the AOT analyzer cannot see either. Classifying them
             // as unsupported turns that into a build error. See UnsupportedReason.
+            //
+            // System.Half was in that list until HalfConverter existed, and it is the reason to keep
+            // this list and PrimitiveConverterProvider in step rather than approximating one from the
+            // other: while it was absent there, the reflection path did not refuse a Half -- it wrote
+            // the struct's internal fields.
+            if (type.ToDisplayString() == "System.Half")
+            {
+                return true;
+            }
+
             return false;
         }
 

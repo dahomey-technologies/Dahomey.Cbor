@@ -182,12 +182,17 @@ namespace Harness
         }
 
         /// <summary>
-        /// Scalar System.Half has no converter either -- the only place the library references it is the
-        /// RFC 8746 typed-array element path, a different representation entirely (`#6.84(bstr)`), not a
-        /// scalar member's.
+        /// Scalar System.Half renders as `float16`, which is exact rather than merely permitted:
+        /// HalfConverter writes binary16 and nothing wider, where the single/double row needs the
+        /// prelude's looser `float` because those emit the shortest form that round-trips.
         /// </summary>
+        /// <remarks>
+        /// It had no representation until <c>HalfConverter</c> existed, when the only place the library
+        /// referenced <c>Half</c> was the RFC 8746 typed-array element path -- `#6.84(bstr)`, a
+        /// different representation entirely, and not a scalar member's.
+        /// </remarks>
         [Fact]
-        public void ScalarHalfHasNoCddlRepresentation()
+        public void ScalarHalfRendersAsFloat16()
         {
             ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
     public class Measurement { public System.Half Value { get; set; } }
@@ -198,8 +203,7 @@ namespace Harness
 }
 ");
 
-            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1011");
-            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
+            Assert.DoesNotContain(diagnostics, d => d.Id == "CBOR1011");
         }
 
         /// <summary>
