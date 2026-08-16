@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -362,6 +363,13 @@ namespace Dahomey.Cbor.Generator
                 builder.Append(",\n");
             }
 
+            // Labels are resolved for the whole rule before any is written, because uniqueness is a
+            // property of the rule rather than of a member: two members whose names fold to the same
+            // identifier can only be told apart by looking at both.
+            IReadOnlyDictionary<MemberModel, string> memberLabels = isArray && options.CddlMemberNames
+                ? BuildMemberLabels(model)
+                : EmptyLabels;
+
             foreach (MemberModel member in InWireOrder(model))
             {
                 string? reference = CddlTypeReference.Render(member.Type, byKey, referenceNames, options);
@@ -387,7 +395,15 @@ namespace Dahomey.Cbor.Generator
                 switch (model.ObjectFormat)
                 {
                     case "Array":
-                        // Positional: no key at all, just the value in wire order.
+                        // Positional: the value alone carries the encoding. A label, when asked for, is
+                        // documentation -- in an array context CDDL ignores the member key -- and is
+                        // what gives a downstream code generator a distinct name per position.
+                        if (memberLabels.TryGetValue(member, out string? label))
+                        {
+                            builder.Append(label);
+                            builder.Append(": ");
+                        }
+
                         break;
 
                     case "IntKeyMap":
@@ -418,6 +434,87 @@ namespace Dahomey.Cbor.Generator
             }
 
             builder.Append(isArray ? "]" : "}");
+        }
+
+        private static readonly IReadOnlyDictionary<MemberModel, string> EmptyLabels =
+            new Dictionary<MemberModel, string>();
+
+        /// <summary>
+        /// A distinct label for each member of an <c>Array</c> rule, derived from the C# member name.
+        /// </summary>
+        /// <remarks>
+        /// Two guarantees, both of which a consumer of the schema depends on. The label is an ASCII
+        /// identifier — <c>[A-Za-z_][A-Za-z0-9_]*</c> — which is narrower than RFC 8610's <c>id</c>
+        /// (that admits <c>-</c> and <c>.</c>), because the reason to emit a label at all is a code
+        /// generator turning it into an identifier in a language that does not. And it is unique within
+        /// the rule, since a generator naming a struct field after each label needs the fields to
+        /// differ.
+        /// <para>
+        /// A C# member name is already an identifier, so the folding only has work to do for the
+        /// Unicode ones, which arrive as <c>_XXXX</c> per code point. That is not injective, so a
+        /// numeric suffix settles whatever it collides with.
+        /// </para>
+        /// </remarks>
+        private static IReadOnlyDictionary<MemberModel, string> BuildMemberLabels(TypeModel model)
+        {
+            Dictionary<MemberModel, string> labels = new Dictionary<MemberModel, string>();
+            HashSet<string> taken = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (MemberModel member in InWireOrder(model))
+            {
+                string candidate = FoldToAsciiIdentifier(member.Name);
+                string unique = candidate;
+
+                for (int suffix = 2; !taken.Add(unique); suffix++)
+                {
+                    unique = candidate + suffix.ToString(CultureInfo.InvariantCulture);
+                }
+
+                labels[member] = unique;
+            }
+
+            return labels;
+        }
+
+        /// <summary>
+        /// Folds a C# member name to <c>[A-Za-z_][A-Za-z0-9_]*</c>, escaping anything outside it as the
+        /// code point in hex.
+        /// </summary>
+        private static string FoldToAsciiIdentifier(string name)
+        {
+            StringBuilder builder = new StringBuilder(name.Length);
+
+            for (int index = 0; index < name.Length; index++)
+            {
+                char character = name[index];
+
+                if (character == '_'
+                    || (character >= 'A' && character <= 'Z')
+                    || (character >= 'a' && character <= 'z')
+                    || (character >= '0' && character <= '9' && builder.Length > 0))
+                {
+                    builder.Append(character);
+                    continue;
+                }
+
+                int codePoint = character;
+
+                // A surrogate pair is one code point, so it escapes as one run rather than as two
+                // lone halves that no longer name the character the member was declared with.
+                if (char.IsHighSurrogate(character)
+                    && index + 1 < name.Length
+                    && char.IsLowSurrogate(name[index + 1]))
+                {
+                    codePoint = char.ConvertToUtf32(character, name[index + 1]);
+                    index++;
+                }
+
+                builder.Append('_').Append(codePoint.ToString("X4", CultureInfo.InvariantCulture));
+            }
+
+            // Total rather than defensive: a C# identifier cannot open with a digit and an escape opens
+            // with '_', so nothing a member name produces reaches this.
+            return builder.Length == 0 ? "_" : builder.ToString();
         }
 
         /// <summary>

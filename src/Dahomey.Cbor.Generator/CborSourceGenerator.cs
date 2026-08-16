@@ -344,9 +344,32 @@ namespace Dahomey.Cbor.Generator
         /// </summary>
         public bool WritesDecimalFractions => DecimalFormat is "DecimalFraction";
 
+        /// <summary>
+        /// Whether an <c>Array</c> rule labels each entry with its member name, from
+        /// <c>[CborCddlSchema(MemberNames = true)]</c>. It rides here rather than being threaded
+        /// separately because every method that emits a shape already takes these options.
+        /// </summary>
+        public bool CddlMemberNames { get; private set; }
+
         public static GenerationOptions Read(INamedTypeSymbol contextSymbol, List<DiagnosticInfo> diagnostics)
         {
             GenerationOptions options = new GenerationOptions();
+
+            // Read before the early return below: this setting lives on [CborCddlSchema], so a context
+            // carrying that attribute and no [CborSourceGenerationOptions] must still see it.
+            AttributeData? schemaAttribute = contextSymbol.GetAttributes().FirstOrDefault(
+                a => a.AttributeClass?.ToDisplayString() == "Dahomey.Cbor.Attributes.CborCddlSchemaAttribute");
+
+            if (schemaAttribute is not null)
+            {
+                foreach (KeyValuePair<string, TypedConstant> named in schemaAttribute.NamedArguments)
+                {
+                    if (named.Key == "MemberNames" && named.Value.Value is bool memberNames)
+                    {
+                        options.CddlMemberNames = memberNames;
+                    }
+                }
+            }
 
             AttributeData? attribute = contextSymbol.GetAttributes().FirstOrDefault(
                 a => a.AttributeClass?.ToDisplayString() == "Dahomey.Cbor.Attributes.CborSourceGenerationOptionsAttribute");
