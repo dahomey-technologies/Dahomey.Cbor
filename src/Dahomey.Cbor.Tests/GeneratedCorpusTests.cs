@@ -546,6 +546,23 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            if (type == typeof(Cddl.CddlLabelledRow))
+            {
+                // Id and Revision differ, so a rule that confused the two same-typed positions would
+                // be caught here rather than only in the schema assertions.
+                return new Cddl.CddlLabelledRow { Id = 7, Name = "foo", Revision = 3 };
+            }
+
+            if (type == typeof(Cddl.CddlColliding))
+            {
+                return new Cddl.CddlColliding { Café = 1, Caf_00E9 = 2 };
+            }
+
+            if (type == typeof(Cddl.CddlLabelledPacked))
+            {
+                return new Cddl.CddlLabelledPacked { Id = 7, Name = "foo" };
+            }
+
             throw new InvalidOperationException(
                 $"{type} is declared on a generated context but has no sample; add one to {nameof(Sample)}.");
         }
