@@ -102,17 +102,24 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// The names of the reading half of <see cref="Cbor"/>. Serializing, <c>ToJson</c> and
-        /// <c>DeserializeAnonymousType</c> — which forwards to <c>Deserialize</c> and so is not a door of
-        /// its own — are outside what the theories claim to cover.
+        /// What on <see cref="Cbor"/> is not a read entry point. Named as exclusions rather than the
+        /// reading half being named as inclusions, so that a method added under a name nobody here
+        /// anticipated — <c>ReadItemsAsync</c>, say — is required to have a row rather than skipped for
+        /// not being on a list. A list of what to check is the same hand-maintained thing as a list of
+        /// rows, and would leave this test one rename behind the API in the same way.
         /// </summary>
-        private static readonly string[] ReadingMethodNames =
+        private static readonly string[] NotReadEntryPoints =
         {
-            "Deserialize",
-            "DeserializeMultiple",
-            "DeserializeAsync",
-            "DeserializeMultipleAsync",
-            "ReadNextItemAsync",
+            "Serialize",
+            "SerializeMultiple",
+            "SerializeAsync",
+            "SerializeMultipleAsync",
+
+            // Debugging helper: forwards to Deserialize<CborValue>, so it is that door, not one of its own.
+            "ToJson",
+
+            // Forwards to Deserialize<T>; the type is inferred from a sample object rather than named.
+            "DeserializeAnonymousType",
         };
 
         /// <summary>
@@ -128,9 +135,11 @@ namespace Dahomey.Cbor.Tests
             HashSet<string> rows = new HashSet<string>(
                 EntryPointsFor<RefusedByItsConverter>().Select(row => (string)row[0]), StringComparer.Ordinal);
 
+            // DeclaredOnly because object.Equals and object.ReferenceEquals are public and static too, and
+            // an exclusion list should say what Cbor offers rather than what every type inherits.
             List<MethodInfo> reading = typeof(Cbor)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(method => Array.IndexOf(ReadingMethodNames, method.Name) >= 0)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Where(method => Array.IndexOf(NotReadEntryPoints, method.Name) < 0)
                 .ToList();
 
             // Reflection finding nothing would make every assertion below vacuously true, which is the one
