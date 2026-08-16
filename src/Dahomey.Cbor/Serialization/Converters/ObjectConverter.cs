@@ -1331,7 +1331,12 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             foreach (IMemberConverter memberConverter in context.memberConvertersForWrite)
             {
-                if (_isStruct)
+                if (HoldsAPosition(memberConverter, ref context))
+                {
+                    // Written whatever ShouldSerialize says: see WriteItem.
+                    writableMembersCount++;
+                }
+                else if (_isStruct)
                 {
                     IMemberConverter<T> typedMemberConverter = (IMemberConverter<T>)memberConverter;
 
@@ -1349,6 +1354,30 @@ namespace Dahomey.Cbor.Serialization.Converters
             return writableMembersCount;
         }
 
+        /// <summary>
+        /// Whether this member is addressed by nothing but its position in the document, and so has
+        /// to be written whatever <c>ShouldSerialize</c> says about it.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="CborObjectFormat.Array"/> carries no keys, so an omitted member slides every
+        /// member after it a position earlier, onto the wrong member on the read; the format has no
+        /// way to express absence, so the member is written with its current value -- the default, in
+        /// the very case the predicate exists to catch -- and the predicate is consulted only where a
+        /// key travels with the value to say which member it belongs to. That is the same reasoning
+        /// that keeps <see cref="CborObjectFormat.Array"/> out of the deterministic member sort in
+        /// <see cref="MemberConvertersForWrite"/>.
+        /// <para>
+        /// The discriminator is the exception: it is not a member of the type and holds no position,
+        /// being written under a semantic tag and recognised by it on the read. Whether it appears at
+        /// all is the discriminator policy's business, so it keeps answering for itself.
+        /// </para>
+        /// </remarks>
+        private static bool HoldsAPosition(IMemberConverter memberConverter, ref WriterContext context)
+        {
+            return context.objectFormat == CborObjectFormat.Array
+                && memberConverter is not IDiscriminatorMemberConverter;
+        }
+
         private bool WriteItem(ref CborWriter writer, ref WriterContext context)
         {
             while (context.memberIndex < context.memberConvertersForWrite.Count)
@@ -1358,7 +1387,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     IMemberConverter<T> typedMemberConverter = (IMemberConverter<T>)memberConverter;
 
-                    if (typedMemberConverter.ShouldSerialize(ref context.obj, typeof(T)))
+                    if (HoldsAPosition(memberConverter, ref context) || typedMemberConverter.ShouldSerialize(ref context.obj, typeof(T)))
                     {
                         switch (context.objectFormat)
                         {
@@ -1380,7 +1409,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                         break;
                     }
                 }
-                else if (memberConverter.ShouldSerialize(context.obj!, typeof(T), context.options))
+                else if (HoldsAPosition(memberConverter, ref context) || memberConverter.ShouldSerialize(context.obj!, typeof(T), context.options))
                 {
                     switch (context.objectFormat)
                     {

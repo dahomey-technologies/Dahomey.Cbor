@@ -120,6 +120,18 @@ namespace Dahomey.Cbor.Serialization.Converters
             _requirementPolicy = requirementPolicy;
         }
 
+        /// <summary>
+        /// Names this member for an error message: its CBOR name, or its index for a member that
+        /// carries one instead — <see cref="CborObjectFormat.IntKeyMap"/> and
+        /// <see cref="CborObjectFormat.Array"/> members have no name to report.
+        /// </summary>
+        private string Describe()
+        {
+            return _memberName.IsEmpty && _memberIndex.HasValue
+                ? $"index {_memberIndex.Value}"
+                : Encoding.UTF8.GetString(_memberName.Span);
+        }
+
         public void Read(ref CborReader reader, object obj)
         {
             // Inspect rather than read: this only asks whether the member is null, and the member's
@@ -128,13 +140,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (_requirementPolicy == RequirementPolicy.DisallowNull || _requirementPolicy == RequirementPolicy.Always)
                 {
-                    throw new CborException($"Property '{Encoding.UTF8.GetString(_memberName.Span)}' cannot be null.");
+                    throw new CborException($"Property '{Describe()}' cannot be null.");
                 }
             }
 
             if (_memberSetter == null)
             {
-                throw new CborException($"No member setter for '{Encoding.UTF8.GetString(_memberName.Span)}'");
+                throw new CborException($"No member setter for '{Describe()}'");
             }
 
             _memberSetter((T)obj, Converter.Read(ref reader));
@@ -144,7 +156,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (_memberGetter == null)
             {
-                throw new CborException($"No member getter for '{Encoding.UTF8.GetString(_memberName.Span)}'");
+                throw new CborException($"No member getter for '{Describe()}'");
             }
 
             TM value = _memberGetter((T)obj);
@@ -152,7 +164,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             if (_isClass && value == null && (_requirementPolicy == RequirementPolicy.DisallowNull
                 || _requirementPolicy == RequirementPolicy.Always))
             {
-                throw new CborException($"Property '{Encoding.UTF8.GetString(_memberName.Span)}' cannot be null.");
+                throw new CborException($"Property '{Describe()}' cannot be null.");
             }
 
             Converter.Write(ref writer, value, _lengthMode);
@@ -167,7 +179,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (_memberSetter == null)
             {
-                throw new CborException($"No member setter for '{Encoding.UTF8.GetString(_memberName.Span)}'");
+                throw new CborException($"No member setter for '{Describe()}'");
             }
 
             _memberSetter((T)obj, (TM)value);
@@ -177,7 +189,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (_memberGetter == null)
             {
-                throw new CborException($"No member getter for '{Encoding.UTF8.GetString(_memberName.Span)}'");
+                throw new CborException($"No member getter for '{Describe()}'");
             }
 
             if (IgnoreIfDefault && EqualityComparer<TM>.Default.Equals(_memberGetter((T)obj), _defaultValue))
@@ -463,7 +475,20 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
     }
 
-    public class DiscriminatorMemberConverter<T> : IMemberConverter
+    /// <summary>
+    /// Marks the discriminator's member converter whatever type it was built for.
+    /// </summary>
+    /// <remarks>
+    /// A write resolves its member list on the object's actual type, so a polymorphic write hands a
+    /// declared type's converter the derived type's members — and with them a
+    /// <see cref="DiscriminatorMemberConverter{T}"/> closed over that derived type. Recognising it by
+    /// the closed type would therefore miss it exactly where a discriminator is written at all.
+    /// </remarks>
+    public interface IDiscriminatorMemberConverter : IMemberConverter
+    {
+    }
+
+    public class DiscriminatorMemberConverter<T> : IDiscriminatorMemberConverter
     {
         private readonly CborOptions _options;
         private readonly IDiscriminatorConvention _discriminatorConvention;

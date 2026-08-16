@@ -295,6 +295,28 @@ indexes: inserting a member with an index that sorts between two existing ones s
 it by one position, where `IntKeyMap` would not move. Use `IntKeyMap` where indexes need to be stable
 addresses across versions.
 
+For the same reason, `Array` writes every member of the type on every document. A member omitted by
+`[CborIgnoreIfDefault]` or by a `ShouldSerializeXyz()` method would leave no trace in a keyless
+format, so everything after it would shift a position earlier and read back onto the wrong member.
+Those declarations are therefore ignored in `Array`, and the member is written with the value it
+holds — `null` or the type's default in the case they exist to catch. They work as declared in
+`StringKeyMap` and `IntKeyMap`, where each value travels with the key that says which member it
+belongs to.
+
+One combination becomes visible that way: a member declaring both `[CborIgnoreIfDefault]` and
+`[CborRequired]` — with a policy of `DisallowNull` or `Always` — now throws when it is null, where the
+omission used to hide it. The two declarations contradict each other in a format that cannot omit
+anything, and the document the write used to produce could not be read back. Drop one of the two, or
+use `IntKeyMap`.
+
+A member keyed by an index has no name to put in such a message, so it is reported as its index:
+`Property 'index 2' cannot be null.` That also applies to `IntKeyMap`, where the same messages used to
+name the member with an empty string.
+
+The discriminator is not a member and holds no position — it is written under a semantic tag and
+recognised by it — so `CborDiscriminatorPolicy` decides whether it appears in an `Array` exactly as it
+does in a map.
+
 ### Bignums (RFC 8949 §3.4.3)
 
 A member typed `System.Numerics.BigInteger` reads and writes integers of any width. Values that fit in 64
