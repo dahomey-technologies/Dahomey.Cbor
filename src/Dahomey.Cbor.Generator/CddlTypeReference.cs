@@ -119,6 +119,9 @@ namespace Dahomey.Cbor.Generator
 
                     goto case TypeKind.Collection;
 
+                // A collection interface describes the same document as the concrete collection behind
+                // it: the backing type decides what the reader hands back, not what goes on the wire.
+                case TypeKind.InterfaceCollection:
                 case TypeKind.Collection:
                 {
                     string? element = Render(
@@ -127,6 +130,7 @@ namespace Dahomey.Cbor.Generator
                     break;
                 }
 
+                case TypeKind.InterfaceDictionary:
                 case TypeKind.Dictionary:
                 {
                     string? dictionaryKey = Render(

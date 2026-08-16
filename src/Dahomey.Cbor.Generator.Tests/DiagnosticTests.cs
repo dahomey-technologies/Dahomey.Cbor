@@ -393,6 +393,31 @@ public partial class Context : CborSerializerContext { }
         }
 
         /// <summary>
+        /// The collection interfaces the reflection path resolves through
+        /// <c>InterfaceCollectionConverter</c>, and <c>IDictionary&lt;K,V&gt;</c> through
+        /// <c>InterfaceDictionaryConverter</c>. Declaring one is ordinary — a model that says
+        /// <c>IList&lt;T&gt;</c> rather than <c>List&lt;T&gt;</c> is expressing a contract, not being
+        /// awkward — so refusing it made the generated path unusable for that model.
+        /// </summary>
+        [Theory]
+        [InlineData("System.Collections.Generic.IList<int>")]
+        [InlineData("System.Collections.Generic.ICollection<int>")]
+        [InlineData("System.Collections.Generic.IEnumerable<int>")]
+        [InlineData("System.Collections.Generic.IReadOnlyList<int>")]
+        [InlineData("System.Collections.Generic.IReadOnlyCollection<int>")]
+        [InlineData("System.Collections.Generic.ISet<int>")]
+        [InlineData("System.Collections.Generic.IDictionary<string, int>")]
+        public void ACollectionInterfaceMemberIsNotReported(string memberType)
+        {
+            AssertClean($@"
+public class Holder {{ public {memberType} Value {{ get; set; }} }}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+");
+        }
+
+        /// <summary>
         /// An abstract base is never instantiated — its subtypes are — so it must not be reported.
         /// </summary>
         [Fact]
