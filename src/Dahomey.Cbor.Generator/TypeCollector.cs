@@ -289,7 +289,11 @@ namespace Dahomey.Cbor.Generator
                     }
                 }
 
-                model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite));
+                model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite)
+                {
+                    RequirementPolicy = ReadRequirementPolicy(member),
+                    ShouldSerializeMethod = FindShouldSerializeMethod(type, member),
+                });
 
                 Collect(memberType);
 
@@ -319,7 +323,6 @@ namespace Dahomey.Cbor.Generator
         private static readonly (string Attribute, string Description)[] UnsupportedMemberFeatures =
         {
             ("CborConverterAttribute", "[CborConverter]"),
-            ("CborRequiredAttribute", "[CborRequired]"),
             ("CborIgnoreIfDefaultAttribute", "[CborIgnoreIfDefault]"),
             ("CborLengthModeAttribute", "[CborLengthMode]"),
             ("DefaultValueAttribute", "[DefaultValue]"),
@@ -349,14 +352,6 @@ namespace Dahomey.Cbor.Generator
                     if (HasAttribute(method, "OnDeserializedAttribute"))
                     {
                         Report(method.Locations.FirstOrDefault(), type.ToDisplayString(), "[OnDeserialized]");
-                    }
-
-                    if (method.Name.StartsWith("ShouldSerialize", System.StringComparison.Ordinal)
-                        && method.Name.Length > "ShouldSerialize".Length
-                        && method.Parameters.Length == 0
-                        && method.ReturnType.SpecialType == SpecialType.System_Boolean)
-                    {
-                        Report(method.Locations.FirstOrDefault(), type.ToDisplayString(), $"a {method.Name}() method");
                     }
 
                     continue;
@@ -890,6 +885,115 @@ namespace Dahomey.Cbor.Generator
             {
                 yield return overridden;
             }
+        }
+
+        /// <summary>
+        /// The <c>[CborRequired]</c> policy for a member, as the <c>RequirementPolicy</c> member name to
+        /// emit, or null where the member is not required.
+        /// </summary>
+        /// <remarks>
+        /// The attribute's constructor defaults to <c>Always</c>, so an argumentless <c>[CborRequired]</c>
+        /// means <c>Always</c> — the same default <c>CborRequiredAttribute</c> itself applies, rather
+        /// than a second copy of the policy living here.
+        /// <para>
+        /// The value is rendered by <c>TypedConstant.ToCSharpString()</c> rather than mapped from its
+        /// underlying number, so a reordering of <c>RequirementPolicy</c> cannot silently turn one policy
+        /// into another here — the emitted text names the member the caller wrote.
+        /// </para>
+        /// </remarks>
+        private static string? ReadRequirementPolicy(ISymbol member)
+        {
+            foreach (ISymbol declaration in WithOverriddenDeclarations(member))
+            {
+                foreach (AttributeData attribute in declaration.GetAttributes())
+                {
+                    if (attribute.AttributeClass?.Name != "CborRequiredAttribute")
+                    {
+                        continue;
+                    }
+
+                    foreach (TypedConstant argument in attribute.ConstructorArguments)
+                    {
+                        return RenderEnumConstant(argument) ?? DefaultRequirementPolicy;
+                    }
+
+                    foreach (KeyValuePair<string, TypedConstant> named in attribute.NamedArguments)
+                    {
+                        if (named.Key == "Policy")
+                        {
+                            return RenderEnumConstant(named.Value) ?? DefaultRequirementPolicy;
+                        }
+                    }
+
+                    // The attribute's own constructor default.
+                    return DefaultRequirementPolicy;
+                }
+            }
+
+            return null;
+        }
+
+        private const string DefaultRequirementPolicy =
+            "global::Dahomey.Cbor.Attributes.RequirementPolicy.Always";
+
+        /// <summary>
+        /// An enum-valued attribute argument as the fully qualified member the caller wrote.
+        /// </summary>
+        /// <remarks>
+        /// Resolved from the enum's own symbol rather than mapped from the underlying number, so a
+        /// reordering of the enum cannot silently turn one member into another here.
+        /// </remarks>
+        private static string? RenderEnumConstant(TypedConstant constant)
+        {
+            if (constant.Type is not INamedTypeSymbol enumType || constant.Value is null)
+            {
+                return null;
+            }
+
+            foreach (ISymbol candidate in enumType.GetMembers())
+            {
+                if (candidate is IFieldSymbol { HasConstantValue: true } field
+                    && Equals(field.ConstantValue, constant.Value))
+                {
+                    return enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                        + "." + field.Name;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The <c>ShouldSerialize&lt;Member&gt;()</c> method the reflection path would use for this
+        /// member, or null where the type declares none that qualifies.
+        /// </summary>
+        /// <remarks>
+        /// The test is <c>DefaultObjectMappingConvention.ProcessShouldSerializeMethod</c>'s, repeated
+        /// rather than approximated: public, no parameters, returning <c>bool</c>, named for the member.
+        /// A method that misses any of those is ignored by the reflection path, so picking it up here
+        /// would make the two paths disagree about whether the member is written at all — which is a
+        /// silent divergence rather than a loud one.
+        /// </remarks>
+        private static string? FindShouldSerializeMethod(ITypeSymbol type, ISymbol member)
+        {
+            string name = "ShouldSerialize" + member.Name;
+
+            foreach (ISymbol candidate in AllMembers(type))
+            {
+                if (candidate is IMethodSymbol
+                    {
+                        Parameters.Length: 0,
+                        DeclaredAccessibility: Accessibility.Public,
+                        IsStatic: false,
+                    } method
+                    && method.Name == name
+                    && method.ReturnType.SpecialType == SpecialType.System_Boolean)
+                {
+                    return name;
+                }
+            }
+
+            return null;
         }
 
         private static bool HasInheritedAttribute(ISymbol member, string attributeName)
