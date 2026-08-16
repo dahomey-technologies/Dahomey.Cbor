@@ -473,10 +473,21 @@ namespace Dahomey.Cbor.Generator
                 ? $".SetMemberIndex({member.CborIndex})"
                 : $".SetMemberName({Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(member.CborName, quote: true)})";
 
+            // Both are calls DelegateMemberMapping has always offered; what was missing was the
+            // generator making them, which is why they were CBOR1007 rather than a shape it could not
+            // reproduce. Order follows the reflection path's: the predicate, then the requirement.
+            string shouldSerialize = member.ShouldSerializeMethod is null
+                ? string.Empty
+                : $".SetShouldSerializeMethod(o => (({ownerName})o).{member.ShouldSerializeMethod}())";
+
+            string required = member.RequirementPolicy is null
+                ? string.Empty
+                : $".SetRequired({member.RequirementPolicy})";
+
             builder.AppendLine($"{indent}                new {mappingType}(");
             builder.AppendLine($"{indent}                    converters,");
             builder.AppendLine($"{indent}                    {getter},");
-            builder.AppendLine($"{indent}                    {setter}){key},");
+            builder.AppendLine($"{indent}                    {setter}){key}{shouldSerialize}{required},");
         }
 
         private static string FullName(ITypeSymbol type)

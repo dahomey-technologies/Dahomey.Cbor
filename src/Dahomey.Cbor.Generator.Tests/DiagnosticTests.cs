@@ -93,7 +93,6 @@ public partial class Context : CborSerializerContext {{ }}
         }
 
         [Theory]
-        [InlineData("[CborRequired]")]
         [InlineData("[CborIgnoreIfDefault]")]
         [InlineData("[DefaultValue(3)]")]
         [InlineData("[CborLengthMode(LengthMode = LengthMode.IndefiniteLength)]")]
@@ -141,15 +140,52 @@ public partial class Context : CborSerializerContext { }
 ");
         }
 
+        /// <summary>
+        /// Both are expressible through the delegate mappings — <c>SetRequired</c> and
+        /// <c>SetShouldSerializeMethod</c> have always been there — so refusing them was the generator
+        /// not emitting a call it could make, rather than a shape it could not reproduce.
+        /// </summary>
         [Fact]
-        public void AShouldSerializeMethodIsReported()
+        public void ARequiredMemberIsNotReported()
         {
-            AssertReports("CBOR1007", @"
+            AssertClean(@"
+public class Holder { [CborRequired] public int Value { get; set; } }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        [Fact]
+        public void AShouldSerializeMethodIsNotReported()
+        {
+            AssertClean(@"
 public class Holder
 {
     public int Value { get; set; }
 
     public bool ShouldSerializeValue() => true;
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// A <c>ShouldSerialize</c> method the reflection path ignores — it takes a parameter, so it is
+        /// not the convention — must not be picked up here either, or the two paths disagree about
+        /// whether the member is written at all.
+        /// </summary>
+        [Fact]
+        public void AShouldSerializeMethodTheReflectionPathIgnoresIsNotUsed()
+        {
+            AssertClean(@"
+public class Holder
+{
+    public int Value { get; set; }
+
+    public bool ShouldSerializeValue(int unused) => false;
 }
 
 [CborSerializable(typeof(Holder))]
