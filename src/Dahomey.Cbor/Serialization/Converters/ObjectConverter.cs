@@ -1133,71 +1133,68 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// converter; reading only ever names the declared type, so the asymmetry is easy to walk into
         /// and the document looks complete.
         /// <para>
-        /// Every registered convention is asked, since which one would have written the key is exactly
-        /// what is not known here. Where none of them finds anything the document really is
-        /// undiscriminated, and the missing <c>CreatorMapping</c> that <see cref="CreateInstance"/>
-        /// reports is the right answer.
+        /// Only the string-keyed arm depends on a convention, and there every registered one is asked,
+        /// since which of them would have written the key is exactly what is not known here. The other
+        /// two formats put the discriminator at a place no convention gets to choose — index 0, or the
+        /// first item behind the semantic tag — so they are probed once and hold even where the
+        /// conventions have been cleared. Where nothing is found the document really is undiscriminated,
+        /// and the missing <c>CreatorMapping</c> that <see cref="CreateInstance"/> reports is the right
+        /// answer.
+        /// </para>
+        /// <para>
+        /// The place is all any of this has to go on, so a type that is not polymorphic at all but does
+        /// declare a member where a discriminator would sit — <c>_t</c>, or index 0 — is reported as an
+        /// unregistered subtype rather than as the missing creator it is. Nothing in the document tells
+        /// the two apart; the resolution path above reads the same place on the same evidence.
         /// </para>
         /// </remarks>
         private void ThrowIfADiscriminatorIsPresent(ref CborReader reader)
         {
-            foreach (IDiscriminatorConvention convention in _registry.DiscriminatorConventionRegistry.Conventions)
+            if (_objectMapping.ObjectFormat == CborObjectFormat.StringKeyMap)
             {
-                CborReaderBookmark bookmark = reader.GetBookmark();
-                CborValue? discriminator = TryReadDiscriminator(ref reader, convention);
-                reader.ReturnToBookmark(bookmark);
-
-                if (discriminator != null)
+                foreach (IDiscriminatorConvention convention in _registry.DiscriminatorConventionRegistry.Conventions)
                 {
-                    throw new CborException(
-                        MemberMappingErrors.UnregisteredDiscriminatedSubtype(typeof(T), discriminator));
+                    CborReaderBookmark namedBookmark = reader.GetBookmark();
+                    CborValue? named = FindItem(ref reader, convention.MemberName) ? ReadDiscriminatorValue(ref reader) : null;
+                    reader.ReturnToBookmark(namedBookmark);
+
+                    ThrowIfPresent(named);
                 }
+
+                return;
+            }
+
+            CborReaderBookmark bookmark = reader.GetBookmark();
+
+            bool present = _objectMapping.ObjectFormat == CborObjectFormat.IntKeyMap
+                ? FindItem(ref reader, 0) // discriminator index is always 0
+                : reader.TryReadSemanticTag(out ulong semanticTag) && semanticTag == _options.DiscriminatorSemanticTag;
+
+            CborValue? discriminator = present ? ReadDiscriminatorValue(ref reader) : null;
+            reader.ReturnToBookmark(bookmark);
+
+            ThrowIfPresent(discriminator);
+        }
+
+        private static void ThrowIfPresent(CborValue? discriminator)
+        {
+            if (discriminator != null)
+            {
+                throw new CborException(
+                    MemberMappingErrors.UnregisteredDiscriminatedSubtype(typeof(T), discriminator));
             }
         }
 
         /// <summary>
-        /// The discriminator value this document carries for <paramref name="convention"/>, or null.
+        /// The discriminator value the reader is sitting on, as a <see cref="CborValue"/>.
         /// </summary>
         /// <remarks>
-        /// Read as a <see cref="CborValue"/> rather than through the convention, which would resolve it
-        /// to a <see cref="Type"/> and fail for the very value being reported. That also renders a
-        /// string and an integer discriminator without this method knowing which it is.
-        /// <para>
-        /// The three arms mirror where each format puts the discriminator, as the resolution above does:
-        /// a named member, index 0, and the first item behind a semantic tag.
-        /// </para>
+        /// Read as a value rather than through the convention, which would resolve it to a
+        /// <see cref="Type"/> and fail for the very value being reported. That also renders a string and
+        /// an integer discriminator without this method knowing which it is.
         /// </remarks>
-        private CborValue? TryReadDiscriminator(ref CborReader reader, IDiscriminatorConvention convention)
+        private CborValue ReadDiscriminatorValue(ref CborReader reader)
         {
-            switch (_objectMapping.ObjectFormat)
-            {
-                case CborObjectFormat.StringKeyMap:
-                    if (!FindItem(ref reader, convention.MemberName))
-                    {
-                        return null;
-                    }
-
-                    break;
-
-                case CborObjectFormat.IntKeyMap:
-                    if (!FindItem(ref reader, 0)) // discriminator index is always 0
-                    {
-                        return null;
-                    }
-
-                    break;
-
-                case CborObjectFormat.Array:
-                default:
-                    if (!reader.TryReadSemanticTag(out ulong semanticTag)
-                        || semanticTag != _options.DiscriminatorSemanticTag)
-                    {
-                        return null;
-                    }
-
-                    break;
-            }
-
             return _registry.ConverterRegistry.Lookup<CborValue>().Read(ref reader);
         }
 

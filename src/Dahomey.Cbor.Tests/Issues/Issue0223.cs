@@ -45,7 +45,7 @@ namespace Dahomey.Cbor.Tests.Issues
                 () => Cbor.Deserialize<Shape>(hex.HexToBytes(), new CborOptions()));
 
             Assert.Contains(ExpectedRemedy, exception.Message);
-            Assert.Contains("circle", exception.Message);
+            Assert.Contains("discriminator \"circle\"", exception.Message);
             Assert.DoesNotContain("CreatorMapping", exception.Message);
         }
 
@@ -59,7 +59,7 @@ namespace Dahomey.Cbor.Tests.Issues
                 () => Cbor.Deserialize<IShape>(hex.HexToBytes(), new CborOptions()));
 
             Assert.Contains(ExpectedRemedy, exception.Message);
-            Assert.Contains("circle", exception.Message);
+            Assert.Contains("discriminator \"circle\"", exception.Message);
         }
 
         /// <summary>
@@ -76,7 +76,7 @@ namespace Dahomey.Cbor.Tests.Issues
                 () => Cbor.Deserialize<IntShape>(hex.HexToBytes(), new CborOptions()));
 
             Assert.Contains(ExpectedRemedy, exception.Message);
-            Assert.Contains("7", exception.Message);
+            Assert.Contains("discriminator 7", exception.Message);
         }
 
         /// <summary>
@@ -86,13 +86,13 @@ namespace Dahomey.Cbor.Tests.Issues
         [Fact]
         public void AnUnregisteredSubtypeUnderArrayFormatIsReported()
         {
-            string hex = WriteOnItsOwnOptions<ArrayShape>(new ArrayCircle { Radius = 1.5 });
+            string hex = WriteOnItsOwnOptions<ArrayShape>(new ArraySquare { Radius = 1.5 });
 
             CborException exception = Assert.Throws<CborException>(
                 () => Cbor.Deserialize<ArrayShape>(hex.HexToBytes(), new CborOptions()));
 
             Assert.Contains(ExpectedRemedy, exception.Message);
-            Assert.Contains("square", exception.Message);
+            Assert.Contains("discriminator \"square\"", exception.Message);
         }
 
         /// <summary>
@@ -129,9 +129,9 @@ namespace Dahomey.Cbor.Tests.Issues
         }
 
         /// <summary>
-        /// Clearing the conventions leaves nothing to probe with, so the document cannot be interrogated
-        /// and the original message stands. Pins that the probe asks the registry rather than assuming
-        /// the default member name.
+        /// Under the default format the member name is the convention's to choose, so clearing the
+        /// conventions leaves nothing to probe with and the original message stands. Pins that the probe
+        /// asks the registry rather than assuming the default member name.
         /// </summary>
         [Fact]
         public void WithNoConventionsRegisteredTheOriginalMessageStands()
@@ -145,6 +145,29 @@ namespace Dahomey.Cbor.Tests.Issues
                 () => Cbor.Deserialize<Shape>(hex.HexToBytes(), options));
 
             Assert.Contains("CreatorMapping", exception.Message);
+        }
+
+        /// <summary>
+        /// The other two formats put the discriminator at a place no convention gets to choose, so the
+        /// document still answers with the conventions cleared. Pins that the probe follows the format
+        /// rather than the registry where the format is what decides.
+        /// </summary>
+        [Fact]
+        public void WithNoConventionsRegisteredAPositionalDiscriminatorIsStillFound()
+        {
+            string intHex = WriteOnItsOwnOptions<IntShape>(new IntCircle { Radius = 1.5 });
+            string arrayHex = WriteOnItsOwnOptions<ArrayShape>(new ArraySquare { Radius = 1.5 });
+
+            CborOptions options = new CborOptions();
+            options.Registry.DiscriminatorConventionRegistry.ClearConventions();
+
+            CborException intException = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<IntShape>(intHex.HexToBytes(), options));
+            CborException arrayException = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<ArrayShape>(arrayHex.HexToBytes(), options));
+
+            Assert.Contains("discriminator 7", intException.Message);
+            Assert.Contains("discriminator \"square\"", arrayException.Message);
         }
 
         public abstract class Shape
@@ -181,7 +204,7 @@ namespace Dahomey.Cbor.Tests.Issues
 
         [CborObjectFormat(CborObjectFormat.Array)]
         [CborDiscriminator("square")]
-        public class ArrayCircle : ArrayShape
+        public class ArraySquare : ArrayShape
         {
             [CborProperty(1)]
             public double Radius { get; set; }
