@@ -11,7 +11,20 @@ namespace Dahomey.Cbor.Serialization.Conventions
     {
         private readonly SerializationRegistry _serializationRegistry;
         private readonly ConcurrentStack<IDiscriminatorConvention> _conventions = new ConcurrentStack<IDiscriminatorConvention>();
-        private readonly ConcurrentDictionary<Type, IDiscriminatorConvention?> _conventionsByType = new ConcurrentDictionary<Type, IDiscriminatorConvention?>();
+        /// <summary>
+        /// The convention resolved for a type. Only resolutions that found one are kept.
+        /// </summary>
+        /// <remarks>
+        /// Caching "no convention" is what made <c>RegisterType</c> useless after the fact: a base type
+        /// is asked about before any of its subtypes is registered whenever a member is declared as the
+        /// base - reading one builds its converter, which resolves the convention - and the null cached
+        /// there outlived every later registration, so the remedy the error message names failed on the
+        /// very options the caller had in hand. Not keeping nulls costs a re-resolution per lookup of a
+        /// type that has no discriminator, which is a couple of cached dictionary reads, and it is the
+        /// callers that ask often - <see cref="Converters.ObjectConverter{T}"/> above all - that hold
+        /// their own answer and only come back here when <see cref="Version"/> has moved.
+        /// </remarks>
+        private readonly ConcurrentDictionary<Type, IDiscriminatorConvention> _conventionsByType = new ConcurrentDictionary<Type, IDiscriminatorConvention>();
 
         /// <summary>
         /// Incremented whenever a registration makes a type resolve to a convention it did not resolve
@@ -67,7 +80,19 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
         public IDiscriminatorConvention? GetConvention(Type type)
         {
-            return _conventionsByType.GetOrAdd(type, t => InternalGetConvention(t));
+            if (_conventionsByType.TryGetValue(type, out IDiscriminatorConvention? convention))
+            {
+                return convention;
+            }
+
+            convention = InternalGetConvention(type);
+
+            if (convention != null)
+            {
+                _conventionsByType.TryAdd(type, convention);
+            }
+
+            return convention;
         }
 
         public void RegisterType(Type type)
@@ -107,21 +132,13 @@ namespace Dahomey.Cbor.Serialization.Conventions
         /// just registered, unless that supertype already has one.
         /// </summary>
         /// <remarks>
-        /// The entry has to be able to displace a <c>null</c>. A base type is asked about before any of
-        /// its subtypes is registered whenever a member is declared as the base - reading one builds its
-        /// converter, which resolves the convention - and that lookup caches "no convention" under the
-        /// base type. A plain <c>TryAdd</c> then cannot get past it, so registering the subtype
-        /// afterwards left the base type resolving to null for the life of the options: the call did
-        /// nothing and said nothing, and the read went on failing exactly as it had before it.
-        /// <para>
-        /// An existing non-null answer is kept rather than overwritten. The registry holds one
-        /// convention per declared type, so the first hierarchy to claim a supertype keeps it, which is
-        /// the behaviour <c>TryAdd</c> already had for that case.
-        /// </para>
+        /// The registry holds one convention per declared type, so the first hierarchy to claim a
+        /// supertype keeps it. Nothing has to be displaced here: the only entries in the way used to be
+        /// the cached nulls, which are no longer kept.
         /// </remarks>
         private void Propagate(Type supertype, IDiscriminatorConvention convention)
         {
-            _conventionsByType.AddOrUpdate(supertype, convention, (_, existing) => existing ?? convention);
+            _conventionsByType.TryAdd(supertype, convention);
         }
     }
 }

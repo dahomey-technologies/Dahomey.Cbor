@@ -197,5 +197,29 @@ namespace Dahomey.Cbor.Tests.Issues
 
             Assert.Null(registry.GetConvention(typeof(Holder)));
         }
+
+        /// <summary>
+        /// The other way into the same trap: a convention registered after a type resolved to nothing.
+        /// </summary>
+        /// <remarks>
+        /// Propagating over a cached null is not enough to cover this one - nothing propagates here,
+        /// because the type asked about is the one carrying the discriminator. The answer has to stop
+        /// being cached at all while it is null, which is what makes the registry consult the newly
+        /// pushed convention instead of repeating what the ones before it said.
+        /// </remarks>
+        [Fact]
+        public void RegisterConventionAfterTheTypeResolvedToNothing()
+        {
+            CborOptions options = new CborOptions();
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+
+            registry.ClearConventions();
+
+            Assert.Null(registry.GetConvention(typeof(Circle)));
+
+            registry.RegisterConvention(new DefaultDiscriminatorConvention<string>(options.Registry));
+
+            Assert.NotNull(registry.GetConvention(typeof(Circle)));
+        }
     }
 }

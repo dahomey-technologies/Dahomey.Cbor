@@ -9,6 +9,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -133,11 +134,18 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// <see cref="_discriminatorConvention"/> was last resolved to null.
         /// </summary>
         /// <remarks>
-        /// The pair is written without a lock, and a torn write costs nothing worse than resolving
+        /// The pair is written without a lock, and an interleaving costs nothing worse than resolving
         /// again. Resolution is monotone - null becomes a convention and never the reverse - so the
         /// stale value a race can leave behind is a null with an old version, which the next read
         /// answers by asking the registry once more. Two threads resolving at once compute the same
         /// answer, and once the field is non-null neither writes again.
+        /// <para>
+        /// The version is written last and read first, both with <see cref="Volatile"/>, which is what
+        /// rules out the one interleaving that would not heal: a reader seeing the new version next to
+        /// the convention it replaced would take the null for a current answer and stop asking. The
+        /// barrier orders the two, so a new version is never visible before the convention it accounts
+        /// for. This matters on the weak memory models - arm64 among them - and costs nothing on x64.
+        /// </para>
         /// </remarks>
         private int _discriminatorConventionVersion;
 
@@ -359,10 +367,13 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// </remarks>
         private IDiscriminatorConvention? GetDiscriminatorConvention()
         {
+            // Read in the order the writes are published in: the version first, so a version that
+            // matches guarantees the convention beside it is the one that version accounts for.
+            int resolvedVersion = Volatile.Read(ref _discriminatorConventionVersion);
             IDiscriminatorConvention? convention = _discriminatorConvention;
 
             if (convention != null
-                || _discriminatorConventionVersion == _registry.DiscriminatorConventionRegistry.Version)
+                || resolvedVersion == _registry.DiscriminatorConventionRegistry.Version)
             {
                 return convention;
             }
@@ -377,7 +388,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 _registry.DiscriminatorConventionRegistry.GetConvention(typeof(T));
 
             _discriminatorConvention = convention;
-            _discriminatorConventionVersion = version;
+            Volatile.Write(ref _discriminatorConventionVersion, version);
 
             return convention;
         }
