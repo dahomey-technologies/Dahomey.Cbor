@@ -295,6 +295,14 @@ indexes: inserting a member with an index that sorts between two existing ones s
 it by one position, where `IntKeyMap` would not move. Use `IntKeyMap` where indexes need to be stable
 addresses across versions.
 
+For the same reason, `Array` writes every member of the type on every document. A member omitted by
+`[CborIgnoreIfDefault]`, `[CborProperty(DefaultValue = ...)]` or a `ShouldSerializeXyz()` method would
+leave no trace in a keyless format, so everything after it would shift a position earlier and read
+back onto the wrong member. Those declarations are therefore ignored in `Array`, and the member is
+written with the value it holds — `null` or the type's default in the case they exist to catch. They
+work as declared in `StringKeyMap` and `IntKeyMap`, where each value travels with the key that says
+which member it belongs to.
+
 ### Bignums (RFC 8949 §3.4.3)
 
 A member typed `System.Numerics.BigInteger` reads and writes integers of any width. Values that fit in 64
