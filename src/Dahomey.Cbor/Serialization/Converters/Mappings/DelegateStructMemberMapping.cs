@@ -117,7 +117,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
 
             return new StructMemberConverter<T, TM>(
-                MemberName ?? string.Empty,
+                MemberName,
                 MemberIndex,
                 ResolveConverter,
                 _memberGetter,

@@ -83,6 +83,72 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(12, strct.id);
         }
 
+        [CborObjectFormat(CborObjectFormat.IntKeyMap)]
+        public struct IndexKeyedStruct
+        {
+            [CborProperty(1)]
+            public int Id { get; set; }
+
+            [CborProperty(2)]
+            public string? Name { get; set; }
+        }
+
+        [Fact]
+        public void WriteStructWithMemberIndexes()
+        {
+            IndexKeyedStruct strct = new IndexKeyedStruct
+            {
+                Id = 12,
+                Name = "row"
+            };
+
+            const string hexBuffer = "A2010C0263726F77";
+            Helper.TestWrite(strct, hexBuffer);
+        }
+
+        [Fact]
+        public void ReadStructWithMemberIndexes()
+        {
+            const string hexBuffer = "A2010C0263726F77";
+            IndexKeyedStruct strct = Helper.Read<IndexKeyedStruct>(hexBuffer);
+
+            Assert.Equal(12, strct.Id);
+            Assert.Equal("row", strct.Name);
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public struct ArrayFormatStruct
+        {
+            [CborProperty(0)]
+            public int Id { get; set; }
+
+            [CborProperty(1)]
+            public string? Name { get; set; }
+        }
+
+        [Fact]
+        public void WriteStructWithArrayFormat()
+        {
+            ArrayFormatStruct strct = new ArrayFormatStruct
+            {
+                Id = 12,
+                Name = "row"
+            };
+
+            const string hexBuffer = "820C63726F77";
+            Helper.TestWrite(strct, hexBuffer);
+        }
+
+        [Fact]
+        public void ReadStructWithArrayFormat()
+        {
+            const string hexBuffer = "820C63726F77";
+            ArrayFormatStruct strct = Helper.Read<ArrayFormatStruct>(hexBuffer);
+
+            Assert.Equal(12, strct.Id);
+            Assert.Equal("row", strct.Name);
+        }
+
         public readonly struct MyStruct
         {
             [CborConstructor("Value")]

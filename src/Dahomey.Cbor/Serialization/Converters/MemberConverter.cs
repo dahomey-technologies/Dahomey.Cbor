@@ -292,7 +292,17 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public ReadOnlySpan<byte> MemberName => _memberName.Span;
         public int? MemberIndex { get; private set; }
-        public string MemberNameAsString { get; }
+
+        /// <summary>
+        /// Null for a member keyed by an index rather than by a name: a member carries one or the
+        /// other, never both. Use <see cref="MemberLabel"/> to name the member in a message.
+        /// </summary>
+        public string? MemberNameAsString { get; }
+
+        /// <summary>
+        /// How this member is named in an error message: its name, or its index when it has no name.
+        /// </summary>
+        private string MemberLabel => MemberNameAsString ?? $"[{MemberIndex}]";
         public bool IgnoreIfDefault => _ignoreIfDefault;
         public RequirementPolicy RequirementPolicy => _requirementPolicy;
 
@@ -305,8 +315,13 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("MemberInfo must not be null");
             }
 
-            MemberNameAsString = memberMapping.MemberName!;
-            _memberName = Encoding.UTF8.GetBytes(MemberNameAsString);
+            MemberNameAsString = memberMapping.MemberName;
+
+            if (MemberNameAsString != null)
+            {
+                _memberName = Encoding.UTF8.GetBytes(MemberNameAsString);
+            }
+
             MemberIndex = memberMapping.MemberIndex;
             _memberGetter = GenerateGetter(memberInfo);
             _memberSetter = GenerateSetter(memberInfo);
@@ -321,7 +336,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// Reflection-free and AOT-safe. Used by <see cref="DelegateStructMemberMapping{T, TM}"/>.
         /// </summary>
         internal StructMemberConverter(
-            string memberName,
+            string? memberName,
             int? memberIndex,
             Func<ICborConverter<TM>> converterFactory,
             StructMemberGetterDelegate<T, TM>? memberGetter,
@@ -331,7 +346,12 @@ namespace Dahomey.Cbor.Serialization.Converters
             RequirementPolicy requirementPolicy)
         {
             MemberNameAsString = memberName;
-            _memberName = Encoding.UTF8.GetBytes(memberName);
+
+            if (memberName != null)
+            {
+                _memberName = Encoding.UTF8.GetBytes(memberName);
+            }
+
             MemberIndex = memberIndex;
             _converterFactory = converterFactory;
             _memberGetter = memberGetter;
@@ -374,13 +394,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 if (_requirementPolicy == RequirementPolicy.DisallowNull || _requirementPolicy == RequirementPolicy.Always)
                 {
-                    throw new CborException($"Property '{MemberNameAsString}' cannot be null.");
+                    throw new CborException($"Property '{MemberLabel}' cannot be null.");
                 }
             }
 
             if (_memberSetter == null)
             {
-                throw new CborException($"No member setter for '{MemberNameAsString}'");
+                throw new CborException($"No member setter for '{MemberLabel}'");
             }
 
             _memberSetter(ref instance, Converter.Read(ref reader));
@@ -390,7 +410,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (_memberGetter == null)
             {
-                throw new CborException($"No member getter for '{MemberNameAsString}'");
+                throw new CborException($"No member getter for '{MemberLabel}'");
             }
 
             TM value = _memberGetter(ref instance);
@@ -398,7 +418,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             if (_isClass && value == null && (_requirementPolicy == RequirementPolicy.DisallowNull
                 || _requirementPolicy == RequirementPolicy.Always))
             {
-                throw new CborException($"Property '{MemberNameAsString}' cannot be null.");
+                throw new CborException($"Property '{MemberLabel}' cannot be null.");
             }
 
             Converter.Write(ref writer, value);
@@ -408,7 +428,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             if (_memberGetter == null)
             {
-                throw new CborException($"No member getter for '{MemberNameAsString}'");
+                throw new CborException($"No member getter for '{MemberLabel}'");
             }
 
             if (IgnoreIfDefault && EqualityComparer<TM>.Default.Equals(_memberGetter(ref instance), _defaultValue))
