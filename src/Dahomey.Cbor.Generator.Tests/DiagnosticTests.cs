@@ -233,7 +233,30 @@ public partial class Context : CborSerializerContext { }
         [Fact]
         public void ATypeWithNoAccessibleParameterlessConstructorIsReported()
         {
+            // Only a private constructor, so there is nothing to build the type with and nothing to
+            // build it *through* either. A single accessible parameterised constructor is a different
+            // case now -- it becomes the creator -- and has its own test.
             AssertReports("CBOR1010", @"
+public class Holder
+{
+    private Holder() { }
+
+    public int Value { get; set; }
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// The case that changed: one accessible constructor, no parameterless one. It used to be
+        /// CBOR1010 and is now the creator the type is read through.
+        /// </summary>
+        [Fact]
+        public void ASingleParameterisedConstructorIsNotReported()
+        {
+            AssertClean(@"
 public class Holder
 {
     public Holder(int value) { Value = value; }
@@ -388,6 +411,90 @@ public class Holder<T> { public virtual T Value { get; set; } }
 public class IntHolder : Holder<int> { public override int Value { get; set; } }
 
 [CborSerializable(typeof(IntHolder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// A positional record has no parameterless constructor and `init`-only properties, so it failed
+        /// twice over: nothing could build it, and nothing could set its members. Both stop mattering
+        /// once the values arrive through the constructor.
+        /// </summary>
+        [Fact]
+        public void APositionalRecordIsNotReported()
+        {
+            AssertClean(@"
+public record R(int Id, string Name);
+
+[CborSerializable(typeof(R))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// An `init`-only property the creator does not supply still has no way back, so it keeps its
+        /// CBOR1006 — the suppression is per member, not per type.
+        /// </summary>
+        [Fact]
+        public void AnInitOnlyMemberTheCreatorDoesNotSupplyIsStillReported()
+        {
+            AssertReports("CBOR1006", @"
+public class Holder
+{
+    [CborConstructor]
+    public Holder(int id) { Id = id; }
+
+    public int Id { get; init; }
+    public string Extra { get; init; }
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// Several constructors, none marked and none parameterless: the reflection path takes
+        /// <c>constructorInfos[0]</c>, and nothing guarantees Roslyn orders them the same way. Picking
+        /// one here could build the type through a different constructor than the reflection path uses,
+        /// so this keeps CBOR1010 — whose remedy resolves the ambiguity for both paths at once.
+        /// </summary>
+        [Fact]
+        public void SeveralUnmarkedConstructorsAreStillReported()
+        {
+            AssertReports("CBOR1010", @"
+public class Holder
+{
+    public Holder(int id) { Id = id; }
+    public Holder(int id, string name) { Id = id; Name = name; }
+
+    public int Id { get; set; }
+    public string Name { get; set; }
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// A parameter naming no serialized member cannot be filled from a document. The reflection path
+        /// leaves it at its default; emitting a creator that silently drops it would make the two paths
+        /// agree on the bytes and disagree on what the object comes back holding, which is worse.
+        /// </summary>
+        [Fact]
+        public void ACreatorParameterMatchingNoMemberIsReported()
+        {
+            AssertReports("CBOR1007", @"
+public class Holder
+{
+    [CborConstructor]
+    public Holder(int id, string absent) { Id = id; }
+
+    public int Id { get; set; }
+}
+
+[CborSerializable(typeof(Holder))]
 public partial class Context : CborSerializerContext { }
 ");
         }

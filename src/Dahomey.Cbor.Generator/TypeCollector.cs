@@ -167,7 +167,8 @@ namespace Dahomey.Cbor.Generator
             // without a constructor is a problem. The reflection path can reach a non-public
             // constructor or a [CborConstructor] creator mapping; a generated factory is `new T()`.
             if (!model.CanInstantiate
-                && type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class })
+                && type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class }
+                && FindCreatorConstructor(type) is null)
             {
                 _diagnostics.Add(DiagnosticInfo.Create(
                     Diagnostics.NoParameterlessConstructor,
@@ -177,6 +178,7 @@ namespace Dahomey.Cbor.Generator
 
             ReadTypeLevelAttributes(type, model);
             ReportUnsupportedFeatures(type);
+            IMethodSymbol? creator = FindCreatorConstructor(type);
 
             Dictionary<string, string> membersByCborName = new Dictionary<string, string>(StringComparer.Ordinal);
             Dictionary<int, string> membersByCborIndex = new Dictionary<int, string>();
@@ -236,7 +238,14 @@ namespace Dahomey.Cbor.Generator
                     continue;
                 }
 
-                if (!canWrite)
+                // A member the creator supplies is read back through the constructor, so it needs no
+                // setter -- which is what makes an `init`-only or get-only member work at all. Matched
+                // on the parameter name the way CreatorMapping matches it, case-insensitively.
+                bool suppliedByCreator = creator is not null
+                    && creator.Parameters.Any(
+                        p => string.Equals(p.Name, member.Name, StringComparison.OrdinalIgnoreCase));
+
+                if (!canWrite && !suppliedByCreator)
                 {
                     _diagnostics.Add(DiagnosticInfo.Create(
                         Diagnostics.MemberNotDeserializable,
@@ -291,6 +300,11 @@ namespace Dahomey.Cbor.Generator
 
                 model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite));
 
+                if (suppliedByCreator)
+                {
+                    model.CreatorMembers[member.Name] = cborName;
+                }
+
                 Collect(memberType);
 
                 // A member's converter must exist before this object's converter is constructed —
@@ -300,6 +314,42 @@ namespace Dahomey.Cbor.Generator
                     model.Dependencies.Add(memberType);
                 }
             }
+
+            // Resolved after the member walk, because a parameter is named for the member it fills and
+            // that member's CBOR name is only settled once its attributes and the naming convention
+            // have been read.
+            if (creator is not null)
+            {
+                foreach (IParameterSymbol parameter in creator.Parameters)
+                {
+                    string? cborName = model.CreatorMembers
+                        .FirstOrDefault(entry => string.Equals(
+                            entry.Key, parameter.Name, StringComparison.OrdinalIgnoreCase))
+                        .Value;
+
+                    if (cborName is null)
+                    {
+                        // A parameter naming no member cannot be filled from a document, and the
+                        // reflection path leaves it at its default. Refusing here rather than emitting a
+                        // creator that silently drops it: the two paths would not disagree about the
+                        // bytes, only about what the object comes back holding, which is worse.
+                        _diagnostics.Add(DiagnosticInfo.Create(
+                            Diagnostics.UnsupportedFeature,
+                            creator.Locations.FirstOrDefault(),
+                            type.ToDisplayString(),
+                            $"a constructor parameter '{parameter.Name}' that matches no serialized member"));
+                        model.CreatorParameters.Clear();
+                        return;
+                    }
+
+                    model.CreatorParameters.Add((FullNameOf(parameter.Type), cborName));
+                }
+            }
+        }
+
+        private static string FullNameOf(ITypeSymbol type)
+        {
+            return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         }
 
         /// <summary>
@@ -890,6 +940,55 @@ namespace Dahomey.Cbor.Generator
             {
                 yield return overridden;
             }
+        }
+
+        /// <summary>
+        /// The constructor a read builds this type through, or null where <c>new T()</c> will do.
+        /// </summary>
+        /// <remarks>
+        /// Mirrors <c>DefaultObjectMappingConvention</c>: a <c>[CborConstructor]</c> wins, and otherwise
+        /// a type with no parameterless constructor is built through the one it has — which is what a
+        /// positional record is, and why records could not round-trip through a generated context.
+        /// <para>
+        /// Deliberately narrower than the reflection path in one case. Where several constructors are
+        /// declared, none marked and none parameterless, that path takes <c>constructorInfos[0]</c>;
+        /// nothing guarantees Roslyn orders them as reflection does, so picking one here could silently
+        /// build a type through a different constructor than the reflection path uses. That case keeps
+        /// CBOR1010, whose remedy — add a parameterless constructor, or mark one with
+        /// <c>[CborConstructor]</c> — resolves the ambiguity for both paths at once.
+        /// </para>
+        /// </remarks>
+        private static IMethodSymbol? FindCreatorConstructor(ITypeSymbol type)
+        {
+            if (type is not INamedTypeSymbol named || named.IsAbstract)
+            {
+                return null;
+            }
+
+            // Implicitly declared ones are excluded, which is what keeps a record workable: its copy
+            // constructor is compiler-generated and protected, while the primary constructor is neither,
+            // so a positional record has exactly one candidate rather than two. Measured, not assumed --
+            // Roslyn reports the primary as IsImplicitlyDeclared: false.
+            List<IMethodSymbol> constructors = named.InstanceConstructors
+                .Where(c => !c.IsStatic
+                    && !c.IsImplicitlyDeclared
+                    && c.DeclaredAccessibility != Accessibility.Private)
+                .ToList();
+
+            IMethodSymbol? marked = constructors.FirstOrDefault(
+                c => HasAttribute(c, "CborConstructorAttribute"));
+
+            if (marked is not null)
+            {
+                return marked;
+            }
+
+            if (constructors.Any(c => c.Parameters.Length == 0))
+            {
+                return null;
+            }
+
+            return constructors.Count == 1 ? constructors[0] : null;
         }
 
         private static bool HasInheritedAttribute(ISymbol member, string attributeName)
