@@ -1375,7 +1375,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private static bool HoldsAPosition(IMemberConverter memberConverter, ref WriterContext context)
         {
             return context.objectFormat == CborObjectFormat.Array
-                && memberConverter is not DiscriminatorMemberConverter<T>;
+                && memberConverter is not IDiscriminatorMemberConverter;
         }
 
         private bool WriteItem(ref CborWriter writer, ref WriterContext context)

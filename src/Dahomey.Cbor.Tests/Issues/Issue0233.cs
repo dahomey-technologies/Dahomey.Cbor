@@ -101,6 +101,62 @@ namespace Dahomey.Cbor.Tests.Issues
             Assert.Equal(3, skipper.Tail);
         }
 
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class ContradictorySkipper
+        {
+            [CborProperty(1)] public int Id { get; set; }
+
+            [CborProperty(2)]
+            [CborIgnoreIfDefault]
+            [CborRequired(RequirementPolicy.DisallowNull)]
+            public string Name { get; set; }
+        }
+
+        /// <summary>
+        /// Writing the slot makes one contradictory pair of declarations visible: a member both
+        /// omitted when default and required not to be null now says so, where the omission used to
+        /// hide it behind a document that could not be read back.
+        /// </summary>
+        [Fact]
+        public void ARequiredMemberThatWouldHaveBeenOmittedIsReported()
+        {
+            CborException exception = Assert.Throws<CborException>(
+                () => Helper.Write(new ContradictorySkipper { Id = 1, Name = null }));
+
+            // Named by its index: an Array member carries no name to report.
+            Assert.Equal("Property 'index 2' cannot be null.", exception.Message);
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        public class PolymorphicBase
+        {
+            [CborProperty(1)] public int Id { get; set; }
+        }
+
+        [CborObjectFormat(CborObjectFormat.Array)]
+        [CborDiscriminator("issue233-derived")]
+        public class PolymorphicDerived : PolymorphicBase
+        {
+            [CborProperty(2)] public int Tail { get; set; }
+        }
+
+        /// <summary>
+        /// The discriminator holds no position and is not a member of the type, so the policy still
+        /// decides whether it appears — including on a polymorphic write, where the member list comes
+        /// from the derived type's converter rather than the declared type's.
+        /// </summary>
+        [Fact]
+        public void TheDiscriminatorPolicyStillDecidesInAnArray()
+        {
+            CborOptions options = new CborOptions { DiscriminatorPolicy = CborDiscriminatorPolicy.Never };
+            options.Registry.DiscriminatorConventionRegistry.RegisterType<PolymorphicDerived>();
+
+            PolymorphicBase value = new PolymorphicDerived { Id = 1, Tail = 42 };
+
+            // 82 01 182A  --  [1, 42], with no discriminator in front of it
+            Assert.Equal("8201182A", Helper.Write(value, options));
+        }
+
         [Fact]
         public void APresentValueIsUnaffected()
         {
