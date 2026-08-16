@@ -26,7 +26,10 @@ namespace Dahomey.Cbor.Tests
     /// <para>
     /// Arranged as a theory over the entry points rather than as a test each, so the failure names the
     /// door rather than the mechanism, and so adding an entry point without a row here is a visible
-    /// omission rather than a silent one.
+    /// omission rather than a silent one. The rows are the reading half of <see cref="Cbor"/>: the four
+    /// single-item doors, the four multiple-item ones, and <c>ReadNextItemAsync</c>. The non-generic
+    /// <c>Type</c> overloads are the same methods with the type passed rather than inferred, and reach
+    /// the converter by the same route, so they are not repeated here.
     /// </para>
     /// </remarks>
     public class RefusalReachesEveryEntryPointTests
@@ -40,29 +43,12 @@ namespace Dahomey.Cbor.Tests
 
         public static IEnumerable<object[]> EntryPoints()
         {
-            yield return Row("Deserialize(ReadOnlySpan)",
-                (bytes, options) => Cbor.Deserialize<RefusedByItsConverter>(bytes.Span, options));
+            return EntryPointsFor<RefusedByItsConverter>();
+        }
 
-            yield return Row("Deserialize(ReadOnlySequence)",
-                (bytes, options) => Cbor.Deserialize<RefusedByItsConverter>(new ReadOnlySequence<byte>(bytes), options));
-
-            yield return Row("DeserializeMultiple(ReadOnlySpan)",
-                (bytes, options) => Cbor.DeserializeMultiple<RefusedByItsConverter>(bytes.Span, options));
-
-            yield return Row("DeserializeMultiple(ReadOnlySequence)",
-                (bytes, options) => Cbor.DeserializeMultiple<RefusedByItsConverter>(new ReadOnlySequence<byte>(bytes), options));
-
-            yield return Row("DeserializeAsync(Stream)",
-                (bytes, options) => Cbor.DeserializeAsync<RefusedByItsConverter>(
-                    new MemoryStream(bytes.ToArray()), options).AsTask().GetAwaiter().GetResult());
-
-            yield return Row("DeserializeAsync(PipeReader)",
-                (bytes, options) => Cbor.DeserializeAsync<RefusedByItsConverter>(
-                    PipeReader.Create(new ReadOnlySequence<byte>(bytes)), options).AsTask().GetAwaiter().GetResult());
-
-            yield return Row("ReadNextItemAsync(PipeReader)",
-                (bytes, options) => Cbor.ReadNextItemAsync<RefusedByItsConverter>(
-                    PipeReader.Create(new ReadOnlySequence<byte>(bytes)), options).AsTask().GetAwaiter().GetResult());
+        public static IEnumerable<object[]> CreatorEntryPoints()
+        {
+            return EntryPointsFor<RefusedByItsCreator>();
         }
 
         /// <summary>
@@ -71,16 +57,17 @@ namespace Dahomey.Cbor.Tests
         /// </summary>
         [Theory]
         [MemberData(nameof(EntryPoints))]
-        public void AConverterRefusalKeepsItsMessage(string name, Func<ReadOnlyMemory<byte>, CborOptions, object> read)
+        public async Task AConverterRefusalKeepsItsMessageAsync(string name, Func<ReadOnlyMemory<byte>, CborOptions, Task<object>> readAsync)
         {
             CborOptions options = new CborOptions();
             options.Registry.ConverterRegistry.RegisterConverter(
                 typeof(RefusedByItsConverter), new RefusingConverter());
 
-            CborException exception = Assert.Throws<CborException>(
-                () => read(WholeItem.HexToBytes(), options));
+            CborException exception = await Assert.ThrowsAsync<CborException>(
+                async () => await readAsync(WholeItem.HexToBytes(), options));
 
-            Assert.StartsWith(ConverterMessage, exception.Message);
+            Assert.True(exception.Message.StartsWith(ConverterMessage, StringComparison.Ordinal),
+                $"{name} reported \"{exception.Message}\" rather than the converter's refusal.");
             Assert.Equal("$", exception.Path);
 
             // The message the entry point would invent if it discarded the refusal. Named rather than
@@ -97,39 +84,66 @@ namespace Dahomey.Cbor.Tests
         /// </summary>
         [Theory]
         [MemberData(nameof(CreatorEntryPoints))]
-        public void ACreatorRefusalKeepsItsMessage(string name, Func<ReadOnlyMemory<byte>, CborOptions, object> read)
+        public async Task ACreatorRefusalKeepsItsMessageAsync(string name, Func<ReadOnlyMemory<byte>, CborOptions, Task<object>> readAsync)
         {
-            CborException exception = Assert.Throws<CborException>(
-                () => read(WholeItem.HexToBytes(), new CborOptions()));
+            CborException exception = await Assert.ThrowsAsync<CborException>(
+                async () => await readAsync(WholeItem.HexToBytes(), new CborOptions()));
 
-            Assert.StartsWith(CreatorMessage, exception.Message);
+            Assert.True(exception.Message.StartsWith(CreatorMessage, StringComparison.Ordinal),
+                $"{name} reported \"{exception.Message}\" rather than the creator's refusal.");
             Assert.Equal("$", exception.Path);
         }
 
-        public static IEnumerable<object[]> CreatorEntryPoints()
+        /// <summary>
+        /// The same rows for either refusing type: what differs between the two theories is where the
+        /// refusal comes from, not which doors have to carry it.
+        /// </summary>
+        /// <remarks>
+        /// The synchronous doors are wrapped rather than awaited — a lambda holding a
+        /// <see cref="ReadOnlySpan{T}"/> cannot be <c>async</c>, and the exception each one throws while
+        /// the delegate is being invoked is caught by <c>Assert.ThrowsAsync</c> all the same.
+        /// </remarks>
+        private static IEnumerable<object[]> EntryPointsFor<T>()
         {
             yield return Row("Deserialize(ReadOnlySpan)",
-                (bytes, options) => Cbor.Deserialize<RefusedByItsCreator>(bytes.Span, options));
+                (bytes, options) => CompletedAsync(Cbor.Deserialize<T>(bytes.Span, options)));
 
             yield return Row("Deserialize(ReadOnlySequence)",
-                (bytes, options) => Cbor.Deserialize<RefusedByItsCreator>(new ReadOnlySequence<byte>(bytes), options));
+                (bytes, options) => CompletedAsync(Cbor.Deserialize<T>(new ReadOnlySequence<byte>(bytes), options)));
 
             yield return Row("DeserializeAsync(Stream)",
-                (bytes, options) => Cbor.DeserializeAsync<RefusedByItsCreator>(
-                    new MemoryStream(bytes.ToArray()), options).AsTask().GetAwaiter().GetResult());
+                async (bytes, options) => await Cbor.DeserializeAsync<T>(new MemoryStream(bytes.ToArray()), options));
 
             yield return Row("DeserializeAsync(PipeReader)",
-                (bytes, options) => Cbor.DeserializeAsync<RefusedByItsCreator>(
-                    PipeReader.Create(new ReadOnlySequence<byte>(bytes)), options).AsTask().GetAwaiter().GetResult());
+                async (bytes, options) => await Cbor.DeserializeAsync<T>(
+                    PipeReader.Create(new ReadOnlySequence<byte>(bytes)), options));
+
+            yield return Row("DeserializeMultiple(ReadOnlySpan)",
+                (bytes, options) => CompletedAsync(Cbor.DeserializeMultiple<T>(bytes.Span, options)));
+
+            yield return Row("DeserializeMultiple(ReadOnlySequence)",
+                (bytes, options) => CompletedAsync(Cbor.DeserializeMultiple<T>(new ReadOnlySequence<byte>(bytes), options)));
+
+            yield return Row("DeserializeMultipleAsync(Stream)",
+                async (bytes, options) => await Cbor.DeserializeMultipleAsync<T>(new MemoryStream(bytes.ToArray()), options));
+
+            yield return Row("DeserializeMultipleAsync(PipeReader)",
+                async (bytes, options) => await Cbor.DeserializeMultipleAsync<T>(
+                    PipeReader.Create(new ReadOnlySequence<byte>(bytes)), options));
 
             yield return Row("ReadNextItemAsync(PipeReader)",
-                (bytes, options) => Cbor.ReadNextItemAsync<RefusedByItsCreator>(
-                    PipeReader.Create(new ReadOnlySequence<byte>(bytes)), options).AsTask().GetAwaiter().GetResult());
+                async (bytes, options) => await Cbor.ReadNextItemAsync<T>(
+                    PipeReader.Create(new ReadOnlySequence<byte>(bytes)), options));
         }
 
-        private static object[] Row(string name, Func<ReadOnlyMemory<byte>, CborOptions, object> read)
+        private static Task<object> CompletedAsync(object result)
         {
-            return new object[] { name, read };
+            return Task.FromResult(result);
+        }
+
+        private static object[] Row(string name, Func<ReadOnlyMemory<byte>, CborOptions, Task<object>> readAsync)
+        {
+            return new object[] { name, readAsync };
         }
 
         public class RefusedByItsConverter
