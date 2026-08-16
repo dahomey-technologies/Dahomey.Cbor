@@ -89,6 +89,18 @@ namespace Dahomey.Cbor.Serialization.Conventions
         public void ClearConventions()
         {
             _conventions.Clear();
+
+            // The per-type cache has to go with them. It holds resolutions made by the conventions
+            // being cleared, and GetConvention answers from it without asking anything -- so leaving it
+            // would keep a cleared convention governing every type already resolved, and make a
+            // convention registered afterwards inert for exactly those types. The window that closed in
+            // was narrow and invisible: a previous RegisterType, an earlier read, or constructing a
+            // CborSerializerContext, whose generated Configure builds every declared converter before
+            // the caller can reach its Options.
+            _conventionsByType.Clear();
+
+            // Anything holding an answer of its own asks again, the same way RegisterConvention says so.
+            Interlocked.Increment(ref _version);
         }
 
         public IDiscriminatorConvention? GetConvention(Type type)
