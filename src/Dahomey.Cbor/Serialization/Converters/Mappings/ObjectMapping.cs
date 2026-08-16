@@ -339,7 +339,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         /// <summary>
         /// The class/struct will be serialized as a CBOR array instead of a CBOR map
         /// </summary>
-        /// CborPropertyAttribute.Index will be used as the index of each property/field of the class in the CBOR array
+        /// <remarks>
+        /// In <see cref="CborObjectFormat.Array"/> the document carries no keys, so
+        /// <c>CborPropertyAttribute.Index</c> orders the members rather than addressing them: they are
+        /// written in ascending index order and read back by position. Gaps and negative indexes are
+        /// allowed and do not reach the wire, so two types differing only in their index values encode
+        /// identically. <see cref="CborObjectFormat.IntKeyMap"/> is the format whose index is written
+        /// into the document and so survives as an address.
+        /// </remarks>
         public void SetObjectFormat(CborObjectFormat objectFormat)
         {
             ObjectFormat = objectFormat;

@@ -273,6 +273,28 @@ If the aim is compactness rather than interoperability with a producer you do no
 keys altogether. Both compress a document of repeated keys harder than string references do, in plain
 RFC 8949.
 
+The two read `[CborProperty(n)]` differently, and the difference is worth being explicit about.
+`IntKeyMap` writes `n` into the document as the member's key, so it addresses the member: gaps are
+free, and a member keeps its meaning wherever it moves in the type. `Array` writes no keys at all, so
+`n` only *orders* the members — they are written in ascending index order and read back by position.
+Gaps and negative indexes are allowed and change nothing on the wire, so these two types produce
+identical bytes:
+
+```csharp
+[CborObjectFormat(CborObjectFormat.Array)]
+public class Row { [CborProperty(0)] public int Id { get; set; } [CborProperty(1)] public string Name { get; set; } }
+
+[CborObjectFormat(CborObjectFormat.Array)]
+public class SameRow { [CborProperty(5)] public int Id { get; set; } [CborProperty(9)] public string Name { get; set; } }
+
+// both write 82 02 63 726F77  --  [2, "row"]
+```
+
+What that costs is that an `Array` type's wire format depends on its member *set*, not only on the
+indexes: inserting a member with an index that sorts between two existing ones shifts everything after
+it by one position, where `IntKeyMap` would not move. Use `IntKeyMap` where indexes need to be stable
+addresses across versions.
+
 ### Bignums (RFC 8949 §3.4.3)
 
 A member typed `System.Numerics.BigInteger` reads and writes integers of any width. Values that fit in 64
