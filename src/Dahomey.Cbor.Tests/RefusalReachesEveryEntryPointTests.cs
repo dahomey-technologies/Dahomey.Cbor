@@ -7,6 +7,9 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipelines;
+using System.Linq;
+using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -30,6 +33,10 @@ namespace Dahomey.Cbor.Tests
     /// single-item doors, the four multiple-item ones, and <c>ReadNextItemAsync</c>. The non-generic
     /// <c>Type</c> overloads are the same methods with the type passed rather than inferred, and reach
     /// the converter by the same route, so they are not repeated here.
+    /// </para>
+    /// <para>
+    /// <see cref="EveryPublicReadEntryPointHasARow"/> is what makes that omission visible rather than
+    /// merely asked for: it reads the entry points off <see cref="Cbor"/> and fails when one has no row.
     /// </para>
     /// </remarks>
     public class RefusalReachesEveryEntryPointTests
@@ -92,6 +99,112 @@ namespace Dahomey.Cbor.Tests
             Assert.True(exception.Message.StartsWith(CreatorMessage, StringComparison.Ordinal),
                 $"{name} reported \"{exception.Message}\" rather than the creator's refusal.");
             Assert.Equal("$", exception.Path);
+        }
+
+        /// <summary>
+        /// What on <see cref="Cbor"/> is not a read entry point. Named as exclusions rather than the
+        /// reading half being named as inclusions, so that a method added under a name nobody here
+        /// anticipated — <c>ReadItemsAsync</c>, say — is required to have a row rather than skipped for
+        /// not being on a list. A list of what to check is the same hand-maintained thing as a list of
+        /// rows, and would leave this test one rename behind the API in the same way.
+        /// </summary>
+        private static readonly string[] NotReadEntryPoints =
+        {
+            "Serialize",
+            "SerializeMultiple",
+            "SerializeAsync",
+            "SerializeMultipleAsync",
+
+            // Debugging helper: forwards to Deserialize<CborValue>, so it is that door, not one of its own.
+            "ToJson",
+
+            // Forwards to Deserialize<T>; the type is inferred from a sample object rather than named.
+            "DeserializeAnonymousType",
+        };
+
+        /// <summary>
+        /// The rows above are the subject rather than the authority: every public reading method of
+        /// <see cref="Cbor"/> must have one. Without this, the remark asking for a row is the only thing
+        /// keeping the theory level with the API, and that has now twice not been enough — a new overload
+        /// would land, the suite would stay green, and the theory would cover every door but the new one,
+        /// which is exactly the state <c>ReadNextItemAsync</c> was in for as long as it existed.
+        /// </summary>
+        [Fact]
+        public void EveryPublicReadEntryPointHasARow()
+        {
+            HashSet<string> rows = new HashSet<string>(
+                EntryPointsFor<RefusedByItsConverter>().Select(row => (string)row[0]), StringComparer.Ordinal);
+
+            // DeclaredOnly because object.Equals and object.ReferenceEquals are public and static too, and
+            // an exclusion list should say what Cbor offers rather than what every type inherits.
+            List<MethodInfo> reading = typeof(Cbor)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Where(method => Array.IndexOf(NotReadEntryPoints, method.Name) < 0)
+                .ToList();
+
+            // Reflection finding nothing would make every assertion below vacuously true, which is the one
+            // way this test could fail to do its job while passing.
+            Assert.NotEmpty(reading);
+
+            List<string> missing = new List<string>();
+
+            foreach (MethodInfo method in reading)
+            {
+                string door = DoorName(method);
+
+                if (TakesTypeArgument(method))
+                {
+                    // A Type overload is the same method with the type passed rather than inferred, and
+                    // reaches the converter by the same route, so it shares its twin's row rather than
+                    // needing one. What has to hold is that the twin exists: a Type-only entry point would
+                    // otherwise be dropped here in silence, which is the failure this test is about.
+                    if (!reading.Any(other => !TakesTypeArgument(other) && DoorName(other) == door))
+                    {
+                        missing.Add($"{door} — a Type overload with no generic twin, so no row covers it");
+                    }
+
+                    continue;
+                }
+
+                if (!rows.Contains(door))
+                {
+                    missing.Add(door);
+                }
+            }
+
+            Assert.True(missing.Count == 0,
+                $"These read entry points have no row in {nameof(EntryPointsFor)}, so no theory asserts that a "
+                + $"refusal reaches the caller through them:{Environment.NewLine}"
+                + string.Join(Environment.NewLine, missing.Select(name => "  " + name)));
+        }
+
+        /// <summary>
+        /// The label a row would carry for this method: its name and the kind of source it reads from,
+        /// which is what distinguishes one door from another. Written to match the hand-written row names
+        /// — a rename on either side fails this test rather than passing it quietly.
+        /// </summary>
+        private static string DoorName(MethodInfo method)
+        {
+            ParameterInfo source = method.GetParameters().FirstOrDefault(parameter =>
+                parameter.ParameterType != typeof(Type)
+                && parameter.ParameterType != typeof(CborOptions)
+                && parameter.ParameterType != typeof(CancellationToken));
+
+            string sourceName = source == null ? "?" : source.ParameterType.Name;
+
+            // ReadOnlySpan<byte> reflects as "ReadOnlySpan`1"; the rows name the shape, not the element.
+            int arity = sourceName.IndexOf('`');
+            if (arity >= 0)
+            {
+                sourceName = sourceName.Substring(0, arity);
+            }
+
+            return $"{method.Name}({sourceName})";
+        }
+
+        private static bool TakesTypeArgument(MethodInfo method)
+        {
+            return method.GetParameters().Any(parameter => parameter.ParameterType == typeof(Type));
         }
 
         /// <summary>
