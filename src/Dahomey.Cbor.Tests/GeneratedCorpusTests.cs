@@ -217,6 +217,16 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedTupleTests.Sample();
             }
 
+            if (type == typeof(GeneratedKeptMapFormat))
+            {
+                return new GeneratedKeptMapFormat { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(GeneratedTakesArrayFormat))
+            {
+                return new GeneratedTakesArrayFormat { Id = 7, Name = "n" };
+            }
+
             if (type == typeof(GeneratedOverrideHolder))
             {
                 return new GeneratedOverrideHolder { Id = 7, Name = "seven" };
