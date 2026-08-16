@@ -8,6 +8,11 @@
          strong-named assembly cannot grant friend access to an unsigned one. -->
     <SignAssembly>True</SignAssembly>
     <AssemblyOriginatorKeyFile>../Dahomey.snk</AssemblyOriginatorKeyFile>
+    <!-- Deliberately left in the oblivious nullable context: the generator reads the nullable
+         annotations of the types it sees, and the oblivious-nullability tests exist to observe what it
+         emits for types that carry none. Do not enable annotations here: it changes the CDDL these
+         test types produce, and 6 CDDL tests fail. Use '#nullable enable' per file if one needs it. -->
+    <Nullable>disable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,7 +22,6 @@
     <PackageReference Include="Moq" Version="4.18.3" />
     <PackageReference Include="Nerdbank.Streams" Version="2.9.112" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
     <PackageReference Include="xunit" Version="2.4.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5">
       <PrivateAssets>all</PrivateAssets>

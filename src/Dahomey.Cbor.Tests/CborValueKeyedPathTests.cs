@@ -59,9 +59,9 @@ namespace Dahomey.Cbor.Tests
         {
             const string hexBuffer = "A161616178"; // a1 6161 6178  -- {"a": "x"}
 
-            string? cborValueKeyed = Assert.Throws<CborException>(
+            string cborValueKeyed = Assert.Throws<CborException>(
                 () => Cbor.Deserialize<Dictionary<CborValue, int>>(hexBuffer.HexToBytes())).Path;
-            string? stringKeyed = Assert.Throws<CborException>(
+            string stringKeyed = Assert.Throws<CborException>(
                 () => Cbor.Deserialize<Dictionary<string, int>>(hexBuffer.HexToBytes())).Path;
 
             Assert.Equal(stringKeyed, cborValueKeyed);

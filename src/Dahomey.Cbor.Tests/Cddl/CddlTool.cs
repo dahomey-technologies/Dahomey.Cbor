@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Threading.Tasks;
+using System.Text;
 
 namespace Dahomey.Cbor.Tests.Cddl
 {
@@ -146,17 +146,35 @@ namespace Dahomey.Cbor.Tests.Cddl
                 startInfo.ArgumentList.Add(argument);
             }
 
-            using Process process = Process.Start(startInfo)!;
+            using Process process = new Process { StartInfo = startInfo };
 
             // Both streams are drained concurrently: reading one to EOF before starting the other
             // deadlocks as soon as the child fills the unread pipe's buffer, and both a rejected
-            // document and a generated one can be arbitrarily long.
-            Task<string> standardOutput = process.StandardOutput.ReadToEndAsync();
-            Task<string> standardError = process.StandardError.ReadToEndAsync();
+            // document and a generated one can be arbitrarily long. The event-based readers do that
+            // without blocking on a task, and WaitForExit() with no argument waits for the readers to
+            // reach EOF as well as for the process itself, so the output is complete when it returns.
+            StringBuilder output = new StringBuilder();
 
+            void Append(object sender, DataReceivedEventArgs e)
+            {
+                if (e.Data != null)
+                {
+                    lock (output)
+                    {
+                        output.AppendLine(e.Data);
+                    }
+                }
+            }
+
+            process.OutputDataReceived += Append;
+            process.ErrorDataReceived += Append;
+
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
             process.WaitForExit();
 
-            return (process.ExitCode, standardOutput.Result + standardError.Result);
+            return (process.ExitCode, output.ToString());
         }
 
         /// <summary>

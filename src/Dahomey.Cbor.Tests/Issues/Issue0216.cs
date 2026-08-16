@@ -168,7 +168,7 @@ namespace Dahomey.Cbor.Tests.Issues
 
         public class RefusingConverterProvider : CborConverterProviderBase
         {
-            public override ICborConverter? GetConverter(Type type, CborOptions options)
+            public override ICborConverter GetConverter(Type type, CborOptions options)
             {
                 return type == typeof(RefusedByItsConverter)
                     ? CreateGenericConverter(options, typeof(RefusingConverter<>), type)
@@ -178,7 +178,7 @@ namespace Dahomey.Cbor.Tests.Issues
 
         public class ThrowingConverterProvider : CborConverterProviderBase
         {
-            public override ICborConverter? GetConverter(Type type, CborOptions options)
+            public override ICborConverter GetConverter(Type type, CborOptions options)
             {
                 return type == typeof(RefusedByAnotherException)
                     ? CreateGenericConverter(options, typeof(ThrowingConverter<>), type)

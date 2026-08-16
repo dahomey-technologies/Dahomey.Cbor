@@ -199,7 +199,7 @@ namespace Dahomey.Cbor.Tests
     public class RecursiveStructure
     {
         public string Name { get; set; } = string.Empty;
-        public RecursiveStructure? Inner { get; set; }
+        public RecursiveStructure Inner { get; set; }
     }
     
     public class RecursiveWithArrayStructure

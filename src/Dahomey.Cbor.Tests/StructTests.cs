@@ -90,7 +90,7 @@ namespace Dahomey.Cbor.Tests
             public int Id { get; set; }
 
             [CborProperty(2)]
-            public string? Name { get; set; }
+            public string Name { get; set; }
         }
 
         [Fact]
@@ -123,7 +123,7 @@ namespace Dahomey.Cbor.Tests
             public int Id { get; set; }
 
             [CborProperty(1)]
-            public string? Name { get; set; }
+            public string Name { get; set; }
         }
 
         [Fact]

@@ -25,7 +25,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor UnsupportedType = new(
             id: "CBOR1002",
             title: "Type is not supported by CBOR source generation",
-            messageFormat: "'{0}' cannot be handled by CBOR source generation ({1}). It would fall back to runtime reflection, which fails under Native AOT",
+            messageFormat: "'{0}' cannot be handled by CBOR source generation ({1}). It would fall back to runtime reflection, which fails under Native AOT.",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -33,7 +33,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor UnsupportedNamingConvention = new(
             id: "CBOR1003",
             title: "Naming convention is not supported by CBOR source generation",
-            messageFormat: "Naming convention '{0}' cannot be reproduced at compile time. Use one of the built-in conventions, or set member names explicitly with [CborProperty]",
+            messageFormat: "Naming convention '{0}' cannot be reproduced at compile time. Use one of the built-in conventions, or set member names explicitly with [CborProperty].",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -74,7 +74,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor UnsupportedFeature = new(
             id: "CBOR1007",
             title: "CBOR feature is not supported by source generation",
-            messageFormat: "'{0}' uses {1}, which CBOR source generation does not reproduce. The reflection path honours it, so a generated context would silently produce different bytes",
+            messageFormat: "'{0}' uses {1}, which CBOR source generation does not reproduce. The reflection path honours it, so a generated context would silently produce different bytes.",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -86,7 +86,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor NonPublicMember = new(
             id: "CBOR1008",
             title: "Non-public member cannot be source-generated",
-            messageFormat: "'{0}.{1}' is {2} and is serialized by the reflection path, but source generation cannot access it. Make it public, or exclude it with [CborIgnore]",
+            messageFormat: "'{0}.{1}' is {2} and is serialized by the reflection path, but source generation cannot access it. Make it public, or exclude it with [CborIgnore].",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -99,7 +99,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor SubtypeNotDeclared = new(
             id: "CBOR1009",
             title: "Discriminated subtype is not declared on any context",
-            messageFormat: "'{0}' carries a discriminator and derives from '{1}', which is declared, but is not itself declared with [CborSerializable]. Polymorphic reads will not resolve it",
+            messageFormat: "'{0}' carries a discriminator and derives from '{1}', which is declared, but is not itself declared with [CborSerializable]. Polymorphic reads will not resolve it.",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -112,7 +112,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor NoParameterlessConstructor = new(
             id: "CBOR1010",
             title: "Type has no accessible parameterless constructor",
-            messageFormat: "'{0}' has no accessible parameterless constructor, so a generated context cannot create one when reading. Add one, or exclude the type",
+            messageFormat: "'{0}' has no accessible parameterless constructor, so a generated context cannot create one when reading. Add one, or exclude the type.",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -120,7 +120,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor MemberNotDeserializable = new(
             id: "CBOR1006",
             title: "Member cannot be deserialized",
-            messageFormat: "'{0}.{1}' has no usable setter, so it will be written but never read back. Add a settable setter, or a creator mapping",
+            messageFormat: "'{0}.{1}' has no usable setter, so it will be written but never read back. Add a settable setter, or a creator mapping.",
             Category,
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true);

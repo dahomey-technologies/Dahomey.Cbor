@@ -76,10 +76,10 @@ public partial class Context : CborSerializerContext {{ }}
         }
 
         [Theory]
-        [InlineData("[CborConverter(typeof(Custom))]", "type")]
-        [InlineData("[CborNamingConvention(typeof(object))]", "type")]
-        [InlineData("[CborLengthMode(LengthMode = LengthMode.IndefiniteLength)]", "type")]
-        public void UnsupportedTypeLevelFeaturesAreReported(string attribute, string _)
+        [InlineData("[CborConverter(typeof(Custom))]")]
+        [InlineData("[CborNamingConvention(typeof(object))]")]
+        [InlineData("[CborLengthMode(LengthMode = LengthMode.IndefiniteLength)]")]
+        public void UnsupportedTypeLevelFeaturesAreReported(string attribute)
         {
             AssertReports("CBOR1007", $@"
 public class Custom {{ }}

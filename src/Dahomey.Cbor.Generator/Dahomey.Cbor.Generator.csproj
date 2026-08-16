@@ -6,6 +6,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
 
+    <!-- Signed with the library's own key: Dahomey.Cbor.Tests is strong-named, and a strong-named
+         assembly warns (CS8002) about every unsigned assembly it references. -->
+    <SignAssembly>True</SignAssembly>
+    <AssemblyOriginatorKeyFile>../Dahomey.snk</AssemblyOriginatorKeyFile>
+
     <!--
       Roslyn component: consumed as an analyzer, not as a referenceable library. It has no package of
       its own - Dahomey.Cbor.csproj packs this dll into analyzers/dotnet/cs so that referencing
@@ -25,6 +30,12 @@
     <Description>Source generator producing reflection-free, Native-AOT-safe CBOR mappings for Dahomey.Cbor.</Description>
   </PropertyGroup>
 
+  <!-- Release tracking for the CBOR#### diagnostics; RS2008 requires every descriptor to appear here. -->
+  <ItemGroup>
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
   </ItemGroup>
@@ -32,7 +43,7 @@
   <!-- The pipeline step names are internal, and asserting on which steps were reused is the only way
        to check incrementality: it is invisible in the generated output, which is identical either way. -->
   <ItemGroup>
-    <InternalsVisibleTo Include="Dahomey.Cbor.Generator.Tests" />
+    <InternalsVisibleTo Include="Dahomey.Cbor.Generator.Tests" Key="0024000004800000940000000602000000240000525341310004000001000100a1d13d213c4ddbe57c8cfdd25d1775a32e40eeca99c937fb91e124f672b891dde0b874d5495efd49fd23fcaef1a66d82482a52b8ba3c000d299679b39d1655b54e3cdd7fb5b7e365ecbe58cea1b94ef9a60d01ae93a0ed2e932d23830f7816c321ff3e987c547ffa0994c5e169ddd8ba09440261746b708a80ba0859b5378ba9" />
   </ItemGroup>
 
 </Project>

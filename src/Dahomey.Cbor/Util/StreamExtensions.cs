@@ -46,14 +46,39 @@ namespace System.IO
         }
 #endif
 
+        /// <summary>
+        /// A single read is allowed to return fewer bytes than were asked for, however seekable the
+        /// stream is, so it is repeated until the destination is filled or the stream ends. Returns the
+        /// number of bytes actually read.
+        /// </summary>
+        private static async ValueTask<int> ReadUpToAsync(Stream stream, Memory<byte> destination, CancellationToken cancellationToken)
+        {
+            int totalRead = 0;
+
+            while (totalRead < destination.Length)
+            {
+                int read = await stream.ReadAsync(destination.Slice(totalRead), cancellationToken);
+
+                if (read == 0)
+                {
+                    break;
+                }
+
+                totalRead += read;
+            }
+
+            return totalRead;
+        }
+
         public static async ValueTask<AsyncReadResult> ReadAndGivePreciseLengthAsync(this Stream stream, int sizeHint, CancellationToken cancellationToken = default)
         {
             AsyncReadResult result = new AsyncReadResult();
 
             if (stream.CanSeek)
             {
-                result.MemoryOwner = MemoryPool<byte>.Shared.Rent((int)stream.Length);
-                result.DataRead = await stream.ReadAsync(result.MemoryOwner.Memory, cancellationToken);
+                int length = (int)stream.Length;
+                result.MemoryOwner = MemoryPool<byte>.Shared.Rent(length);
+                result.DataRead = await ReadUpToAsync(stream, result.MemoryOwner.Memory.Slice(0, length), cancellationToken);
                 return result;
             }
 
@@ -83,8 +108,9 @@ namespace System.IO
 
             if (stream.CanSeek)
             {
-                buffer = MemoryPool<byte>.Shared.Rent((int)stream.Length);
-                await stream.ReadAsync(buffer.Memory, cancellationToken);
+                int length = (int)stream.Length;
+                buffer = MemoryPool<byte>.Shared.Rent(length);
+                await ReadUpToAsync(stream, buffer.Memory.Slice(0, length), cancellationToken);
                 return buffer;
             }
 
