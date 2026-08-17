@@ -329,9 +329,14 @@ namespace Dahomey.Cbor.Generator
 
                 case "Dahomey.Cbor.CborBigFloat":
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
+
+                // RFC 9562's binary UUID. Always tagged and always sixteen bytes, so no option
+                // reaches it and the size is part of the schema.
+                case "System.Guid":
+                    return "#6.37(bstr .size 16)";
             }
 
-            // Guid and DateTimeOffset have no scalar converter. Nor does System.Half: the only place
+            // DateTimeOffset has no scalar converter. Nor does System.Half: the only place
             // the library references it is the RFC 8746 typed-array element path, which writes
             // `#6.84(bstr)` -- a different representation entirely, not this method's concern.
             // System.Decimal reaches here only in its default encoding, which is likewise

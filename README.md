@@ -122,7 +122,9 @@ class CustomObject2
 ```
 
 The last two options are for a type you cannot decorate because you do not own it — `System.Guid` in
-the example above.
+the example above. A converter registered either way takes precedence over the built-in one, so the
+example still governs; `System.Guid` itself no longer needs it, since it is written as an RFC 9562
+binary UUID out of the box.
 
 Converters are what the library uses internally for standard types and for classes discovered by
 reflection, so a converter of your own gets the same features and the same performance.

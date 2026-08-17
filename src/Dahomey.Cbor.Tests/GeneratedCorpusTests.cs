@@ -445,6 +445,17 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // Guid.Empty alongside a populated one: the all-zero value is the only shape where the
+            // big-endian swap is invisible, so a sample made of it alone would pass either way.
+            if (type == typeof(GeneratedGuidHolder))
+            {
+                return new GeneratedGuidHolder
+                {
+                    Id = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"),
+                    Optional = Guid.Empty,
+                };
+            }
+
             if (type == typeof(Cddl.CddlTypedArrays))
             {
                 return new Cddl.CddlTypedArrays

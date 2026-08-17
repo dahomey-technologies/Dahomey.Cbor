@@ -140,9 +140,13 @@ namespace Harness
             Assert.DoesNotContain(diagnostics, d => d.Id == "CBOR1011");
         }
 
-        /// <summary>Guid has no scalar CBOR converter at all, so it falls through the same way.</summary>
+        /// <summary>
+        /// Guid does render: GuidConverter writes RFC 9562's binary UUID, tag 37 over sixteen bytes.
+        /// Kept here because it sat beside the decimal above as a refusal, and which of the two still
+        /// is belongs in one place.
+        /// </summary>
         [Fact]
-        public void GuidHasNoCddlRepresentation()
+        public void GuidHasACddlRepresentation()
         {
             ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
     public class Keyed { public System.Guid Key { get; set; } }
@@ -153,8 +157,7 @@ namespace Harness
 }
 ");
 
-            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1011");
-            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
+            Assert.DoesNotContain(diagnostics, d => d.Id == "CBOR1011");
         }
 
         // char and BigInteger are deliberately absent from this file: both have concrete converters
