@@ -741,7 +741,7 @@ namespace Dahomey.Cbor.Generator
                 || type.ToDisplayString() is "System.Half" or "System.Guid" or "System.DateTimeOffset";
         }
 
-        private static bool IsPrimitive(ITypeSymbol type)
+        private bool IsPrimitive(ITypeSymbol type)
         {
             switch (type.SpecialType)
             {
@@ -775,6 +775,12 @@ namespace Dahomey.Cbor.Generator
                 case "Dahomey.Cbor.CborDecimalFraction":
                 case "Dahomey.Cbor.CborBigFloat":
                     return true;
+
+                // The only classification that depends on an option. Under the default there is no
+                // TimeSpanConverter to resolve, so the type is collected as an object -- which is what
+                // the reflection path does with it too, and the corpus compares the two.
+                case "System.TimeSpan":
+                    return _options.WritesDurations;
             }
 
             // System.Half, System.Guid, System.DateTimeOffset and System.Object are deliberately absent.

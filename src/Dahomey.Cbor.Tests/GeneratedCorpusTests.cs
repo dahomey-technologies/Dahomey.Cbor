@@ -445,6 +445,22 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // A fractional value and a negative one, so both the nanosecond entry and the sign
+            // convention are compared against the reflection path rather than only whole seconds.
+            if (type == typeof(GeneratedDurationHolder))
+            {
+                return new GeneratedDurationHolder
+                {
+                    Elapsed = new TimeSpan(0, 1, 2, 3, 500),
+                    Timeout = TimeSpan.FromSeconds(-30),
+                };
+            }
+
+            if (type == typeof(Cddl.CddlDurationHolder))
+            {
+                return new Cddl.CddlDurationHolder { Elapsed = new TimeSpan(0, 1, 2, 3, 500) };
+            }
+
             if (type == typeof(Cddl.CddlTypedArrays))
             {
                 return new Cddl.CddlTypedArrays
@@ -601,6 +617,7 @@ namespace Dahomey.Cbor.Tests
                 EnumFormat = generated.EnumFormat,
                 DateTimeFormat = generated.DateTimeFormat,
                 DecimalFormat = generated.DecimalFormat,
+                TimeSpanFormat = generated.TimeSpanFormat,
             };
 
             string reflectionBytes = WriteAs(type, Sample(type), reflection);

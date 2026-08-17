@@ -329,6 +329,12 @@ namespace Dahomey.Cbor.Generator
 
                 case "Dahomey.Cbor.CborBigFloat":
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
+
+                // Reachable only under TimeSpanFormat.Duration -- otherwise the type is an object and
+                // never arrives here. The nanosecond entry is written only for a value that has a
+                // fractional part, so it is optional in the schema.
+                case "System.TimeSpan":
+                    return "#6.1002({1 => int, ? -9 => int})";
             }
 
             // Guid and DateTimeOffset have no scalar converter. Nor does System.Half: the only place
