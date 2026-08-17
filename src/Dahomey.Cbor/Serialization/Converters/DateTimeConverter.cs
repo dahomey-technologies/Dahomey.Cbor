@@ -172,7 +172,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                     return false;
                 }
 
-                if (negative)
+                // The offset says how far the written clock runs ahead of UTC, so UTC is reached by
+                // subtracting it: RFC 3339 section 5.6 gives 1996-12-19T16:39:57-08:00 as equal to
+                // 1996-12-20T00:39:57Z, a negative offset moving the clock forward.
+                if (!negative)
                 {
                     offsetHours = -offsetHours;
                     offsetMinutes = -offsetMinutes;
