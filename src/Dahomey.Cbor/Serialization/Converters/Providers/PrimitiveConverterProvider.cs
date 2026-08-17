@@ -48,6 +48,19 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
             }
 
             // Not a TypeCode, so it cannot join the switch above.
+            //
+            // MATCHED PAIR: the four scalars below are duplicated by name in
+            // src/Dahomey.Cbor.Generator/TypeCollector.cs (IsPrimitive) and rendered by name in
+            // CddlTypeReference.RenderPrimitive. They cannot be shared -- the generator is an analyzer
+            // assembly and must not reference this one -- so a converter added or removed here has to
+            // be mirrored there. PrimitiveConverterProviderParityTests is what catches a one-sided
+            // edit; without a mirror, a generated context maps the type as an object and writes
+            // different bytes from this path, with no diagnostic.
+            if (type == typeof(Half))
+            {
+                return new HalfConverter();
+            }
+
             if (type == typeof(BigInteger))
             {
                 return new BigIntegerConverter();

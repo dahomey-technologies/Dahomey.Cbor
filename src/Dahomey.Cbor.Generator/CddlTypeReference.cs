@@ -315,28 +315,34 @@ namespace Dahomey.Cbor.Generator
                 return "(int / #6.2(bstr) / #6.3(bstr))";
             }
 
-            // The two RFC 8949 section 3.4.4 types, matched by name for the same reason. Both write
-            // their tag unconditionally over a two-element array, exponent first, and their mantissa
-            // through WriteBigInteger -- so the mantissa is the same three-way choice as above, for the
-            // same reason, and the exponent is a plain int because CborWriter.WriteInt32 emits one.
-            // A `decimal` under DecimalFormat.DecimalFraction renders identically to
-            // CborDecimalFraction, which is correct rather than a collision: the two write the same
-            // bytes, and the declared type is what decides which converter produces them.
+            // The remaining scalars with no SpecialType, each matched by name for the same reason as
+            // BigInteger above.
             switch (type.ToDisplayString())
             {
+                // The two RFC 8949 section 3.4.4 types. Both write their tag unconditionally over a
+                // two-element array, exponent first, and their mantissa through WriteBigInteger -- so
+                // the mantissa is the same three-way choice as above, for the same reason, and the
+                // exponent is a plain int because CborWriter.WriteInt32 emits one. A `decimal` under
+                // DecimalFormat.DecimalFraction renders identically to CborDecimalFraction, which is
+                // correct rather than a collision: the two write the same bytes, and the declared type
+                // is what decides which converter produces them.
                 case "Dahomey.Cbor.CborDecimalFraction":
                     return "#6.4([int, (int / #6.2(bstr) / #6.3(bstr))])";
 
                 case "Dahomey.Cbor.CborBigFloat":
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
+
+                // HalfConverter writes through CborWriter.WriteHalf, which emits binary16 and nothing
+                // wider -- unlike WriteSingle and WriteDouble, which pick the shortest form that round
+                // trips and so need the prelude's looser `float`. So `float16` is exact here rather
+                // than merely permitted.
+                case "System.Half":
+                    return "float16";
             }
 
-            // Guid and DateTimeOffset have no scalar converter. Nor does System.Half: the only place
-            // the library references it is the RFC 8746 typed-array element path, which writes
-            // `#6.84(bstr)` -- a different representation entirely, not this method's concern.
-            // System.Decimal reaches here only in its default encoding, which is likewise
-            // indescribable. Each falls through to CBOR1011 rather than asserting a row no converter
-            // backs.
+            // Guid and DateTimeOffset have no scalar converter. System.Decimal reaches here only in
+            // its default encoding, which is likewise indescribable. Each falls through to CBOR1011
+            // rather than asserting a row no converter backs.
             return null;
         }
 

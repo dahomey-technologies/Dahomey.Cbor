@@ -13,11 +13,10 @@ namespace Dahomey.Cbor.Tests
         public short[] Counts { get; set; }
         public ulong[] Ticks { get; set; }
 
-        // Half[] is deliberately absent. It is an RFC 8746 element type and the generator's element
-        // set names it, but System.Half has no concrete converter in PrimitiveConverterProvider, so a
-        // context declaring Half[] is refused by CBOR1002 before typed arrays are reached. That is the
-        // designed behaviour -- a loud refusal rather than a silent divergence -- and it is the one of
-        // the ten element types the generated path cannot carry.
+        // The tenth element type, and the only one whose element converter is not a SpecialType: it
+        // reaches the generated path through TypeCollector.IsPrimitive matching "System.Half" by name.
+        // Present here so tag 84 has the same byte-identity cover as the other nine.
+        public Half[] Levels { get; set; }
 
         /// <summary>
         /// byte[] is deliberately not a typed array: it stays a plain CBOR byte string, which is both
@@ -64,6 +63,7 @@ namespace Dahomey.Cbor.Tests
             Precise = new[] { 1.25, -3.5 },
             Counts = new short[] { 1, -2, 300 },
             Ticks = new ulong[] { 0, ulong.MaxValue },
+            Levels = new[] { (Half)1.5f, Half.MaxValue },
             Payload = new byte[] { 1, 2, 3 },
         };
 
