@@ -329,9 +329,19 @@ namespace Dahomey.Cbor.Generator
 
                 case "Dahomey.Cbor.CborBigFloat":
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
+
+                // The same three forms a DateTime takes, since it is the same pair of tags. Only tag 0
+                // carries the offset; tag 1 names an instant and drops it.
+                case "System.DateTimeOffset":
+                    return options.DateTimeFormat switch
+                    {
+                        "Unix" => "#6.1(int)",
+                        "UnixMilliseconds" => "#6.1(float)",
+                        _ => "#6.0(tstr)",
+                    };
             }
 
-            // Guid and DateTimeOffset have no scalar converter. Nor does System.Half: the only place
+            // Guid has no scalar converter. Nor does System.Half: the only place
             // the library references it is the RFC 8746 typed-array element path, which writes
             // `#6.84(bstr)` -- a different representation entirely, not this method's concern.
             // System.Decimal reaches here only in its default encoding, which is likewise

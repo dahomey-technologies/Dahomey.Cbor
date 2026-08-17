@@ -53,6 +53,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 return new BigIntegerConverter();
             }
 
+            if (type == typeof(DateTimeOffset))
+            {
+                return new DateTimeOffsetConverter(options);
+            }
+
             if (type == typeof(CborDecimalFraction))
             {
                 return new DecimalFractionConverter();

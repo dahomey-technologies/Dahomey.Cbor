@@ -445,6 +445,17 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // Two different offsets, so the comparison catches a generated context that resolved a
+            // converter dropping them: the instants would still be right and the bytes would not.
+            if (type == typeof(GeneratedOffsetHolder))
+            {
+                return new GeneratedOffsetHolder
+                {
+                    Stamp = new DateTimeOffset(2026, 8, 17, 1, 2, 3, TimeSpan.FromHours(2)),
+                    Optional = new DateTimeOffset(1996, 12, 19, 16, 39, 57, TimeSpan.FromHours(-8)),
+                };
+            }
+
             if (type == typeof(Cddl.CddlTypedArrays))
             {
                 return new Cddl.CddlTypedArrays
