@@ -56,13 +56,12 @@ public partial class Context : CborSerializerContext { }
         }
 
         /// <summary>
-        /// The four types classified as primitives that have no case in PrimitiveConverterProvider.
+        /// The three types classified as primitives that have no case in PrimitiveConverterProvider.
         /// Each would fall through to ObjectConverterProvider and reach MakeGenericType at run time —
         /// the exact failure a generated context exists to prevent, and invisible to the AOT analyzer.
         /// </summary>
         [Theory]
         [InlineData("object")]
-        [InlineData("System.Guid")]
         [InlineData("System.DateTimeOffset")]
         [InlineData("System.Half")]
         public void TypesWithNoConcreteConverterAreReported(string memberType)

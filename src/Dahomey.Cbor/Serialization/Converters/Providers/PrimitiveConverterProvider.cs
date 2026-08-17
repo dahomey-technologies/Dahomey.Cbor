@@ -53,6 +53,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 return new BigIntegerConverter();
             }
 
+            if (type == typeof(Guid))
+            {
+                return new GuidConverter();
+            }
+
             if (type == typeof(CborDecimalFraction))
             {
                 return new DecimalFractionConverter();
