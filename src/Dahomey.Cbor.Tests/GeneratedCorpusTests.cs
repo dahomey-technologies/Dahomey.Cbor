@@ -140,6 +140,7 @@ namespace Dahomey.Cbor.Tests
                     Precise = new[] { 1.25, -3.5 },
                     Counts = new short[] { 1, -2, 300 },
                     Ticks = new ulong[] { 0, ulong.MaxValue },
+                    Levels = new[] { (System.Half)1.5f, System.Half.MaxValue },
                     Payload = new byte[] { 1, 2, 3 },
                 };
             }
@@ -463,6 +464,7 @@ namespace Dahomey.Cbor.Tests
                     Balances = new[] { -1L, 2L },
                     Samples = new[] { 1.5f },
                     Precise = new[] { 1.25 },
+                    Levels = new[] { (System.Half)1.5f },
                 };
             }
 
@@ -533,6 +535,7 @@ namespace Dahomey.Cbor.Tests
                     Initial = 'A',
                     Big = new System.Numerics.BigInteger(ulong.MaxValue) + System.Numerics.BigInteger.One,
                     Pair = (7, "seven"),
+                    Level = (System.Half)1.5f,
                 };
             }
 

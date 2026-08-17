@@ -174,5 +174,36 @@ namespace App
             Assert.Contains("options.DefaultNamingConvention", generated);
             Assert.Contains("someId", generated);
         }
+
+        /// <summary>
+        /// A <c>Half</c> is a scalar the emitter registers nothing for, and <c>Half[]</c> is the tenth
+        /// RFC 8746 element type, which makes it the one member shape that emits
+        /// <c>TypedArrayConverter&lt;System.Half&gt;</c>.
+        /// </summary>
+        /// <remarks>
+        /// A diagnostics-only assertion cannot see this: the converter named here has to be
+        /// <c>public</c> and its element type has to satisfy <c>where TI : unmanaged</c>, and both fail
+        /// at the consumer's compile rather than in the generator. <c>TypedArrayConverter&lt;TI&gt;</c>
+        /// has already been <c>internal</c> once, which compiled inside the library's own friend test
+        /// assembly and was CS0122 everywhere else.
+        /// </remarks>
+        [Fact]
+        public void AHalfMemberAndAHalfArrayCompile()
+        {
+            AssertCompiles(@"
+namespace App
+{
+    public class Readings
+    {
+        public System.Half Scalar { get; set; }
+        public System.Half[] Series { get; set; }
+    }
+
+    [CborSerializable(typeof(Readings))]
+    [CborSourceGenerationOptions(TypedArrayMode = Dahomey.Cbor.TypedArrayMode.ReadWriteLittleEndian)]
+    public partial class Context : CborSerializerContext { }
+}
+");
+        }
     }
 }

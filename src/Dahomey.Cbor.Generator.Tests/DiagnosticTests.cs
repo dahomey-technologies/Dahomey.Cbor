@@ -56,9 +56,9 @@ public partial class Context : CborSerializerContext { }
         }
 
         /// <summary>
-        /// The four types classified as primitives that have no case in PrimitiveConverterProvider.
-        /// Each would fall through to ObjectConverterProvider and reach MakeGenericType at run time —
-        /// the exact failure a generated context exists to prevent, and invisible to the AOT analyzer.
+        /// The types with no case in PrimitiveConverterProvider. Each would fall through to
+        /// ObjectConverterProvider and reach MakeGenericType at run time — the exact failure a generated
+        /// context exists to prevent, and invisible to the AOT analyzer.
         /// </summary>
         [Theory]
         [InlineData("object")]
@@ -75,11 +75,15 @@ public partial class Context : CborSerializerContext {{ }}
         }
 
         /// <summary>
-        /// <c>Half</c> was in the list above until <c>HalfConverter</c> existed. It is the reason that
-        /// list is kept in step with <c>PrimitiveConverterProvider</c> by hand rather than derived from
-        /// it: while it was absent there, the reflection path did not refuse a <c>Half</c> — it wrote the
-        /// struct's internal fields, so the generator's refusal was the better of the two behaviours.
+        /// <c>HalfConverter</c> is a concrete converter, so a <c>Half</c> belongs on the other side of
+        /// that line — scalar and as an RFC 8746 typed-array element, which is the tenth element type.
         /// </summary>
+        /// <remarks>
+        /// The absence of a diagnostic is only half of what this has to be right about: a type in
+        /// neither <c>TypeCollector.IsPrimitive</c> nor <c>HasNoConcreteConverter</c> is also clean here,
+        /// while being collected as an object and written as its internal members.
+        /// <c>PrimitiveConverterProviderParityTests</c> in the library suite is what pins the other half.
+        /// </remarks>
         [Theory]
         [InlineData("System.Half")]
         [InlineData("System.Half[]")]

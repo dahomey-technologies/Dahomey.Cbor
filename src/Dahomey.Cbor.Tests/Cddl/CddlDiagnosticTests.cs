@@ -157,9 +157,11 @@ namespace Harness
             Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
         }
 
-        // char and BigInteger are deliberately absent from this file: both have concrete converters
-        // (CharConverter and BigIntegerConverter), so both render rather than raising CBOR1011.
-        // CddlScalarMappingTests pins what they render as.
+        // char, BigInteger and Half are deliberately absent from this file: each has a concrete
+        // converter (CharConverter, BigIntegerConverter and HalfConverter), so each renders rather than
+        // raising CBOR1011. CddlScalarMappingTests pins what they render as, where the row also reaches
+        // the gem's parse and instance checks -- which is the whole point of the split, since asserting
+        // here that a diagnostic stays silent says nothing about what was emitted instead.
 
         /// <summary>
         /// DateTimeOffset has no scalar converter either -- only System.DateTime does, via
@@ -179,31 +181,6 @@ namespace Harness
 
             Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1011");
             Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
-        }
-
-        /// <summary>
-        /// Scalar System.Half renders as `float16`, which is exact rather than merely permitted:
-        /// HalfConverter writes binary16 and nothing wider, where the single/double row needs the
-        /// prelude's looser `float` because those emit the shortest form that round-trips.
-        /// </summary>
-        /// <remarks>
-        /// It had no representation until <c>HalfConverter</c> existed, when the only place the library
-        /// referenced <c>Half</c> was the RFC 8746 typed-array element path -- `#6.84(bstr)`, a
-        /// different representation entirely, and not a scalar member's.
-        /// </remarks>
-        [Fact]
-        public void ScalarHalfRendersAsFloat16()
-        {
-            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
-    public class Measurement { public System.Half Value { get; set; } }
-
-    [CborSerializable(typeof(Measurement))]
-    [CborCddlSchema]
-    public partial class HarnessContext : CborSerializerContext { }
-}
-");
-
-            Assert.DoesNotContain(diagnostics, d => d.Id == "CBOR1011");
         }
 
         /// <summary>
