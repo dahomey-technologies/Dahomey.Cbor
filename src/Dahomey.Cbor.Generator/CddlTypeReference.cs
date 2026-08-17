@@ -329,6 +329,24 @@ namespace Dahomey.Cbor.Generator
 
                 case "Dahomey.Cbor.CborBigFloat":
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
+
+                // The two RFC 8943 tags, chosen by the same option that governs a DateTime: 1004 over
+                // a full-date string, 100 over a count of days. Both numeric formats write the day
+                // count, since a date has no time of day to carry milliseconds.
+                case "System.DateOnly":
+                    return options.DateTimeFormat is "Unix" or "UnixMilliseconds"
+                        ? "#6.100(int)"
+                        : "#6.1004(tstr)";
+
+                // Untagged, alone among the date and time types: no registered tag describes a time of
+                // day, so TimeOnlyConverter writes none and the schema must not claim one.
+                case "System.TimeOnly":
+                    return options.DateTimeFormat switch
+                    {
+                        "Unix" => "int",
+                        "UnixMilliseconds" => "float",
+                        _ => "tstr",
+                    };
             }
 
             // Guid and DateTimeOffset have no scalar converter. Nor does System.Half: the only place

@@ -195,6 +195,20 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // A date carrying no time and a time carrying no date. Both are non-generic structs whose
+            // public properties would serialize as a perfectly valid map, so only the comparison against
+            // the reflection path says whether the context resolved their concrete converters. The
+            // nullable member is here because Nullable<T> reaches the element type by a different route.
+            if (type == typeof(GeneratedDateHolder))
+            {
+                return new GeneratedDateHolder
+                {
+                    Date = new DateOnly(2026, 8, 17),
+                    Time = new TimeOnly(1, 2, 3, 841),
+                    OptionalDate = new DateOnly(1969, 7, 4),
+                };
+            }
+
             // Both encodings of tag 4 in one type. The corpus runs it under two contexts differing only
             // in DecimalFormat, so the decimal member moves between the FC form and tag 4 while the two
             // struct members stay put -- which is the cohabitation, checked against the reflection path
@@ -442,6 +456,18 @@ namespace Dahomey.Cbor.Tests
                 return new Cddl.CddlDateTimeFormatHolder
                 {
                     Stamp = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+                };
+            }
+
+            // Carried by three contexts differing only in DateTimeFormat, so the date stays a day count
+            // across both numeric settings while the time beside it moves from an integer to a float.
+            // The fractional second is what makes that visible: whole seconds would render the same.
+            if (type == typeof(Cddl.CddlDateHolder))
+            {
+                return new Cddl.CddlDateHolder
+                {
+                    Date = new DateOnly(2026, 8, 17),
+                    Time = new TimeOnly(1, 2, 3, 841),
                 };
             }
 
