@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization;
@@ -18,6 +19,9 @@ namespace Dahomey.Cbor.Tests.Cddl
         public BigInteger Big { get; set; }
         public CborDecimalFraction Price { get; set; }
         public CborBigFloat Scale { get; set; }
+
+        /// <summary>Tag 0, the only one of the pair that can carry an offset.</summary>
+        public DateTimeOffset When { get; set; }
 
         /// <summary>
         /// A tuple, which is a fixed heterogeneous array rather than a collection of one type -- the one
@@ -42,6 +46,16 @@ namespace Dahomey.Cbor.Tests.Cddl
         /// character and writes it as a text string -- not as an integer code point, which is the
         /// mapping a reader of the type alone would expect.
         /// </summary>
+        /// <summary>
+        /// The same tag a DateTime takes under the default format, since the two share an encoding --
+        /// only the offset inside the string differs, which CDDL does not distinguish.
+        /// </summary>
+        [Fact]
+        public void DateTimeOffsetIsTagZeroOverAString()
+        {
+            Assert.Contains("\"When\": #6.0(tstr),", CddlScalarsContext.CddlSchema.Replace("\r\n", "\n"));
+        }
+
         [Fact]
         public void CharIsATextString()
         {
