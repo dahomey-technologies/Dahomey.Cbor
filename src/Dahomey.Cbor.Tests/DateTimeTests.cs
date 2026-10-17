@@ -12,8 +12,15 @@ namespace Dahomey.Cbor.Tests
         [InlineData("1A4BFBAFFA", "2010-05-25T11:09:46Z")]
         [InlineData("74323031302D30352D32355431313A30393A34365A", "2010-05-25T11:09:46Z")]
         [InlineData("7818323031302D30352D32355431313A30393A34362E3132335A", "2010-05-25T11:09:46.123Z")]
-        [InlineData("781D323031392D30392D31315431303A31363A32382E3834312B30323A3030", "2019-09-11T12:16:28.841Z")]
-        [InlineData("781D323031392D30392D31315431303A31363A32382E3834312D30323A3030", "2019-09-11T08:16:28.841Z")]
+        // An offset is subtracted to reach UTC, so "+02:00" reads two hours earlier and "-02:00" two
+        // hours later -- not the reverse.
+        [InlineData("781D323031392D30392D31315431303A31363A32382E3834312B30323A3030", "2019-09-11T08:16:28.841Z")]
+        [InlineData("781D323031392D30392D31315431303A31363A32382E3834312D30323A3030", "2019-09-11T12:16:28.841Z")]
+        // RFC 3339 section 5.6's own worked example, which states this equivalence outright, and whose
+        // offset also carries the date across midnight.
+        [InlineData("7819313939362D31322D31395431363A33393A35372D30383A3030", "1996-12-20T00:39:57Z")]
+        // A minutes-bearing offset, so the two components are known to be applied in the same direction.
+        [InlineData("7819323031392D30392D31315431303A31363A32382B30353A3330", "2019-09-11T04:46:28Z")]
         public void ReadDateTime(string hexBuffer, string expectedISO8601)
         {
             DateTime expectedDateTime = DateTime.ParseExact(expectedISO8601,
