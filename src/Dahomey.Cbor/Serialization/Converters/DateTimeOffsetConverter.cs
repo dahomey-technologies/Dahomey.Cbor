@@ -44,11 +44,42 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 case CborDataItemType.Signed:
                 case CborDataItemType.Unsigned:
-                    return DateTimeOffset.FromUnixTimeSeconds(reader.ReadInt64());
+                    long seconds = reader.ReadInt64();
+
+                    try
+                    {
+                        return DateTimeOffset.FromUnixTimeSeconds(seconds);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        throw reader.BuildException(
+                            $"Invalid date format {seconds.ToString(CultureInfo.InvariantCulture)}: "
+                            + "outside the range a DateTimeOffset holds");
+                    }
 
                 case CborDataItemType.Double:
                 case CborDataItemType.Single:
-                    return DateTimeOffset.FromUnixTimeSeconds(0).AddSeconds(reader.ReadDouble());
+                    double fractionalSeconds = reader.ReadDouble();
+
+                    // NaN compares false against every bound, so AddSeconds would not refuse it: it
+                    // converts to a zero tick count and reads as the epoch. Neither it nor an infinity
+                    // names an instant, so both are refused here.
+                    if (double.IsNaN(fractionalSeconds) || double.IsInfinity(fractionalSeconds))
+                    {
+                        throw reader.BuildException(
+                            "Invalid date format: a time stamp must be a finite number");
+                    }
+
+                    try
+                    {
+                        return DateTimeOffset.FromUnixTimeSeconds(0).AddSeconds(fractionalSeconds);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        throw reader.BuildException(
+                            $"Invalid date format {fractionalSeconds.ToString("R", CultureInfo.InvariantCulture)}: "
+                            + "outside the range a DateTimeOffset holds");
+                    }
 
                 default:
                     throw reader.BuildException("Invalid date format");
@@ -120,7 +151,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     // Past three places the digits are finer than the milliseconds this reads, and are
                     // dropped rather than refused -- a peer with a more precise clock is interoperating
-                    // correctly. Matches what DateTimeConverter accepts.
+                    // correctly.
                     if (places < 3)
                     {
                         milliseconds = milliseconds * 10 + digit;

@@ -127,6 +127,62 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
+        /// A numeric time stamp outside what a <see cref="DateTimeOffset"/> holds is a format error like
+        /// the string form's, not an <see cref="ArgumentOutOfRangeException"/> from the BCL.
+        /// </summary>
+        [Theory]
+        [InlineData("C11B7FFFFFFFFFFFFFFF")]  // long.MaxValue seconds
+        [InlineData("C11BFFFFFFFFFFFFFFFF")]  // beyond long.MaxValue
+        [InlineData("C13B7FFFFFFFFFFFFFFF")]  // long.MinValue seconds
+        [InlineData("C11B0000003AFFF44180")]  // 253402300800, one second past DateTimeOffset.MaxValue
+        [InlineData("C13B0000000E7791F700")]  // -62135596801, one second before DateTimeOffset.MinValue
+        [InlineData("C1FB4415AF1D78B58C40")]  // the double 1e20
+        [InlineData("C1FBC415AF1D78B58C40")]  // the double -1e20
+        [InlineData("C1FA7F7FFFFF")]          // float.MaxValue
+        public void ANumericTimeStampOutOfRangeIsRefused(string hexBuffer)
+        {
+            Assert.Throws<CborException>(() => Helper.Read<DateTimeOffset>(hexBuffer));
+        }
+
+        /// <summary>
+        /// NaN compares false against every bound, so without an explicit check it reads as the epoch.
+        /// </summary>
+        [Theory]
+        [InlineData("C1F97E00")]              // NaN, half
+        [InlineData("C1FA7FC00000")]          // NaN, single
+        [InlineData("C1FB7FF8000000000000")]  // NaN, double
+        [InlineData("C1F97C00")]              // +Infinity
+        [InlineData("C1F9FC00")]              // -Infinity
+        [InlineData("C1FA7F800000")]          // +Infinity, single
+        [InlineData("C1FB7FF0000000000000")]  // +Infinity, double
+        [InlineData("C1FBFFF0000000000000")]  // -Infinity, double
+        public void ANonFiniteTimeStampIsRefused(string hexBuffer)
+        {
+            Assert.Throws<CborException>(() => Helper.Read<DateTimeOffset>(hexBuffer));
+        }
+
+        /// <summary>The bounds themselves are representable and must still read.</summary>
+        [Fact]
+        public void TheBoundsOfTheRangeStillRead()
+        {
+            // 253402300799 seconds is 9999-12-31T23:59:59Z and -62135596800 is 0001-01-01T00:00:00Z.
+            Assert.Equal(
+                new DateTimeOffset(9999, 12, 31, 23, 59, 59, TimeSpan.Zero),
+                Helper.Read<DateTimeOffset>("C11B0000003AFFF4417F"));
+            Assert.Equal(
+                DateTimeOffset.MinValue,
+                Helper.Read<DateTimeOffset>("C13B0000000E7791F6FF"));
+
+            // The same two bounds as doubles, which are exact at this magnitude.
+            Assert.Equal(
+                new DateTimeOffset(9999, 12, 31, 23, 59, 59, TimeSpan.Zero),
+                Helper.Read<DateTimeOffset>("C1FB424D7FFA20BF8000"));
+            Assert.Equal(
+                DateTimeOffset.MinValue,
+                Helper.Read<DateTimeOffset>("C1FBC22CEF23EE000000"));
+        }
+
+        /// <summary>
         /// A string naming no offset is given one by <c>UnqualifiedTimeZoneDateTimeKind</c>, exactly as
         /// constructing a <see cref="DateTimeOffset"/> from a <see cref="DateTime"/> of that kind does.
         /// </summary>
