@@ -268,7 +268,6 @@ public partial class Context : CborSerializerContext {{ }}
         }
 
         [Theory]
-        [InlineData("[CborRequired]")]
         [InlineData("[CborIgnoreIfDefault]")]
         [InlineData("[DefaultValue(3)]")]
         [InlineData("[CborLengthMode(LengthMode = LengthMode.IndefiniteLength)]")]
@@ -316,15 +315,139 @@ public partial class Context : CborSerializerContext { }
 ");
         }
 
+        /// <summary>
+        /// Both are expressible through the delegate mappings — <c>SetRequired</c> and
+        /// <c>SetShouldSerializeMethod</c> have always been there — so refusing them was the generator
+        /// not emitting a call it could make, rather than a shape it could not reproduce.
+        /// </summary>
         [Fact]
-        public void AShouldSerializeMethodIsReported()
+        public void ARequiredMemberIsNotReported()
         {
-            AssertReports("CBOR1007", @"
+            AssertClean(@"
+public class Holder { [CborRequired] public int Value { get; set; } }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        [Fact]
+        public void AShouldSerializeMethodIsNotReported()
+        {
+            AssertClean(@"
 public class Holder
 {
     public int Value { get; set; }
 
     public bool ShouldSerializeValue() => true;
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        private static string ShouldSerializeHolder(string declarations) => $@"
+public class Holder
+{{
+    public int Value {{ get; set; }}
+
+    {declarations}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+";
+
+        /// <summary>
+        /// The shapes where the reflection path throws while building the mapping, each confirmed
+        /// against it by <c>ShouldSerializeReflectionRefusalTests</c> in the library tests: a
+        /// <c>public bool</c> predicate that is static or generic on the declaring type, and a
+        /// generic and a non-generic version side by side.
+        /// </summary>
+        [Theory]
+        [InlineData("public static bool ShouldSerializeValue() => false;")]
+        [InlineData("public bool ShouldSerializeValue<T>() => false;")]
+        [InlineData("public bool ShouldSerializeValue() => false; public bool ShouldSerializeValue<T>() => false;")]
+        [InlineData("public int ShouldSerializeValue() => 0; public bool ShouldSerializeValue<T>() => false;")]
+        public void AShouldSerializeMethodTheReflectionPathThrowsOnIsReported(string declarations)
+        {
+            AssertReports("CBOR1017", ShouldSerializeHolder(declarations));
+        }
+
+        [Fact]
+        public void AGenericShouldSerializeMethodFoundOnABaseIsReported()
+        {
+            AssertReports("CBOR1017", @"
+public class Base { public bool ShouldSerializeValue<T>() => false; }
+public class Holder : Base { public int Value { get; set; } }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        [Fact]
+        public void AStaticShouldSerializeMethodOnAStructIsReported()
+        {
+            AssertReports("CBOR1017", @"
+public struct Holder { public int Value { get; set; } public static bool ShouldSerializeValue() => false; }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        [Fact]
+        public void AStaticShouldSerializeMethodOnTheBaseOfTheDeclaringTypeIsReportedAgainstAMemberItDeclares()
+        {
+            // Value is declared on Holder, whose own static is found first.
+            AssertReports("CBOR1017", @"
+public class Base { public bool ShouldSerializeValue() => false; }
+public class Holder : Base { public int Value { get; set; } public new static bool ShouldSerializeValue() => true; }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// The shapes the reflection path does not throw on, which must stay silent: a static
+        /// inherited from a base is invisible to a lookup that is not FlattenHierarchy, a method that
+        /// does not return bool is ignored whatever else it is, and a non-public one is not seen.
+        /// </summary>
+        [Theory]
+        [InlineData("public class Base { public static bool ShouldSerializeValue() => false; } public class Holder : Base { public int Value { get; set; } }")]
+        [InlineData("public class Base { public bool ShouldSerializeValue() => false; } public class Mid : Base { public new static bool ShouldSerializeValue() => true; } public class Holder : Mid { public int Value { get; set; } }")]
+        [InlineData("public class Holder { public int Value { get; set; } public static int ShouldSerializeValue() => 0; }")]
+        [InlineData("public class Holder { public int Value { get; set; } public int ShouldSerializeValue<T>() => 0; }")]
+        [InlineData("public class Holder { public int Value { get; set; } internal static bool ShouldSerializeValue() => false; }")]
+        [InlineData("public class Holder { public int Value { get; set; } internal bool ShouldSerializeValue<T>() => false; public bool ShouldSerializeValue() => false; }")]
+        [InlineData("public class Base { public bool ShouldSerializeValue<T>() => false; } public class Holder : Base { public int Value { get; set; } public bool ShouldSerializeValue() => false; }")]
+        [InlineData("public struct Holder { public int Value { get; set; } public bool ShouldSerializeValue() => false; }")]
+        public void AShouldSerializeShapeTheReflectionPathAcceptsIsNotReported(string types)
+        {
+            AssertClean(types + @"
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// A <c>ShouldSerialize</c> method the reflection path ignores — it takes a parameter, so it is
+        /// not the convention — must not be picked up here either, or the two paths disagree about
+        /// whether the member is written at all.
+        /// </summary>
+        [Fact]
+        public void AShouldSerializeMethodTheReflectionPathIgnoresIsNotUsed()
+        {
+            AssertClean(@"
+public class Holder
+{
+    public int Value { get; set; }
+
+    public bool ShouldSerializeValue(int unused) => false;
 }
 
 [CborSerializable(typeof(Holder))]

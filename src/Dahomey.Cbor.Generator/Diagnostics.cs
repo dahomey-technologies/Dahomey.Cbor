@@ -188,5 +188,20 @@ namespace Dahomey.Cbor.Generator
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
+
+        /// <summary>
+        /// A <c>public bool ShouldSerialize&lt;Member&gt;()</c> that the reflection path cannot turn
+        /// into a call: it builds an expression over the method, which throws for a static or an open
+        /// generic one, and <c>GetMethod</c> throws before that when the generic and non-generic
+        /// versions are both public. The type is unusable there, so a generated context that wrote the
+        /// member regardless would be accepting what the reflection path refuses.
+        /// </summary>
+        public static readonly DiagnosticDescriptor ShouldSerializeRefused = new(
+            id: "CBOR1017",
+            title: "ShouldSerialize method cannot be used",
+            messageFormat: "'{0}.{1}' is governed by '{2}', which cannot be called as a predicate: {3}. The reflection path throws for it when it builds the mapping. Make it a public, non-generic instance method returning bool, or make it non-public.",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
     }
 }

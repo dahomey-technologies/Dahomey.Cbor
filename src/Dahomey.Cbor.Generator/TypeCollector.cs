@@ -357,7 +357,28 @@ namespace Dahomey.Cbor.Generator
                     }
                 }
 
-                model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite));
+                // Found once, so the name and the type it is cast to cannot come from different methods.
+                IMethodSymbol? shouldSerialize = FindShouldSerializeMethod(
+                    type, member, out IMethodSymbol? refused, out string? refusal);
+
+                if (refused is not null && refusal is not null)
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.ShouldSerializeRefused,
+                        refused.Locations.FirstOrDefault() ?? member.Locations.FirstOrDefault(),
+                        type.Name,
+                        member.Name,
+                        refused.Name,
+                        refusal));
+                }
+
+                model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite)
+                {
+                    RequirementPolicy = ReadRequirementPolicy(member),
+                    ShouldSerializeMethod = shouldSerialize?.Name,
+                    ShouldSerializeOwner = shouldSerialize?.ContainingType
+                        .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                });
 
                 Collect(memberType);
 
@@ -387,7 +408,6 @@ namespace Dahomey.Cbor.Generator
         private static readonly (string Attribute, string Description)[] UnsupportedMemberFeatures =
         {
             ("CborConverterAttribute", "[CborConverter]"),
-            ("CborRequiredAttribute", "[CborRequired]"),
             ("CborIgnoreIfDefaultAttribute", "[CborIgnoreIfDefault]"),
             ("CborLengthModeAttribute", "[CborLengthMode]"),
             ("DefaultValueAttribute", "[DefaultValue]"),
@@ -432,14 +452,6 @@ namespace Dahomey.Cbor.Generator
                     if (HasAttribute(method, "OnDeserializedAttribute"))
                     {
                         Report(method.Locations.FirstOrDefault(), type.ToDisplayString(), "[OnDeserialized]");
-                    }
-
-                    if (method.Name.StartsWith("ShouldSerialize", System.StringComparison.Ordinal)
-                        && method.Name.Length > "ShouldSerialize".Length
-                        && method.Parameters.Length == 0
-                        && method.ReturnType.SpecialType == SpecialType.System_Boolean)
-                    {
-                        Report(method.Locations.FirstOrDefault(), type.ToDisplayString(), $"a {method.Name}() method");
                     }
 
                     continue;
@@ -1030,6 +1042,177 @@ namespace Dahomey.Cbor.Generator
             {
                 yield return overridden;
             }
+        }
+
+        /// <summary>
+        /// The <c>[CborRequired]</c> policy for a member, as the <c>RequirementPolicy</c> member name to
+        /// emit, or null where the member is not required.
+        /// </summary>
+        /// <remarks>
+        /// The attribute's constructor defaults to <c>Always</c>, so an argumentless <c>[CborRequired]</c>
+        /// means <c>Always</c> — the same default <c>CborRequiredAttribute</c> itself applies, rather
+        /// than a second copy of the policy living here.
+        /// <para>
+        /// The value is rendered by <c>TypedConstant.ToCSharpString()</c> rather than mapped from its
+        /// underlying number, so a reordering of <c>RequirementPolicy</c> cannot silently turn one policy
+        /// into another here — the emitted text names the member the caller wrote.
+        /// </para>
+        /// </remarks>
+        private static string? ReadRequirementPolicy(ISymbol member)
+        {
+            foreach (ISymbol declaration in WithOverriddenDeclarations(member))
+            {
+                foreach (AttributeData attribute in declaration.GetAttributes())
+                {
+                    if (attribute.AttributeClass?.Name != "CborRequiredAttribute")
+                    {
+                        continue;
+                    }
+
+                    // The constructor argument first, or its default; then the named Policy, because
+                    // reflection applies the property after the constructor has run, so a named value
+                    // wins when both are written.
+                    string policy = DefaultRequirementPolicy;
+
+                    foreach (TypedConstant argument in attribute.ConstructorArguments)
+                    {
+                        policy = RenderEnumConstant(argument) ?? DefaultRequirementPolicy;
+                        break;
+                    }
+
+                    foreach (KeyValuePair<string, TypedConstant> named in attribute.NamedArguments)
+                    {
+                        if (named.Key == "Policy")
+                        {
+                            policy = RenderEnumConstant(named.Value) ?? policy;
+                        }
+                    }
+
+                    return policy;
+                }
+            }
+
+            return null;
+        }
+
+        private const string DefaultRequirementPolicy =
+            "global::Dahomey.Cbor.Attributes.RequirementPolicy.Always";
+
+        /// <summary>
+        /// An enum-valued attribute argument as the fully qualified member the caller wrote.
+        /// </summary>
+        /// <remarks>
+        /// Resolved from the enum's own symbol rather than mapped from the underlying number, so a
+        /// reordering of the enum cannot silently turn one member into another here.
+        /// </remarks>
+        private static string? RenderEnumConstant(TypedConstant constant)
+        {
+            if (constant.Type is not INamedTypeSymbol enumType || constant.Value is null)
+            {
+                return null;
+            }
+
+            foreach (ISymbol candidate in enumType.GetMembers())
+            {
+                if (candidate is IFieldSymbol { HasConstantValue: true } field
+                    && Equals(field.ConstantValue, constant.Value))
+                {
+                    return enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                        + "." + field.Name;
+                }
+            }
+
+            // A value the enum does not name, such as (RequirementPolicy)7: reflection keeps the raw
+            // number, so it is cast through rather than folded onto a member it was not written as.
+            long raw = System.Convert.ToInt64(constant.Value, CultureInfo.InvariantCulture);
+            string literal = raw < 0
+                ? "(" + raw.ToString(CultureInfo.InvariantCulture) + ")"
+                : raw.ToString(CultureInfo.InvariantCulture);
+
+            return "(" + enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")" + literal;
+        }
+
+        /// <summary>
+        /// The <c>ShouldSerialize&lt;Member&gt;()</c> method the reflection path would use for this
+        /// member, or null where there is none -- including every member of a struct. When the
+        /// reflection path would instead <b>throw</b> building the mapping, <paramref name="refused"/>
+        /// is the method it chokes on and <paramref name="refusal"/> says why.
+        /// </summary>
+        /// <remarks>
+        /// <c>DefaultObjectMappingConvention.ProcessShouldSerializeMethod</c> calls
+        /// <c>GetMethod(name, no parameters)</c> on the member's <b>declaring</b> type, so the search
+        /// starts there and goes up its bases, never down: a predicate declared only on a derived type
+        /// is invisible to a member a base declares, and one hiding the base's with <c>new</c> loses to
+        /// it. That lookup sees public methods only, so a non-public one is skipped rather than ending
+        /// the search, and it is not <c>FlattenHierarchy</c>, so a static method inherited from a base
+        /// is skipped too. At the level that has candidates, the outcome is:
+        /// <list type="bullet">
+        /// <item>two public candidates (<c>M()</c> and <c>M&lt;T&gt;()</c>): <c>AmbiguousMatchException</c>;</item>
+        /// <item>one that does not return <c>bool</c>: ignored, whatever else it is;</item>
+        /// <item>a <c>bool</c> one that is static (only possible on the declaring type) or generic: the
+        /// expression tree cannot be built, and an <c>ArgumentException</c> escapes;</item>
+        /// <item>otherwise it is the predicate.</item>
+        /// </list>
+        /// Each throw is reported rather than ignored: the generated path would otherwise write the
+        /// member for a type the reflection path refuses outright. A struct's member converter never
+        /// consults a predicate, but the convention still builds the lambda, so a struct is refused
+        /// for the same shapes and simply never emits one.
+        /// </remarks>
+        private static IMethodSymbol? FindShouldSerializeMethod(
+            ITypeSymbol type, ISymbol member, out IMethodSymbol? refused, out string? refusal)
+        {
+            refused = null;
+            refusal = null;
+
+            string name = "ShouldSerialize" + member.Name;
+            ITypeSymbol? declaring = member.ContainingType;
+
+            for (ITypeSymbol? current = declaring;
+                 current is not null && current.SpecialType != SpecialType.System_Object;
+                 current = current.BaseType)
+            {
+                bool onDeclaringType = SymbolEqualityComparer.Default.Equals(current, declaring);
+
+                List<IMethodSymbol> candidates = current.GetMembers(name)
+                    .OfType<IMethodSymbol>()
+                    .Where(m => m.MethodKind == MethodKind.Ordinary
+                        && m.Parameters.Length == 0
+                        && m.DeclaredAccessibility == Accessibility.Public
+                        && (onDeclaringType || !m.IsStatic))
+                    .ToList();
+
+                if (candidates.Count == 0)
+                {
+                    continue;
+                }
+
+                if (candidates.Count > 1)
+                {
+                    refused = candidates[0];
+                    refusal = "it declares both a generic and a non-generic version, which makes the lookup ambiguous";
+                    return null;
+                }
+
+                IMethodSymbol method = candidates[0];
+
+                if (method.ReturnType.SpecialType != SpecialType.System_Boolean)
+                {
+                    return null;
+                }
+
+                if (method.IsStatic || method.IsGenericMethod)
+                {
+                    refused = method;
+                    refusal = method.IsStatic
+                        ? "it is static, and an instance call cannot be built over a static method"
+                        : "it is generic, and a call cannot be built over an open generic method";
+                    return null;
+                }
+
+                return type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct ? null : method;
+            }
+
+            return null;
         }
 
         private static bool HasInheritedAttribute(ISymbol member, string attributeName)

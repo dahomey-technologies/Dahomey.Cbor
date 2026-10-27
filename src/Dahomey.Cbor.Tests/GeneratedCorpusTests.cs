@@ -232,6 +232,81 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedTupleTests.Sample();
             }
 
+            if (type == typeof(ShouldSerializeOnDerivedOnly))
+            {
+                return new ShouldSerializeOnDerivedOnly { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeInherited))
+            {
+                return new ShouldSerializeInherited { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeHidden))
+            {
+                return new ShouldSerializeHidden { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeOverridden))
+            {
+                return new ShouldSerializeOverridden { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeOverridingProperty))
+            {
+                return new ShouldSerializeOverridingProperty { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeNotBool))
+            {
+                return new ShouldSerializeNotBool { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeWithParameter))
+            {
+                return new ShouldSerializeWithParameter { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeNonPublic))
+            {
+                return new ShouldSerializeNonPublic { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeInheritedStatic))
+            {
+                return new ShouldSerializeInheritedStatic { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(RequiredNamedPolicyHolder))
+            {
+                return new RequiredNamedPolicyHolder { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(RequiredUndefinedConstructorPolicyHolder))
+            {
+                return new RequiredUndefinedConstructorPolicyHolder { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(RequiredNegativeNamedPolicyHolder))
+            {
+                return new RequiredNegativeNamedPolicyHolder { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeStruct))
+            {
+                return new ShouldSerializeStruct { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(GeneratedRequiredHolder))
+            {
+                return new GeneratedRequiredHolder { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(GeneratedShouldSerializeHolder))
+            {
+                return new GeneratedShouldSerializeHolder { Id = 1, Name = "n" };
+            }
+
             if (type == typeof(GeneratedKeptMapFormat))
             {
                 return new GeneratedKeptMapFormat { Id = 7, Name = "n" };
