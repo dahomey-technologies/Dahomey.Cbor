@@ -227,6 +227,41 @@ namespace Dahomey.Cbor.Tests
             // Tuples at three shapes: within seven, past seven so the converter carries a Rest, and
             // nested twice. The comparison is what catches a generated context that named a different
             // converter or the wrong type arguments -- both would still produce valid CBOR.
+            if (type == typeof(NonPublicGetterPrivate))
+            {
+                return new NonPublicGetterPrivate { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(NonPublicGetterProtected))
+            {
+                return new NonPublicGetterProtected { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(NonPublicGetterInternal))
+            {
+                return new NonPublicGetterInternal { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(NonPublicGetterProtectedInternal))
+            {
+                return new NonPublicGetterProtectedInternal { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(NonPublicGetterBesideAStaticPredicate))
+            {
+                return new NonPublicGetterBesideAStaticPredicate { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(NonPublicGetterInherited))
+            {
+                return new NonPublicGetterInherited { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(NonPublicGetterOverridden))
+            {
+                return new NonPublicGetterOverridden { Id = 1, Name = "n" };
+            }
+
             if (type == typeof(GeneratedTupleHolder))
             {
                 return GeneratedTupleTests.Sample();

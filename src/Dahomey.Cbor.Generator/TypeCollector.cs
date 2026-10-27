@@ -16,13 +16,23 @@ namespace Dahomey.Cbor.Generator
         private readonly GenerationOptions _options;
         private readonly List<DiagnosticInfo> _diagnostics;
 
+        /// <summary>
+        /// The assembly the generated code is compiled into, which decides whether an <c>internal</c>
+        /// accessor of a collected type is reachable. Null means unknown, and is taken as reachable.
+        /// </summary>
+        private readonly IAssemblySymbol? _accessingAssembly;
+
         private readonly Dictionary<string, TypeModel> _models =
             new Dictionary<string, TypeModel>();
 
-        public TypeCollector(GenerationOptions options, List<DiagnosticInfo> diagnostics)
+        public TypeCollector(
+            GenerationOptions options,
+            List<DiagnosticInfo> diagnostics,
+            IAssemblySymbol? accessingAssembly = null)
         {
             _options = options;
             _diagnostics = diagnostics;
+            _accessingAssembly = accessingAssembly;
         }
 
         public void Collect(ITypeSymbol type)
@@ -548,6 +558,28 @@ namespace Dahomey.Cbor.Generator
 
                     if (member.DeclaredAccessibility == Accessibility.Public)
                     {
+                        // A public property can still have a getter that is not: the reflection path
+                        // decides on the getter, so the property is skipped there unless [CborProperty]
+                        // asks for it, and emitting `o.Name` for one is CS0271 in the generated code.
+                        if (member is IPropertySymbol { GetMethod: { DeclaredAccessibility: not Accessibility.Public } getter })
+                        {
+                            if (!IsSerializedByTheReflectionPath(member))
+                            {
+                                continue;
+                            }
+
+                            if (!IsReachableFromTheContext(getter))
+                            {
+                                _diagnostics.Add(DiagnosticInfo.Create(
+                                    Diagnostics.NonPublicMember,
+                                    member.Locations.FirstOrDefault(),
+                                    type.Name,
+                                    member.Name,
+                                    $"public but has a {AccessibilityName(getter.DeclaredAccessibility)} getter"));
+                                continue;
+                            }
+                        }
+
                         yield return member;
                         continue;
                     }
@@ -559,21 +591,24 @@ namespace Dahomey.Cbor.Generator
                             member.Locations.FirstOrDefault(),
                             type.Name,
                             member.Name,
-                            member.DeclaredAccessibility.ToString().ToLowerInvariant()));
+                            AccessibilityName(member.DeclaredAccessibility)));
                     }
                 }
             }
         }
 
         /// <summary>
-        /// Whether <c>DefaultObjectMappingConvention</c> would serialize this non-public member, and
-        /// therefore whether dropping it changes the bytes.
+        /// Whether <c>DefaultObjectMappingConvention</c> would serialize this member whose accessibility
+        /// is not plain public, and therefore whether dropping it changes the bytes.
         /// </summary>
         /// <remarks>
-        /// That convention excludes a property whose getter is protected, private or static, and a
-        /// field that is private or static — unless the member carries <c>[CborProperty]</c>, which
-        /// overrides the filter entirely. So an internal property, an internal or protected field, and
-        /// anything at all with the attribute, are all serialized today.
+        /// That convention excludes a property by its <b>getter</b> -- protected, private or static --
+        /// and a field that is private or static, unless the member carries <c>[CborProperty]</c>, which
+        /// overrides the filter entirely. Everything else is serialized: an internal, protected internal
+        /// or <c>private protected</c> getter, and a protected, internal, protected internal or
+        /// <c>private protected</c> field. Only <c>IsFamily</c> and <c>IsPrivate</c> are tested, so the
+        /// two intersection forms (<c>private protected</c>) are not excluded -- they are neither.
+        /// A property with no getter is skipped outright, attribute or not.
         /// </remarks>
         private static bool IsSerializedByTheReflectionPath(ISymbol member)
         {
@@ -587,6 +622,11 @@ namespace Dahomey.Cbor.Generator
                 return false;
             }
 
+            if (member is IPropertySymbol { GetMethod: null })
+            {
+                return false;
+            }
+
             if (HasInheritedAttribute(member, "CborPropertyAttribute"))
             {
                 return true;
@@ -594,11 +634,38 @@ namespace Dahomey.Cbor.Generator
 
             return member switch
             {
-                IPropertySymbol property => property.GetMethod is
-                    { DeclaredAccessibility: Accessibility.Internal or Accessibility.ProtectedOrInternal },
-                IFieldSymbol field => field.DeclaredAccessibility
-                    is Accessibility.Internal or Accessibility.Protected or Accessibility.ProtectedOrInternal,
+                IPropertySymbol property => property.GetMethod!.DeclaredAccessibility
+                    is not (Accessibility.Private or Accessibility.Protected),
+                IFieldSymbol field => field.DeclaredAccessibility is not Accessibility.Private,
                 _ => false,
+            };
+        }
+
+        /// <summary>
+        /// Whether generated code in the context's assembly can call this accessor. An
+        /// <c>internal</c> one is reachable only from its own assembly or one it names with
+        /// <c>InternalsVisibleTo</c>, which is what makes a getter on a base type read from metadata
+        /// the case that matters.
+        /// </summary>
+        private bool IsReachableFromTheContext(ISymbol accessor)
+        {
+            return accessor.DeclaredAccessibility switch
+            {
+                Accessibility.Public => true,
+                Accessibility.Internal or Accessibility.ProtectedOrInternal =>
+                    _accessingAssembly is null
+                    || accessor.ContainingAssembly.GivesAccessTo(_accessingAssembly),
+                _ => false,
+            };
+        }
+
+        private static string AccessibilityName(Accessibility accessibility)
+        {
+            return accessibility switch
+            {
+                Accessibility.ProtectedOrInternal => "protected internal",
+                Accessibility.ProtectedAndInternal => "private protected",
+                _ => accessibility.ToString().ToLowerInvariant(),
             };
         }
 

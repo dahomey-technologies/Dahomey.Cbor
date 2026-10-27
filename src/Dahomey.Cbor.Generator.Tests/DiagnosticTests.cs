@@ -434,6 +434,124 @@ public partial class Context : CborSerializerContext { }
 ");
         }
 
+        private static string Holder(string member, string extra = "") => $@"
+public class Holder
+{{
+    public int Id {{ get; set; }}
+    {member}
+    {extra}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+";
+
+        /// <summary>
+        /// The reflection path skips a property whose getter is protected or private, so there is
+        /// nothing to reproduce and nothing to report. Collecting it emitted <c>o.Name</c>, CS0271.
+        /// </summary>
+        [Theory]
+        [InlineData("public string Name { private get; set; }")]
+        [InlineData("public string Name { protected get; set; }")]
+        [InlineData("[CborIgnore] public string Name { private get; set; }")]
+        public void APropertyWithAGetterTheReflectionPathSkipsIsNotReported(string member)
+        {
+            AssertClean(Holder(member));
+        }
+
+        /// <summary>
+        /// A member the reflection path skips is never mapped, so a <c>ShouldSerialize</c> beside it
+        /// is never looked up: it cannot make the reflection path throw, and CBOR1017 must not say it
+        /// does.
+        /// </summary>
+        [Theory]
+        [InlineData("public static bool ShouldSerializeName() => false;")]
+        [InlineData("public bool ShouldSerializeName<T>() => false;")]
+        public void AShouldSerializeBesideASkippedPropertyIsNotReported(string predicate)
+        {
+            AssertClean(Holder("public string Name { private get; set; }", predicate));
+        }
+
+        /// <summary>
+        /// [CborProperty] overrides the skip, so the reflection path maps the property and the
+        /// generated path would have to call a getter it cannot reach.
+        /// </summary>
+        [Theory]
+        [InlineData("[CborProperty(\"n\")] public string Name { private get; set; }")]
+        [InlineData("[CborProperty(\"n\")] public string Name { protected get; set; }")]
+        [InlineData("[CborProperty(\"n\")] public string Name { private protected get; set; }")]
+        public void AGetterTheReflectionPathIsAskedToMapButTheContextCannotCallIsReported(string member)
+        {
+            AssertReports("CBOR1008", Holder(member));
+        }
+
+        /// <summary>
+        /// <c>private protected</c> is neither protected nor private to the reflection path's test, so
+        /// it maps the property, and so does it a field.
+        /// </summary>
+        [Theory]
+        [InlineData("public string Name { private protected get; set; }")]
+        [InlineData("private protected string Name;")]
+        public void APrivateProtectedMemberTheReflectionPathMapsIsReported(string member)
+        {
+            AssertReports("CBOR1008", Holder(member));
+        }
+
+        /// <summary>
+        /// Reachable from the context's own assembly, so the getter is called as it is today.
+        /// </summary>
+        [Theory]
+        [InlineData("public string Name { internal get; set; }")]
+        [InlineData("public string Name { protected internal get; set; }")]
+        public void AnInternalGetterInTheSameAssemblyIsCollected(string member)
+        {
+            AssertClean(Holder(member));
+            Assert.Contains("o.Name", GeneratorHarness.GeneratedSource(Preamble + Holder(member)));
+        }
+
+        /// <summary>
+        /// The same getter on a base read from metadata cannot be called from here, and the reflection
+        /// path maps it: collecting it was CS0271 and skipping it would change the bytes.
+        /// </summary>
+        /// <remarks>
+        /// Only <c>protected internal</c> is testable. Roslyn imports metadata members with
+        /// <c>MetadataImportOptions.Public</c> unless the assembly grants access, and a plain
+        /// <c>internal</c> accessor is then absent from the symbol -- indistinguishable from a property
+        /// that never had a getter, so the generator has nothing to report against.
+        /// </remarks>
+        [Theory]
+        [InlineData("public string Name { protected internal get; set; }")]
+        public void AnInternalGetterOnABaseFromAnotherAssemblyIsReported(string member)
+        {
+            (IReadOnlyList<Diagnostic> diagnostics, _) = GeneratorHarness.RunAgainstLibrary(
+                InheritedFormatPreamble + $"namespace Lib {{ public class Base {{ public int Id {{ get; set; }} {member} }} }}",
+                InheritedFormatPreamble + @"
+public class Derived : Lib.Base { }
+
+[CborSerializable(typeof(Derived))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Contains(diagnostics, diagnostic => diagnostic.Id == "CBOR1008");
+        }
+
+        /// <summary>The skip applies to a getter read from metadata exactly as to one in source.</summary>
+        [Fact]
+        public void AProtectedGetterOnABaseFromAnotherAssemblyIsSkippedSilently()
+        {
+            (IReadOnlyList<Diagnostic> diagnostics, string generated) = GeneratorHarness.RunAgainstLibrary(
+                InheritedFormatPreamble + "namespace Lib { public class Base { public int Id { get; set; } public string Name { protected get; set; } } }",
+                InheritedFormatPreamble + @"
+public class Derived : Lib.Base { }
+
+[CborSerializable(typeof(Derived))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Empty(diagnostics);
+            Assert.DoesNotContain("o.Name", generated);
+        }
+
         /// <summary>
         /// A <c>ShouldSerialize</c> method the reflection path ignores — it takes a parameter, so it is
         /// not the convention — must not be picked up here either, or the two paths disagree about
