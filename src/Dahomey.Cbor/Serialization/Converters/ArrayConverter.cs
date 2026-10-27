@@ -56,17 +56,10 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 reader.ReadArray(this, ref context);
             }
-            catch (CborException exception)
+            catch (CborException exception) when (exception.PrependPathIndexAndDecline(context.index))
             {
-                if (context.index >= 0)
-                {
-                    exception.PrependPathIndex(context.index);
-                }
-                else
-                {
-                    exception.MarkPathKnown();
-                }
-
+                // Not entered: the filter records the position and declines. A negative index is
+                // the array header itself and is marked as seen without naming a position.
                 throw;
             }
 

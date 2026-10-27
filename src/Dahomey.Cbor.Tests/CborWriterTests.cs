@@ -239,6 +239,18 @@ namespace Dahomey.Cbor.Tests
             Helper.TestWrite(nameof(CborWriter.WriteString), value, hexBuffer, expectedExceptionType);
         }
 
+        [Theory]
+        [InlineData("63666F6F", "foo")]
+        [InlineData("60", "")]
+        public void WriteStringSpan(string hexBuffer, string value)
+        {
+            var bufferWriter = new ArrayBufferWriter<byte>();
+            var cborWriter = new CborWriter(bufferWriter);
+            cborWriter.WriteString(Encoding.UTF8.GetBytes(value).AsSpan());
+
+            Assert.Equal(hexBuffer, Convert.ToHexString(bufferWriter.WrittenSpan));
+        }
+
         [Fact]
         public void WriteStringSize()
         {

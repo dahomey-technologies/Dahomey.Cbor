@@ -332,6 +332,8 @@ namespace Dahomey.Cbor.Generator
         public string? DateTimeFormat { get; private set; }
         public string? TypedArrayMode { get; private set; }
         public string? DecimalFormat { get; private set; }
+        public string? TimeSpanFormat { get; private set; }
+        public string? UntaggedGuidFormat { get; private set; }
 
         /// <summary>
         /// Whether this context writes RFC 8746 typed arrays, which is the only half of
@@ -348,6 +350,13 @@ namespace Dahomey.Cbor.Generator
         /// reading tag 4 is unconditional and says nothing about the documents this context produces.
         /// </summary>
         public bool WritesDecimalFractions => DecimalFormat is "DecimalFraction";
+
+        /// <summary>
+        /// Whether a <c>System.TimeSpan</c> resolves to <c>TimeSpanConverter</c> rather than to the
+        /// object mapping. Unlike the two above this governs collection as well as the schema: the
+        /// setting decides which mechanism handles the type, not merely which bytes it emits.
+        /// </summary>
+        public bool WritesDurations => TimeSpanFormat is "Duration";
 
         public static GenerationOptions Read(INamedTypeSymbol contextSymbol, List<DiagnosticInfo> diagnostics)
         {
@@ -441,6 +450,22 @@ namespace Dahomey.Cbor.Generator
                         options.DecimalFormat = named.Value.Value switch
                         {
                             1 => "DecimalFraction",
+                            _ => null,
+                        };
+                        break;
+
+                    case "TimeSpanFormat":
+                        options.TimeSpanFormat = named.Value.Value switch
+                        {
+                            1 => "Duration",
+                            _ => null,
+                        };
+                        break;
+
+                    case "UntaggedGuidFormat":
+                        options.UntaggedGuidFormat = named.Value.Value switch
+                        {
+                            1 => "ClrByteOrder",
                             _ => null,
                         };
                         break;

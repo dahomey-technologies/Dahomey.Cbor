@@ -3,6 +3,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Buffers.Text;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -517,11 +518,11 @@ namespace Dahomey.Cbor.Serialization
                     return (Half)ReadInteger();
 
                 case CborMajorType.NegativeInteger:
-                    return (Half)(-1L - (long)ReadInteger());
+                    return NegativeIntegerToHalf(ReadInteger());
 
                 case CborMajorType.TextString:
                     ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
-                    if (!Utf8Parser.TryParse(buffer, out double value, out int bytesConsumed))
+                    if (!Utf8Parser.TryParse(buffer, out double value, out int bytesConsumed) || bytesConsumed != buffer.Length)
                     {
                         ThrowCbor($"Cannot parse half from {Encoding.ASCII.GetString(buffer)}");
                     }
@@ -564,11 +565,11 @@ namespace Dahomey.Cbor.Serialization
                     return ReadInteger();
 
                 case CborMajorType.NegativeInteger:
-                    return -1L - (long)ReadInteger();
+                    return NegativeIntegerToSingle(ReadInteger());
 
                 case CborMajorType.TextString:
                     ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
-                    if (!Utf8Parser.TryParse(buffer, out float value, out int bytesConsumed))
+                    if (!Utf8Parser.TryParse(buffer, out float value, out int bytesConsumed) || bytesConsumed != buffer.Length)
                     {
                         ThrowCbor($"Cannot parse single from {Encoding.ASCII.GetString(buffer)}");
                     }
@@ -611,11 +612,11 @@ namespace Dahomey.Cbor.Serialization
                     return ReadInteger();
 
                 case CborMajorType.NegativeInteger:
-                    return -1L - (long)ReadInteger();
+                    return NegativeIntegerToDouble(ReadInteger());
 
                 case CborMajorType.TextString:
                     ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
-                    if (!Utf8Parser.TryParse(buffer, out double value, out int bytesConsumed))
+                    if (!Utf8Parser.TryParse(buffer, out double value, out int bytesConsumed) || bytesConsumed != buffer.Length)
                     {
                         ThrowCbor($"Cannot parse double from {Encoding.ASCII.GetString(buffer)}");
                     }
@@ -692,11 +693,11 @@ namespace Dahomey.Cbor.Serialization
                     return ReadInteger();
 
                 case CborMajorType.NegativeInteger:
-                    return -1L - (long)ReadInteger();
+                    return NegativeIntegerToDecimal(ReadInteger());
 
                 case CborMajorType.TextString:
                     ReadOnlySpan<byte> buffer = ReadSizeAndBytes(true);
-                    if (!Utf8Parser.TryParse(buffer, out decimal value, out int bytesConsumed))
+                    if (!Utf8Parser.TryParse(buffer, out decimal value, out int bytesConsumed) || bytesConsumed != buffer.Length)
                     {
                         ThrowCbor($"Cannot parse decimal from {Encoding.ASCII.GetString(buffer)}");
                     }
@@ -707,13 +708,13 @@ namespace Dahomey.Cbor.Serialization
                         switch (header.Primitive)
                         {
                             case CborPrimitive.HalfFloat:
-                                return (decimal)(float)InternalReadHalf();
+                                return ToDecimal((float)InternalReadHalf());
 
                             case CborPrimitive.SingleFloat:
-                                return Convert.ToDecimal(InternalReadSingle());
+                                return ToDecimal(InternalReadSingle());
 
                             case CborPrimitive.DoubleFloat:
-                                return Convert.ToDecimal(InternalReadDouble());
+                                return ToDecimal(InternalReadDouble());
 
                             case CborPrimitive.DecimalFloat:
                                 return InternalReadDecimal();
@@ -1183,6 +1184,8 @@ namespace Dahomey.Cbor.Serialization
 
             int size = ReadSize();
 
+            ExpectItems(size);
+
             arrayReader.ReadBeginArray(size, ref context);
 
             while (size > 0 || size < 0 && !IsBreak())
@@ -1303,6 +1306,84 @@ namespace Dahomey.Cbor.Serialization
             return value;
         }
 
+        // The value of a negative integer item is -1 - argument, and the argument reaches 2^64 - 1, so
+        // the value reaches -2^64: `-1L - (long)argument` wraps for every argument above long.MaxValue
+        // and the sign flips. Up to long.MaxValue that arithmetic is exact and is kept as it was. Past
+        // it, the magnitude argument + 1 still fits a ulong, except for ulong.MaxValue, whose value is
+        // exactly -2^64.
+        //
+        // The binary types convert that magnitude once, the way the positive arm converts a ulong, so a
+        // negative integer reads as the exact mirror image of the positive one. Subtracting 1 from the
+        // converted argument instead would round twice and miss a tie by one unit in the last place.
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Half NegativeIntegerToHalf(ulong argument)
+        {
+            // Nothing from 65520 up rounds to a finite Half, as in the positive arm.
+            return argument <= long.MaxValue ? (Half)(-1L - (long)argument) : Half.NegativeInfinity;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float NegativeIntegerToSingle(ulong argument)
+        {
+            if (argument <= long.MaxValue)
+            {
+                return -1L - (long)argument;
+            }
+
+            return argument == ulong.MaxValue ? -18446744073709551616f : -(float)(argument + 1);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static double NegativeIntegerToDouble(ulong argument)
+        {
+            if (argument <= long.MaxValue)
+            {
+                return -1L - (long)argument;
+            }
+
+            return argument == ulong.MaxValue ? -18446744073709551616.0 : -(double)(argument + 1);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static decimal NegativeIntegerToDecimal(ulong argument)
+        {
+            // A decimal holds -2^64 exactly.
+            return argument <= long.MaxValue ? -1L - (long)argument : -1m - argument;
+        }
+
+        // A decimal holds finite values below 2^96 in magnitude. The BCL conversions throw an
+        // OverflowException for NaN, the infinities and anything larger, which is not what a caller of
+        // this reader catches; the range is checked first instead. The comparison is false for NaN.
+        private const double DecimalLimit = 79228162514264337593543950336.0; // 2^96
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private decimal ToDecimal(float value)
+        {
+            if (!(Math.Abs(value) < DecimalLimit))
+            {
+                ThrowNotADecimal(value.ToString("R", CultureInfo.InvariantCulture));
+            }
+
+            return Convert.ToDecimal(value);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private decimal ToDecimal(double value)
+        {
+            if (!(Math.Abs(value) < DecimalLimit))
+            {
+                ThrowNotADecimal(value.ToString("R", CultureInfo.InvariantCulture));
+            }
+
+            return Convert.ToDecimal(value);
+        }
+
+        private void ThrowNotADecimal(string value)
+        {
+            ThrowCbor($"Cannot convert {value} to a decimal, which holds only finite values below 2^96 in magnitude");
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Half InternalReadHalf()
         {
@@ -1359,6 +1440,14 @@ namespace Dahomey.Cbor.Serialization
                 int i0 = BinaryPrimitives.ReadInt32BigEndian(bytes.Slice(4, 4));
                 int i2 = BinaryPrimitives.ReadInt32BigEndian(bytes.Slice(8, 4));
                 int i3 = BinaryPrimitives.ReadInt32BigEndian(bytes.Slice(12, 4));
+
+                // The flags word of a decimal is a sign bit and a scale of 0 to 28, nothing else; the
+                // constructor throws an ArgumentException for anything more, which is not what a
+                // caller of this reader catches.
+                if ((i3 & 0x7F00FFFF) != 0 || ((i3 >> 16) & 0xFF) > 28)
+                {
+                    ThrowCbor($"Invalid decimal: its flags word 0x{i3:X8} is not a sign and a scale of 0 to 28");
+                }
 
                 return new decimal(new int[] { i0, i1, i2, i3 });
             }
@@ -1723,27 +1812,76 @@ namespace Dahomey.Cbor.Serialization
                         case CborPrimitive.True:
                         case CborPrimitive.Null:
                         case CborPrimitive.Undefined:
-                        case CborPrimitive.SimpleValue:
-                        case CborPrimitive.Break:
                             _state = CborReaderState.Data;
                             break;
 
                         case CborPrimitive.HalfFloat:
+                            ExpectLength(2);
                             Advance(2);
                             break;
 
                         case CborPrimitive.SingleFloat:
+                            ExpectLength(4);
                             Advance(4);
                             break;
 
                         case CborPrimitive.DoubleFloat:
+                            ExpectLength(8);
                             Advance(8);
                             break;
 
                         case CborPrimitive.DecimalFloat:
+                            ExpectLength(16);
                             Advance(16);
                             break;
+
+                        default:
+                            SkipUncommonPrimitive(header);
+                            break;
                     }
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// The rest of major type 7, kept out of <see cref="SkipDataItem"/> so the values that make up
+        /// nearly every skipped member do not pay for them.
+        /// </summary>
+        /// <remarks>
+        /// Simple values 0-19 and 32-255 are well-formed and unassigned (RFC 8949 §3.3), so they are
+        /// skipped. What is not well-formed is a <see cref="CborException"/>: a two-byte simple value
+        /// below 32, which <see cref="CborDataItemScanner"/> refuses as well, the reserved additional
+        /// information 29 and 30, and a break code, which ends an indefinite-length item and is taken by
+        /// the loop that is reading one before it asks for another item - arriving here, it stands where
+        /// an item was expected.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void SkipUncommonPrimitive(CborReaderHeader header)
+        {
+            if (header.AdditionalValue < (byte)CborPrimitive.False)
+            {
+                _state = CborReaderState.Data;
+                return;
+            }
+
+            switch (header.Primitive)
+            {
+                case CborPrimitive.SimpleValue:
+                    // The number of a simple value from 32 up is the byte behind the initial byte.
+                    byte simpleValue = ReadBytes(1)[0];
+
+                    if (simpleValue < 32)
+                    {
+                        ThrowCbor($"Invalid simple value {simpleValue}: a number below 32 is not written behind F8");
+                    }
+                    break;
+
+                case CborPrimitive.Break:
+                    ThrowCbor("Unexpected break code: it ends an indefinite-length item, it is not an item itself");
+                    break;
+
+                default:
+                    ThrowCbor($"Invalid primitive {header.AdditionalValue}: this additional information is reserved");
                     break;
             }
         }
@@ -1858,6 +1996,43 @@ namespace Dahomey.Cbor.Serialization
             {
                 ThrowCbor($"Unexpected end of buffer");
             }
+        }
+
+        /// <summary>
+        /// Refuses a definite array count that the bytes remaining cannot satisfy.
+        /// </summary>
+        /// <remarks>
+        /// The count is the sender's claim, and <see cref="ICborArrayReader{TC}.ReadBeginArray"/> is
+        /// handed it so that the reader can size what it builds: nine bytes can announce 2^63 items, and a
+        /// callback that allocated from that would be spending the sender's number rather than the
+        /// document's. Every data item is at least one byte, so a count beyond the bytes that remain
+        /// cannot be met by any document, and a callback is only ever given one that could be. The
+        /// indefinite-length marker is negative and always passes.
+        /// <para>
+        /// The check is against the whole of the buffer, not the enclosing array: the items of an array
+        /// in the middle of a document are followed by their siblings, and a count is no less honest for
+        /// being satisfied by them. A reader on a growing buffer - the speculative read behind
+        /// <c>ReadNextItemAsync</c> - sees only what has arrived, and a count the arrived bytes cannot
+        /// hold is the same "not enough yet" that running out of bytes mid-array has always been.
+        /// </para>
+        /// <para>
+        /// A map is not checked: nothing here sizes a map from its count, so there is no allocation to
+        /// guard, and a pair is two items or more, so the bound would be a different one.
+        /// </para>
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ExpectItems(int count)
+        {
+            int remaining = _length - _currentPos;
+            if (count > remaining)
+            {
+                ThrowItemsBeyondBuffer(count, remaining);
+            }
+        }
+
+        private void ThrowItemsBeyondBuffer(int count, int remaining)
+        {
+            ThrowCbor($"Unexpected end of buffer: the array declares {count} items but {remaining} bytes remain");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

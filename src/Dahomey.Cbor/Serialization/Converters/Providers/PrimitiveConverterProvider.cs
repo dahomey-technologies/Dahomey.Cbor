@@ -66,6 +66,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 return new BigIntegerConverter();
             }
 
+            // Only when asked. Returning null under the default leaves a TimeSpan to the object
+            // mapping, which is what it has always been written by, so no document changes shape.
+            if (type == typeof(TimeSpan) && options.TimeSpanFormat == TimeSpanFormat.Duration)
+            {
+                return new TimeSpanConverter();
+            }
+
+            if (type == typeof(Guid))
+            {
+                return new GuidConverter(options);
+            }
+
 #if NET6_0_OR_GREATER
             if (type == typeof(DateOnly))
             {

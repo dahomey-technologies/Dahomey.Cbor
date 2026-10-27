@@ -125,6 +125,12 @@ namespace Dahomey.Cbor
         /// part of the way out of it.
         /// </para>
         /// <para>
+        /// A converter that can reach itself again should call this from an exception filter that
+        /// returns <c>false</c> instead - <c>catch (CborException exception) when (Add(exception))</c> -
+        /// since a <c>catch</c> that rethrows costs about 16 KB of stack for every level it passes
+        /// through, where a filter costs none.
+        /// </para>
+        /// <para>
         /// Only a converter that decodes a structure of its own needs this. One registered against a
         /// member is already named by the object holding it, and one that delegates to other converters
         /// inherits whatever they contribute.
@@ -223,6 +229,53 @@ namespace Dahomey.Cbor
         internal void MarkPathKnown()
         {
             _pathKnown = true;
+        }
+
+        /// <summary>
+        /// <see cref="PrependPathMember(string)"/> for an exception filter: it records the segment and
+        /// returns <c>false</c>, so <c>catch (CborException exception) when
+        /// (exception.PrependPathMemberAndDecline(name))</c> adds its segment and lets the exception go
+        /// on to the next handler without being caught.
+        /// </summary>
+        /// <remarks>
+        /// The converters use this where they would otherwise catch, add a segment and rethrow. A
+        /// <c>catch</c> block runs on top of the frames that threw, and a rethrow from it starts a new
+        /// dispatch on top of that again, so a failure at the bottom of n nested converters needs
+        /// n nested dispatches' worth of stack - about 16 KB each - and a document nested a few dozen
+        /// levels deep can exhaust a 1 MB stack before it reaches the <c>catch</c> that reports it. A
+        /// filter runs during the first pass, one after another, with nothing unwound and no dispatch
+        /// left waiting, so the path is built in constant stack. The result a caller sees is the same.
+        /// <para>
+        /// A filter that throws is silently treated as one that returned <c>false</c>, so a segment that
+        /// could not be recorded is lost where a failing <c>catch</c> would have replaced the exception.
+        /// Nothing here depends on a <c>finally</c> or a <c>using</c> below the filter having run
+        /// first: a filter sees the frames as they were when the exception was thrown.
+        /// </para>
+        /// </remarks>
+        internal bool PrependPathMemberAndDecline(string? name)
+        {
+            PrependPathMember(name);
+            return false;
+        }
+
+        /// <summary>
+        /// <see cref="PrependPathIndex(int)"/> for an exception filter. See
+        /// <see cref="PrependPathMemberAndDecline(string)"/>.
+        /// </summary>
+        internal bool PrependPathIndexAndDecline(int index)
+        {
+            PrependPathIndex(index);
+            return false;
+        }
+
+        /// <summary>
+        /// <see cref="MarkPathKnown"/> for an exception filter. See
+        /// <see cref="PrependPathMemberAndDecline(string)"/>.
+        /// </summary>
+        internal bool MarkPathKnownAndDecline()
+        {
+            MarkPathKnown();
+            return false;
         }
 
         private void PushSegment(string segment)

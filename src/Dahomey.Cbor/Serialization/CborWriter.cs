@@ -395,15 +395,14 @@ namespace Dahomey.Cbor.Serialization
             _bufferWriter.Advance(byteCount);
         }
 
+        /// <summary>Writes UTF-8 bytes as a text string.</summary>
+        /// <remarks>
+        /// An empty span is an empty text string (<c>60</c>), as <c>WriteString("")</c> writes: a span
+        /// cannot be null, so there is no null to write. Use <see cref="WriteNull"/> for that.
+        /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteString(ReadOnlySpan<byte> value)
         {
-            if (value.IsEmpty)
-            {
-                WriteNull();
-                return;
-            }
-
             WriteInteger(CborMajorType.TextString, (ulong)value.Length);
             _bufferWriter.Write(value);
         }

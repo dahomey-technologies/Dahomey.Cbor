@@ -3,7 +3,8 @@
 [← back to the README](../README.md)
 
 `DateTime`, `DateTimeOffset`, `DateOnly` and `TimeOnly` each have a converter. Which encoding they write is chosen by one
-option, `CborOptions.DateTimeFormat`, so a document keeps one shape throughout.
+option, `CborOptions.DateTimeFormat`, so a document keeps one shape throughout. `TimeSpan` has a converter
+on request, through its own option, `CborOptions.TimeSpanFormat`.
 
 | `DateTimeFormat` | `DateTime` | `DateOnly` |
 |---|---|---|
@@ -89,14 +90,69 @@ The same applies as for `DateOnly`: only the string-keyed map ever existed.
 nowhere to put an offset, so `Unix` and `UnixMilliseconds` write the right instant and read it back at
 offset zero.
 
+## `TimeSpan` (RFC 9581)
+
+By default a `TimeSpan` has no converter: the reflection path maps it as an object and writes its public
+properties as a map — valid CBOR, but large (259 bytes) and meaningful only to a decoder that knows the CLR
+type's shape. That form is unchanged. `CborOptions.TimeSpanFormat` opts in to the duration
+[RFC 9581](https://www.rfc-editor.org/rfc/rfc9581.html#section-4) registers for exactly this, tag 1002:
+
+```csharp
+var options = new CborOptions { TimeSpanFormat = TimeSpanFormat.Duration };
+```
+
+```csharp
+// 01:02:03     -> D9 03EA A1 01 19 0E8B                 {1: 3723}
+// 01:02:03.500 -> D9 03EA A2 01 190E8B 28 1A1DCD6500    {1: 3723, -9: 500000000}
+// -1.5 s       -> D9 03EA A2 01 21 28 1A1DCD6500        {1: -2, -9: 500000000}
+```
+
+Key 1 is the whole seconds and key -9 a fraction in nanoseconds, written only when the value has one.
+RFC 9581 §3.3 makes the fraction an **unsigned** count *added* to the base, so a negative duration writes
+the floored base: -1.5 s is -2 + 0.5. `TimeSpan.MinValue` and `MaxValue` round-trip.
+
+This setting governs reading as well as writing: under the default there is no converter, so tag 1002 is
+not read as a `TimeSpan`, and under `Duration` the property-map form is not.
+
+A duration is read by these rules:
+
+- Key 1 is an integer or a float. A float is rounded to the nearest tick, and is refused beside a
+  fraction key.
+- The fraction keys -3, -6, -9, -12, -15 and -18 are unsigned integers, at most one per duration. A
+  `TimeSpan` resolves to 100ns, so a fraction finer than that is accepted only when it is a whole number of
+  ticks, and is otherwise refused rather than truncated. A fraction of any size is added to the base
+  with checked arithmetic.
+- Keys -1, -13 and 13 are the timescale, at most one of them: 0 (UTC) and 1 (TAI) are accepted, since a
+  length in SI seconds is the same on both. Any other value is skipped under -1 or -13 and refused under the
+  critical key 13.
+- An unsigned key that is not understood, key 0 included, is refused, as are a base under key 4 or 5 and a
+  duration with no key 1. A negative or text key that is not understood is skipped with its value.
+- A plain number is read as seconds.
+- A value outside the range of a `TimeSpan` is a `CborException`.
+
+The tag itself is not checked on read, as for every other converter here.
+
+In a source-generated context the setting has to be stated on the attribute, because it decides whether
+`TimeSpan` is collected as an object or resolved to a converter:
+
+```csharp
+[CborSerializable(typeof(Job))]
+[CborSourceGenerationOptions(TimeSpanFormat = TimeSpanFormat.Duration)]
+public partial class JobContext : CborSerializerContext { }
+```
+
+A schema-generating context describes a `TimeSpan` under `Duration` as
+`#6.1002({1 => int, ? -9 => uint})`; the fraction is `uint` because the reader accepts a count larger than
+one second and folds it into the base.
+
 ## What has no converter
 
-`System.TimeSpan` has none. It is a struct with public properties, so the reflection path maps it as an
-object and writes those properties as a map: valid CBOR, but large — it takes 259 bytes. A
+`System.TimeSpan` has none under the default `TimeSpanFormat.Members`. It is a struct with public
+properties, so the reflection path maps it as an object and writes those properties as a map. A
 source-generated context does not refuse it; it collects `TimeSpan` as an object and generates that same
-map.
+map. Set `TimeSpanFormat.Duration` (above) for the compact form.
 
-Write a [custom converter](../README.md#custom-converters) if you need one.
+Write a [custom converter](../README.md#custom-converters) for any other shape.
 
 ## Compatibility
 
@@ -104,3 +160,6 @@ Data written by this version cannot be read by older versions. A `DateOnly` is n
 number and a `TimeOnly` an untagged string, where an older version expected (or, for a `DateOnly` on
 current runtimes, failed to write) a map of the type's public properties, and refuses anything else.
 This version reads that map, so upgrade readers before writers.
+
+A `TimeSpan` written under `TimeSpanFormat.Duration` is a tagged map that an older version, which maps a
+`TimeSpan` by its members, cannot read. The default is unchanged, so nothing changes until the option is set.

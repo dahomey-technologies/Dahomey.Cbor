@@ -502,6 +502,26 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedCollectionInterfaceTests.Sample();
             }
 
+            if (type == typeof(GeneratedFieldFirst))
+            {
+                return new GeneratedFieldFirst { F = 1, P = 2 };
+            }
+
+            if (type == typeof(GeneratedPropertiesDerivedAddsField))
+            {
+                return new GeneratedPropertiesDerivedAddsField { BP = 1, DF = 2 };
+            }
+
+            if (type == typeof(EmptyMemberName))
+            {
+                return new EmptyMemberName { A = 5, B = 6 };
+            }
+
+            if (type == typeof(GeneratedMixedDerived))
+            {
+                return new GeneratedMixedDerived { BF = 1, BP = 2, DF = 3, DP = 4 };
+            }
+
             if (type == typeof(GeneratedOverrideHolder))
             {
                 return new GeneratedOverrideHolder { Id = 7, Name = "seven" };
@@ -540,6 +560,11 @@ namespace Dahomey.Cbor.Tests
             if (type == typeof(MutualB))
             {
                 return new MutualB { Id = 2, Peer = new MutualA { Id = 1 } };
+            }
+
+            if (type == typeof(EnumWidthHolder))
+            {
+                return EnumConverterTests.WidthSample();
             }
 
             // The CDDL fixtures. They are declared to exercise schema emission, but a context is a
@@ -730,6 +755,22 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // A fractional value and a negative one, so both the nanosecond entry and the sign
+            // convention are compared against the reflection path rather than only whole seconds.
+            if (type == typeof(GeneratedDurationHolder))
+            {
+                return new GeneratedDurationHolder
+                {
+                    Elapsed = new TimeSpan(0, 1, 2, 3, 500),
+                    Timeout = TimeSpan.FromSeconds(-30),
+                };
+            }
+
+            if (type == typeof(Cddl.CddlDurationHolder))
+            {
+                return new Cddl.CddlDurationHolder { Elapsed = new TimeSpan(0, 1, 2, 3, 500) };
+            }
+
             // Carried by three contexts differing only in DateTimeFormat, so the date stays a day count
             // across both numeric settings while the time beside it is the same string under all
             // three. The fractional second keeps the time's fraction in view.
@@ -739,6 +780,17 @@ namespace Dahomey.Cbor.Tests
                 {
                     Date = new DateOnly(2026, 8, 17),
                     Time = new TimeOnly(1, 2, 3, 841),
+                };
+            }
+
+            // Guid.Empty alongside a populated one: the all-zero value is the only shape where the
+            // big-endian swap is invisible, so a sample made of it alone would pass either way.
+            if (type == typeof(GeneratedGuidHolder))
+            {
+                return new GeneratedGuidHolder
+                {
+                    Id = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"),
+                    Optional = Guid.Empty,
                 };
             }
 
@@ -911,6 +963,8 @@ namespace Dahomey.Cbor.Tests
                 EnumFormat = generated.EnumFormat,
                 DateTimeFormat = generated.DateTimeFormat,
                 DecimalFormat = generated.DecimalFormat,
+                TimeSpanFormat = generated.TimeSpanFormat,
+                UntaggedGuidFormat = generated.UntaggedGuidFormat,
             };
 
             string reflectionBytes = WriteAs(type, Sample(type), reflection);

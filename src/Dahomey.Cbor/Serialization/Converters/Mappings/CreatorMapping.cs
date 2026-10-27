@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
@@ -161,9 +160,13 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                                         if (createMemberNames)
                                         {
-                                            memberMapping = memberMappings
-                                                .Where(m => !(m is IDiscriminatorMapping))
-                                                .FirstOrDefault(m => string.Compare(m.MemberName, parameter.Name, ignoreCase: true) == 0);
+                                            // The C# member name first, as on the index path: a naming convention or a
+                                            // [CborProperty] rename must not hide the member the parameter initializes.
+                                            // The CBOR name stays as a fallback for parameters named after the key.
+                                            memberMapping = FindMemberByParameterName(memberMappings, parameter.Name)
+                                                ?? memberMappings
+                                                    .Where(m => !(m is IDiscriminatorMapping))
+                                                    .FirstOrDefault(m => string.Compare(m.MemberName, parameter.Name, ignoreCase: true) == 0);
 
                                             if (memberMapping == null || memberMapping.MemberName == null)
                                             {
@@ -171,17 +174,25 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                                             }
                                             else
                                             {
-                                                _memberNames.Add(new RawString(memberMapping.MemberName, Encoding.ASCII));
+                                                _memberNames.Add(new RawString(memberMapping.MemberName));
                                             }
                                         }
                                         else
                                         {
-                                            memberMapping = memberMappings
-                                                .FirstOrDefault(m => string.Compare(m.MemberName, _memberNames[i].ToString(), ignoreCase: true) == 0);
+                                            string memberName = _memberNames[i].ToString();
+                                            memberMapping = memberMappings.FirstOrDefault(m => string.Equals(m.MemberName, memberName, StringComparison.Ordinal))
+                                                ?? memberMappings.FirstOrDefault(m => string.Equals(m.MemberName, memberName, StringComparison.OrdinalIgnoreCase));
 
                                             if (memberMapping == null)
                                             {
                                                 throw new CborException($"Cannot find a field or property named {_memberNames[i]} on type {_objectMapping.ObjectType.FullName}");
+                                            }
+
+                                            // The values are keyed by the name as it appears in the document: a listed
+                                            // name that only matches ignoring case would otherwise never be found.
+                                            if (memberMapping.MemberName != null && memberMapping.MemberName != memberName)
+                                            {
+                                                _memberNames[i] = new RawString(memberMapping.MemberName);
                                             }
                                         }
 
@@ -225,9 +236,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
 
                                         if (createMemberIndexes)
                                         {
-                                            memberMapping = memberMappings
-                                                .Where(m => !(m is IDiscriminatorMapping))
-                                                .FirstOrDefault(m => string.Compare(m.MemberInfo!.Name, parameter.Name, ignoreCase: true) == 0);
+                                            memberMapping = FindMemberByParameterName(memberMappings, parameter.Name);
 
                                             if (memberMapping == null || !memberMapping.MemberIndex.HasValue)
                                             {
@@ -271,6 +280,24 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Finds the member a creator parameter initializes by its C# name, the exact case first so that
+        /// members differing only by case resolve deterministically.
+        /// </summary>
+        private static IMemberMapping? FindMemberByParameterName(IReadOnlyCollection<IMemberMapping> memberMappings, string? parameterName)
+        {
+            if (parameterName == null)
+            {
+                return null;
+            }
+
+            IEnumerable<IMemberMapping> candidates = memberMappings
+                .Where(m => !(m is IDiscriminatorMapping) && m.MemberInfo != null);
+
+            return candidates.FirstOrDefault(m => string.Equals(m.MemberInfo!.Name, parameterName, StringComparison.Ordinal))
+                ?? candidates.FirstOrDefault(m => string.Equals(m.MemberInfo!.Name, parameterName, StringComparison.OrdinalIgnoreCase));
         }
     }
 }
