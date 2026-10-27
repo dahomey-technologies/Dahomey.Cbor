@@ -101,7 +101,7 @@ namespace Dahomey.Cbor.Generator
         public string ObjectFormat { get; set; } = "StringKeyMap";
 
         /// <summary>
-        /// Whether the type itself carries <c>[CborObjectFormat]</c>. Only then is the format stated in
+        /// Whether the type carries <c>[CborObjectFormat]</c>, declared or inherited from a base class. Only then is the format stated in
         /// the generated registration: an undecorated type takes the options' format, as it does on the
         /// reflection path.
         /// </summary>

@@ -68,6 +68,95 @@ namespace Dahomey.Cbor.Tests
         }
     }
 
+    // [CborObjectFormat] is inherited on the reflection path (GetCustomAttribute<T>() walks the base
+    // classes), so a subtype of a decorated base takes its format. The generated path has to agree.
+
+    [CborObjectFormat(CborObjectFormat.Array)]
+    public class InheritedArrayBase
+    {
+        [CborProperty(0)]
+        public int Id { get; set; }
+    }
+
+    public class InheritedArrayDerived : InheritedArrayBase
+    {
+        [CborProperty(1)]
+        public string Name { get; set; }
+    }
+
+    [CborObjectFormat(CborObjectFormat.Array)]
+    public class InheritedGenericBase<T>
+    {
+        [CborProperty(0)]
+        public T Value { get; set; }
+    }
+
+    public class InheritedGenericDerived : InheritedGenericBase<int>
+    {
+        [CborProperty(1)]
+        public string Name { get; set; }
+    }
+
+    [CborObjectFormat(CborObjectFormat.Array)]
+    [CborDiscriminator("base")]
+    public class InheritedPolymorphicBase
+    {
+        [CborProperty(1)]
+        public int Id { get; set; }
+    }
+
+    [CborDiscriminator("derived")]
+    public class InheritedPolymorphicDerived : InheritedPolymorphicBase
+    {
+        [CborProperty(2)]
+        public string Name { get; set; }
+    }
+
+    [CborObjectFormat(CborObjectFormat.StringKeyMap)]
+    public class InheritedMapBase
+    {
+        public int Id { get; set; }
+    }
+
+    public class InheritedMapDerived : InheritedMapBase
+    {
+        public string Name { get; set; }
+    }
+
+    /// <summary>Nearest declaration wins: a subtype re-declaring the format overrides its base.</summary>
+    [CborObjectFormat(CborObjectFormat.IntKeyMap)]
+    public class InheritedOverrideDerived : InheritedArrayBase
+    {
+        [CborProperty(1)]
+        public string Name { get; set; }
+    }
+
+    [CborSerializable(typeof(InheritedArrayDerived))]
+    public partial class InheritedArrayContext : CborSerializerContext
+    {
+    }
+
+    [CborSerializable(typeof(InheritedGenericDerived))]
+    public partial class InheritedGenericContext : CborSerializerContext
+    {
+    }
+
+    [CborSerializable(typeof(InheritedPolymorphicDerived))]
+    public partial class InheritedPolymorphicContext : CborSerializerContext
+    {
+    }
+
+    [CborSerializable(typeof(InheritedMapDerived))]
+    [CborSourceGenerationOptions(ObjectFormat = CborObjectFormat.Array)]
+    public partial class InheritedMapUnderArrayContext : CborSerializerContext
+    {
+    }
+
+    [CborSerializable(typeof(InheritedOverrideDerived))]
+    public partial class InheritedOverrideContext : CborSerializerContext
+    {
+    }
+
     public class GeneratedObjectFormatTests
     {
         /// <summary>
@@ -149,6 +238,78 @@ namespace Dahomey.Cbor.Tests
 
             CborOptions reflection = new CborOptions { ObjectFormat = CborObjectFormat.Array };
             Assert.Equal(Helper.Write(value, reflection), generated, ignoreCase: true);
+        }
+
+        [Fact]
+        public void ASubtypeInheritsItsBaseClassesArrayFormat()
+        {
+            InheritedArrayContext context = new InheritedArrayContext();
+            InheritedArrayDerived value = new InheritedArrayDerived { Id = 7, Name = "n" };
+
+            string generated = Helper.Write(value, context.Options);
+
+            // 82 07 61 6E -- an array of two, though only the base declares the format.
+            Assert.Equal("8207616E", generated, ignoreCase: true);
+            Assert.Equal(Helper.Write(value, new CborOptions()), generated, ignoreCase: true);
+
+            InheritedArrayDerived read = Cbor.Deserialize<InheritedArrayDerived>(generated.HexToBytes(), context.Options);
+            Assert.Equal(7, read.Id);
+            Assert.Equal("n", read.Name);
+        }
+
+        [Fact]
+        public void ASubtypeOfAGenericBaseInheritsItsFormat()
+        {
+            InheritedGenericContext context = new InheritedGenericContext();
+            InheritedGenericDerived value = new InheritedGenericDerived { Value = 7, Name = "n" };
+
+            string generated = Helper.Write(value, context.Options);
+
+            Assert.StartsWith("82", generated, System.StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(Helper.Write(value, new CborOptions()), generated, ignoreCase: true);
+        }
+
+        [Fact]
+        public void APolymorphicArrayBaseGivesItsSubtypeTheArrayFormat()
+        {
+            InheritedPolymorphicContext context = new InheritedPolymorphicContext();
+            InheritedPolymorphicBase value = new InheritedPolymorphicDerived { Id = 7, Name = "n" };
+
+            string generated = Helper.Write(value, context.Options);
+
+            // 83: an array of three -- the tagged discriminator, then the two members.
+            Assert.StartsWith("83", generated, System.StringComparison.OrdinalIgnoreCase);
+
+            CborOptions reflection = new CborOptions();
+            reflection.Registry.DiscriminatorConventionRegistry.RegisterType<InheritedPolymorphicDerived>();
+            Assert.Equal(Helper.Write(value, reflection), generated, ignoreCase: true);
+        }
+
+        [Fact]
+        public void ADeclaredMapFormatOnABaseSurvivesAnArrayDefaultInTheSubtype()
+        {
+            InheritedMapUnderArrayContext context = new InheritedMapUnderArrayContext();
+            InheritedMapDerived value = new InheritedMapDerived { Id = 7, Name = "n" };
+
+            string generated = Helper.Write(value, context.Options);
+
+            Assert.StartsWith("A2", generated, System.StringComparison.OrdinalIgnoreCase);
+
+            CborOptions reflection = new CborOptions { ObjectFormat = CborObjectFormat.Array };
+            Assert.Equal(Helper.Write(value, reflection), generated, ignoreCase: true);
+        }
+
+        [Fact]
+        public void ASubtypeRedeclaringTheFormatOverridesItsBase()
+        {
+            InheritedOverrideContext context = new InheritedOverrideContext();
+            InheritedOverrideDerived value = new InheritedOverrideDerived { Id = 7, Name = "n" };
+
+            string generated = Helper.Write(value, context.Options);
+
+            // A2 00 07 01 61 6E -- an IntKeyMap, not the base's Array.
+            Assert.Equal("A2000701616E", generated, ignoreCase: true);
+            Assert.Equal(Helper.Write(value, new CborOptions()), generated, ignoreCase: true);
         }
     }
 }

@@ -223,6 +223,31 @@ namespace Dahomey.Cbor.Tests
                 return new GeneratedKeptMapFormat { Id = 7, Name = "n" };
             }
 
+            if (type == typeof(InheritedArrayDerived))
+            {
+                return new InheritedArrayDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedGenericDerived))
+            {
+                return new InheritedGenericDerived { Value = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedPolymorphicDerived))
+            {
+                return new InheritedPolymorphicDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedMapDerived))
+            {
+                return new InheritedMapDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedOverrideDerived))
+            {
+                return new InheritedOverrideDerived { Id = 7, Name = "n" };
+            }
+
             if (type == typeof(GeneratedTakesArrayFormat))
             {
                 return new GeneratedTakesArrayFormat { Id = 7, Name = "n" };

@@ -404,7 +404,7 @@ namespace Dahomey.Cbor.Generator
             builder.AppendLine($"{indent}        options.Registry.ObjectMappingRegistry.Register<{fullName}>(objectMapping =>");
             builder.AppendLine($"{indent}        {{");
 
-            // Stated whenever the type declares [CborObjectFormat], StringKeyMap included, and only then.
+            // Stated whenever the type declares or inherits [CborObjectFormat], StringKeyMap included, and only then.
             // The mapping's own default is the *options* format, so a declared StringKeyMap that is
             // skipped is lost under a context whose options say Array. An undecorated type must not
             // state it: pinning it would defeat an ObjectFormat supplied through the CborOptions

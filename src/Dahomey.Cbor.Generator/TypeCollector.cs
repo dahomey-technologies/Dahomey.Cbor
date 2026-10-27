@@ -512,6 +512,31 @@ namespace Dahomey.Cbor.Generator
             model.ObjectFormat = _options.ObjectFormat;
             model.DiscriminatorPolicy = _options.DiscriminatorPolicy;
 
+            // [CborObjectFormat] is read the way reflection reads it: GetCustomAttribute<T>() inherits,
+            // so a subtype of a decorated base takes the base's format and the nearest declaration
+            // wins. ISymbol.GetAttributes() returns only what the symbol itself declares, so the
+            // chain is walked by hand.
+            for (ITypeSymbol? current = type; current is not null; current = current.BaseType)
+            {
+                AttributeData? declared = current.GetAttributes().FirstOrDefault(attribute =>
+                    attribute.AttributeClass?.Name == "CborObjectFormatAttribute"
+                    && attribute.ConstructorArguments.Length == 1);
+
+                if (declared is null)
+                {
+                    continue;
+                }
+
+                model.ObjectFormatDeclared = true;
+                model.ObjectFormat = declared.ConstructorArguments[0].Value switch
+                {
+                    1 => "IntKeyMap",
+                    2 => "Array",
+                    _ => "StringKeyMap",
+                };
+                break;
+            }
+
             AttributeData? stringDiscriminator = null;
             AttributeData? intDiscriminator = null;
 
@@ -519,19 +544,6 @@ namespace Dahomey.Cbor.Generator
             {
                 switch (attribute.AttributeClass?.Name)
                 {
-                    case "CborObjectFormatAttribute":
-                        if (attribute.ConstructorArguments.Length == 1)
-                        {
-                            model.ObjectFormatDeclared = true;
-                            model.ObjectFormat = attribute.ConstructorArguments[0].Value switch
-                            {
-                                1 => "IntKeyMap",
-                                2 => "Array",
-                                _ => "StringKeyMap",
-                            };
-                        }
-                        break;
-
                     case "CborDiscriminatorAttribute":
                         stringDiscriminator = attribute;
                         break;

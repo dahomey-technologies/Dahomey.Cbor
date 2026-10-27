@@ -44,6 +44,37 @@ using Dahomey.Cbor.Serialization;
                     + string.Join(", ", diagnostics.Select(d => d.Id + ": " + d.GetMessage())));
         }
 
+        /// <summary>
+        /// [CborObjectFormat] is inherited on the reflection path, so a subtype of an Array base is an
+        /// Array type and its members need indexes there too. CBOR1005 is what the reflection path's
+        /// "expecting all fields/properties to get a member index" becomes at build time.
+        /// </summary>
+        [Fact]
+        public void ASubtypeOfAnArrayBaseNeedsMemberIndexes()
+        {
+            AssertReports("CBOR1005", @"
+[CborObjectFormat(CborObjectFormat.Array)]
+public class ArrBase { [CborProperty(0)] public int Id { get; set; } }
+public class ArrDerived : ArrBase { public string Name { get; set; } }
+
+[CborSerializable(typeof(ArrDerived))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        [Fact]
+        public void ASubtypeOfAnArrayBaseWithIndexesReportsNothing()
+        {
+            AssertClean(@"
+[CborObjectFormat(CborObjectFormat.Array)]
+public class ArrBase { [CborProperty(0)] public int Id { get; set; } }
+public class ArrDerived : ArrBase { [CborProperty(1)] public string Name { get; set; } }
+
+[CborSerializable(typeof(ArrDerived))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
         [Fact]
         public void APlainTypeReportsNothing()
         {
