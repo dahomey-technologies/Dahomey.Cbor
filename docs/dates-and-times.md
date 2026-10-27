@@ -2,7 +2,7 @@
 
 [← back to the README](../README.md)
 
-`DateTime`, `DateOnly` and `TimeOnly` each have a converter. Which encoding they write is chosen by one
+`DateTime`, `DateTimeOffset`, `DateOnly` and `TimeOnly` each have a converter. Which encoding they write is chosen by one
 option, `CborOptions.DateTimeFormat`, so a document keeps one shape throughout.
 
 | `DateTimeFormat` | `DateTime` | `DateOnly` |
@@ -52,7 +52,9 @@ Before it had a converter a `DateOnly` was written as a map of its public proper
 never written. `DayNumber` decides when present, and `Year`, `Month` and `Day` otherwise; a map with
 neither is refused. Keys match without regard to case, so a naming convention does not matter, and a
 repeated key follows `CborOptions.DuplicateKeyMode` like any other map. A key that is not text is
-refused. Only the string-keyed map is recognised, not the `IntKeyMap` or `Array` object formats.
+refused. Only the string-keyed map is recognised, which loses nothing: neither type's properties carry a member index, so
+`IntKeyMap` and `Array` refused to write either of them (`expecting all fields/properties to get a member
+index`) and no document was ever stored that way.
 
 ## `TimeOnly`
 
@@ -79,15 +81,26 @@ A `TimeOnly` used to be written as a map of its public properties (`Hour`, `Minu
 `Millisecond`, `Microsecond`, `Nanosecond`, `Ticks`). That map is still **read** and never written.
 `Ticks` carries the whole value, so seconds and fractions are recovered from it; without `Ticks`,
 `Hour` and `Minute` are required and `Second`, `Millisecond` and `Microsecond` are used when present.
-The same string-keyed-map restriction applies as for `DateOnly`.
+The same applies as for `DateOnly`: only the string-keyed map ever existed.
+
+## `DateTimeOffset`
+
+`DateTimeOffset` keeps the offset it carries under `ISO8601` (tag 0). Tag 1 names an instant and has
+nowhere to put an offset, so `Unix` and `UnixMilliseconds` write the right instant and read it back at
+offset zero.
 
 ## What has no converter
 
-`System.DateTimeOffset` and `System.TimeSpan` have none. Both are structs with public properties, so the
-reflection path maps them as objects and writes those properties as a map: valid CBOR, but large — a
-`TimeSpan` takes 259 bytes — and a `DateTimeOffset` does not read back at all, arriving as `default`.
+`System.TimeSpan` has none. It is a struct with public properties, so the reflection path maps it as an
+object and writes those properties as a map: valid CBOR, but large — it takes 259 bytes. A
+source-generated context does not refuse it; it collects `TimeSpan` as an object and generates that same
+map.
 
-A source-generated context refuses `DateTimeOffset` at build time with `CBOR1002`. It does not refuse
-`TimeSpan`, which is collected as an object and generates that same map.
+Write a [custom converter](../README.md#custom-converters) if you need one.
 
-Write a [custom converter](../README.md#custom-converters) for either if you need one.
+## Compatibility
+
+Data written by this version cannot be read by older versions. A `DateOnly` is now a tagged string or
+number and a `TimeOnly` an untagged string, where an older version expected (or, for a `DateOnly` on
+current runtimes, failed to write) a map of the type's public properties, and refuses anything else.
+This version reads that map, so upgrade readers before writers.

@@ -21,6 +21,22 @@ namespace Dahomey.Cbor.Generator
 
         Collection,
         Dictionary,
+
+        /// <summary>
+        /// A collection *interface* — <c>IList&lt;T&gt;</c>, <c>ICollection&lt;T&gt;</c>,
+        /// <c>IEnumerable&lt;T&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>,
+        /// <c>IReadOnlyCollection&lt;T&gt;</c>, <c>ISet&lt;T&gt;</c> — which cannot be instantiated, so
+        /// reading one builds a concrete backing collection and hands it back as the interface. That
+        /// backing type is <see cref="BackingType"/>, chosen the way
+        /// <c>CollectionConverterProvider</c> chooses it.
+        /// </summary>
+        InterfaceCollection,
+
+        /// <summary>
+        /// <c>IDictionary&lt;K,V&gt;</c> itself, whose backing type is always
+        /// <c>Dictionary&lt;K,V&gt;</c> and so needs no <see cref="BackingType"/>.
+        /// </summary>
+        InterfaceDictionary,
         Object,
 
         /// <summary>
@@ -101,6 +117,19 @@ namespace Dahomey.Cbor.Generator
         public string ObjectFormat { get; set; } = "StringKeyMap";
 
         /// <summary>
+        /// Whether the type carries <c>[CborObjectFormat]</c>, declared or inherited from a base
+        /// class. Only then is the format stated in the generated registration: an undecorated type
+        /// takes the options' format, as it does on the reflection path.
+        /// </summary>
+        public bool ObjectFormatDeclared { get; set; }
+
+        /// <summary>
+        /// The base class that declares the format, when it is inherited rather than declared on the
+        /// type itself; null otherwise. Used to say so in a diagnostic.
+        /// </summary>
+        public string? ObjectFormatInheritedFrom { get; set; }
+
+        /// <summary>
         /// A tuple's type arguments, when <see cref="Kind"/> is <see cref="TypeKind.Tuple"/>: one per
         /// element up to seven, and for a longer tuple the seven plus the <c>Rest</c> holding the
         /// overflow. These are the converter's type arguments, so the eighth is the <c>Rest</c>'s own
@@ -131,6 +160,19 @@ namespace Dahomey.Cbor.Generator
 
         /// <summary>Element type for arrays and collections; key type for dictionaries.</summary>
         public ITypeSymbol? ElementType { get; set; }
+
+        /// <summary>
+        /// The concrete collection a <see cref="TypeKind.InterfaceCollection"/> is built into while it
+        /// is read, before being handed back as the interface — <c>List&lt;T&gt;</c> for the ordered
+        /// interfaces, <c>HashSet&lt;T&gt;</c> for <c>ISet&lt;T&gt;</c>.
+        /// </summary>
+        /// <remarks>
+        /// Carried as a string rather than an <c>ITypeSymbol</c> because it is a type the source does
+        /// not mention: nothing in the compilation refers to <c>List&lt;T&gt;</c> just because a member
+        /// said <c>IList&lt;T&gt;</c>, so there is no symbol to reach for and the emitter only ever
+        /// needs its name.
+        /// </remarks>
+        public string? BackingType { get; set; }
 
         /// <summary>
         /// True when <see cref="Kind"/> is <see cref="TypeKind.Array"/> and the element type is one of

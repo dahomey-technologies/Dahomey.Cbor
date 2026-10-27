@@ -1,4 +1,8 @@
+using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization.Conventions;
+using Dahomey.Cbor.Serialization.Converters.Mappings;
 using System;
+using System.Linq;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -30,6 +34,48 @@ namespace Dahomey.Cbor.Serialization.Converters
         public static string DuplicateMemberName(Type objectType, string? memberName)
         {
             return $"class/struct {objectType.Name} maps several fields/properties to the member name '{memberName}'";
+        }
+
+        /// <summary>
+        /// Refuses a convention whose discriminator member name is already taken by a member of the type
+        /// it would be written beside.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="ObjectMapping{T}"/> validates the member names once, with the discriminator under
+        /// the name its convention had then. A convention that replaces it afterwards - through
+        /// <c>ClearConventions</c> and a new registration - can bring a name the validation never saw,
+        /// and nothing re-runs it. So whoever picks up a changed convention asks here, and gets the
+        /// answer a fresh <c>CborOptions</c> would have given when the mapping was built. Only a type
+        /// whose mapping carries a discriminator member is concerned, and only in the format that keys
+        /// its members by name.
+        /// </remarks>
+        public static void ThrowIfDiscriminatorNameCollides(IObjectMapping objectMapping, IDiscriminatorConvention? convention)
+        {
+            if (convention == null || objectMapping.ObjectFormat != CborObjectFormat.StringKeyMap)
+            {
+                return;
+            }
+
+            string discriminatorName = System.Text.Encoding.UTF8.GetString(convention.MemberName.ToArray());
+            bool hasDiscriminator = false;
+            bool collides = false;
+
+            foreach (IMemberMapping memberMapping in objectMapping.MemberMappings)
+            {
+                if (memberMapping is IDiscriminatorMapping)
+                {
+                    hasDiscriminator = true;
+                }
+                else if (string.Equals(memberMapping.MemberName, discriminatorName, StringComparison.Ordinal))
+                {
+                    collides = true;
+                }
+            }
+
+            if (hasDiscriminator && collides)
+            {
+                throw new CborException(DuplicateMemberName(objectMapping.ObjectType, discriminatorName));
+            }
         }
 
         public static string DuplicateMemberIndex(Type objectType)
