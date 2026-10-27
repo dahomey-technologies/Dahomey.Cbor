@@ -522,7 +522,10 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override T Read(ref CborReader reader)
         {
-            if (reader.ReadNull())
+            // A struct has no null: it is refused below like any other item of the wrong type, as the
+            // built-in value types refuse it, rather than read as default and confused with a value
+            // whose members are all default. Nullable<T> reads null before it gets here.
+            if (!typeof(T).IsValueType && reader.ReadNull())
             {
                 return default!;
             }

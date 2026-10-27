@@ -193,7 +193,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException($"No member getter for '{Describe()}'");
             }
 
-            if (IgnoreIfDefault && EqualityComparer<TM>.Default.Equals(_memberGetter((T)obj), _defaultValue))
+            if (IgnoreIfDefault && DefaultValueComparer<TM>.AreIdentical(_memberGetter((T)obj), _defaultValue))
             {
                 return false;
             }
@@ -437,7 +437,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException($"No member getter for '{MemberLabel}'");
             }
 
-            if (IgnoreIfDefault && EqualityComparer<TM>.Default.Equals(_memberGetter(ref instance), _defaultValue))
+            if (IgnoreIfDefault && DefaultValueComparer<TM>.AreIdentical(_memberGetter(ref instance), _defaultValue))
             {
                 return false;
             }
