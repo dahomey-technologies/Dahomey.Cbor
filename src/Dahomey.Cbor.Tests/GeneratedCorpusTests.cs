@@ -268,6 +268,16 @@ namespace Dahomey.Cbor.Tests
                 return new RequiredNamedPolicyHolder { Id = 1, Name = "n" };
             }
 
+            if (type == typeof(RequiredUndefinedConstructorPolicyHolder))
+            {
+                return new RequiredUndefinedConstructorPolicyHolder { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(RequiredNegativeNamedPolicyHolder))
+            {
+                return new RequiredNegativeNamedPolicyHolder { Id = 1, Name = "n" };
+            }
+
             if (type == typeof(ShouldSerializeStruct))
             {
                 return new ShouldSerializeStruct { Id = 1, Name = "n" };

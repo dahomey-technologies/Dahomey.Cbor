@@ -358,7 +358,19 @@ namespace Dahomey.Cbor.Generator
                 }
 
                 // Found once, so the name and the type it is cast to cannot come from different methods.
-                IMethodSymbol? shouldSerialize = FindShouldSerializeMethod(type, member);
+                IMethodSymbol? shouldSerialize = FindShouldSerializeMethod(
+                    type, member, out IMethodSymbol? refused, out string? refusal);
+
+                if (refused is not null && refusal is not null)
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.ShouldSerializeRefused,
+                        refused.Locations.FirstOrDefault() ?? member.Locations.FirstOrDefault(),
+                        type.Name,
+                        member.Name,
+                        refused.Name,
+                        refusal));
+                }
 
                 model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite)
                 {
@@ -1106,61 +1118,94 @@ namespace Dahomey.Cbor.Generator
                 }
             }
 
-            return null;
+            // A value the enum does not name, such as (RequirementPolicy)7: reflection keeps the raw
+            // number, so it is cast through rather than folded onto a member it was not written as.
+            long raw = System.Convert.ToInt64(constant.Value, CultureInfo.InvariantCulture);
+            string literal = raw < 0
+                ? "(" + raw.ToString(CultureInfo.InvariantCulture) + ")"
+                : raw.ToString(CultureInfo.InvariantCulture);
+
+            return "(" + enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")" + literal;
         }
 
         /// <summary>
         /// The <c>ShouldSerialize&lt;Member&gt;()</c> method the reflection path would use for this
-        /// member, or null where there is none -- including every member of a struct.
+        /// member, or null where there is none -- including every member of a struct. When the
+        /// reflection path would instead <b>throw</b> building the mapping, <paramref name="refused"/>
+        /// is the method it chokes on and <paramref name="refusal"/> says why.
         /// </summary>
         /// <remarks>
         /// <c>DefaultObjectMappingConvention.ProcessShouldSerializeMethod</c> calls
         /// <c>GetMethod(name, no parameters)</c> on the member's <b>declaring</b> type, so the search
         /// starts there and goes up its bases, never down: a predicate declared only on a derived type
         /// is invisible to a member a base declares, and one hiding the base's with <c>new</c> loses to
-        /// it. Only public methods are visible to that lookup, so a non-public one is skipped rather
-        /// than ending the search; the first public one found is the answer, and it is used only if it
-        /// returns <c>bool</c> and is an instance method -- the reflection path ignores the first and
-        /// throws for the second, and the generated one ignores both. The exception is a static method
-        /// inherited from a base: the lookup is not <c>FlattenHierarchy</c>, so it does not see one and
-        /// the search goes on past it. A struct's member converter never
-        /// consults a predicate at all, so none is emitted for one.
+        /// it. That lookup sees public methods only, so a non-public one is skipped rather than ending
+        /// the search, and it is not <c>FlattenHierarchy</c>, so a static method inherited from a base
+        /// is skipped too. At the level that has candidates, the outcome is:
+        /// <list type="bullet">
+        /// <item>two public candidates (<c>M()</c> and <c>M&lt;T&gt;()</c>): <c>AmbiguousMatchException</c>;</item>
+        /// <item>one that does not return <c>bool</c>: ignored, whatever else it is;</item>
+        /// <item>a <c>bool</c> one that is static (only possible on the declaring type) or generic: the
+        /// expression tree cannot be built, and an <c>ArgumentException</c> escapes;</item>
+        /// <item>otherwise it is the predicate.</item>
+        /// </list>
+        /// Each throw is reported rather than ignored: the generated path would otherwise write the
+        /// member for a type the reflection path refuses outright. A struct's member converter never
+        /// consults a predicate, but the convention still builds the lambda, so a struct is refused
+        /// for the same shapes and simply never emits one.
         /// </remarks>
-        private static IMethodSymbol? FindShouldSerializeMethod(ITypeSymbol type, ISymbol member)
+        private static IMethodSymbol? FindShouldSerializeMethod(
+            ITypeSymbol type, ISymbol member, out IMethodSymbol? refused, out string? refusal)
         {
-            if (type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct)
-            {
-                return null;
-            }
+            refused = null;
+            refusal = null;
 
             string name = "ShouldSerialize" + member.Name;
+            ITypeSymbol? declaring = member.ContainingType;
 
-            for (ITypeSymbol? current = member.ContainingType;
+            for (ITypeSymbol? current = declaring;
                  current is not null && current.SpecialType != SpecialType.System_Object;
                  current = current.BaseType)
             {
-                foreach (ISymbol candidate in current.GetMembers(name))
-                {
-                    if (candidate is IMethodSymbol
-                        {
-                            Parameters.Length: 0,
-                            DeclaredAccessibility: Accessibility.Public,
-                            TypeParameters.Length: 0,
-                        } method)
-                    {
-                        // GetMethod(name, no parameters) is not FlattenHierarchy, so it skips a static
-                        // method inherited from a base and keeps looking. One on the declaring type
-                        // itself is found, and the reflection path then throws building the mapping.
-                        if (method.IsStatic && !SymbolEqualityComparer.Default.Equals(current, member.ContainingType))
-                        {
-                            continue;
-                        }
+                bool onDeclaringType = SymbolEqualityComparer.Default.Equals(current, declaring);
 
-                        return !method.IsStatic && method.ReturnType.SpecialType == SpecialType.System_Boolean
-                            ? method
-                            : null;
-                    }
+                List<IMethodSymbol> candidates = current.GetMembers(name)
+                    .OfType<IMethodSymbol>()
+                    .Where(m => m.MethodKind == MethodKind.Ordinary
+                        && m.Parameters.Length == 0
+                        && m.DeclaredAccessibility == Accessibility.Public
+                        && (onDeclaringType || !m.IsStatic))
+                    .ToList();
+
+                if (candidates.Count == 0)
+                {
+                    continue;
                 }
+
+                if (candidates.Count > 1)
+                {
+                    refused = candidates[0];
+                    refusal = "it declares both a generic and a non-generic version, which makes the lookup ambiguous";
+                    return null;
+                }
+
+                IMethodSymbol method = candidates[0];
+
+                if (method.ReturnType.SpecialType != SpecialType.System_Boolean)
+                {
+                    return null;
+                }
+
+                if (method.IsStatic || method.IsGenericMethod)
+                {
+                    refused = method;
+                    refusal = method.IsStatic
+                        ? "it is static, and an instance call cannot be built over a static method"
+                        : "it is generic, and a call cannot be built over an open generic method";
+                    return null;
+                }
+
+                return type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct ? null : method;
             }
 
             return null;

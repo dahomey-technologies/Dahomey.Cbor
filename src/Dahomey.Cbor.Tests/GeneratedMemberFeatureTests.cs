@@ -39,6 +39,25 @@ namespace Dahomey.Cbor.Tests
         public string Name { get; set; }
     }
 
+    /// <summary>A policy the enum does not name: reflection keeps the raw number, which behaves as Never.</summary>
+    public class RequiredUndefinedConstructorPolicyHolder
+    {
+        public int Id { get; set; }
+
+        [CborRequired((RequirementPolicy)7)]
+        public string Name { get; set; }
+    }
+
+    public class RequiredNegativeNamedPolicyHolder
+    {
+        public int Id { get; set; }
+
+        [CborRequired(Policy = (RequirementPolicy)(-1))]
+        public string Name { get; set; }
+    }
+
+    [CborSerializable(typeof(RequiredUndefinedConstructorPolicyHolder))]
+    [CborSerializable(typeof(RequiredNegativeNamedPolicyHolder))]
     [CborSerializable(typeof(GeneratedRequiredHolder))]
     [CborSerializable(typeof(RequiredNamedPolicyHolder))]
     [CborSerializable(typeof(GeneratedShouldSerializeHolder))]
@@ -146,5 +165,62 @@ namespace Dahomey.Cbor.Tests
             Assert.Throws<CborException>(() => Helper.Write(withNull));
             Assert.Throws<CborException>(() => Helper.Write(withNull, context.Options));
         }
+
+        /// <summary>The result of an operation, or the type of what it threw, so two paths compare as values.</summary>
+        private static string Outcome(System.Func<object> operation)
+        {
+            try
+            {
+                return operation() switch
+                {
+                    byte[] bytes => System.BitConverter.ToString(bytes),
+                    object other => System.Text.Json.JsonSerializer.Serialize(other, other.GetType()),
+                };
+            }
+            catch (System.Exception exception)
+            {
+                return "throws " + exception.GetType().Name;
+            }
+        }
+
+        private static void AssertPathsAgreeOnAnUndefinedPolicy<T>(T withNull)
+            where T : class
+        {
+            MemberFeatureContext context = new MemberFeatureContext();
+
+            // {"Id": 1}: absent
+            const string absent = "A1624964" + "01";
+            // {"Name": null}: present and null
+            const string nullName = "A1644E616D65F6";
+
+            Assert.Equal(
+                Outcome(() => Cbor.Deserialize<T>(absent.HexToBytes())),
+                Outcome(() => Cbor.Deserialize<T>(absent.HexToBytes(), context.Options)));
+            Assert.Equal(
+                Outcome(() => Cbor.Deserialize<T>(nullName.HexToBytes())),
+                Outcome(() => Cbor.Deserialize<T>(nullName.HexToBytes(), context.Options)));
+            Assert.Equal(
+                Outcome(() => Helper.Write(withNull)),
+                Outcome(() => Helper.Write(withNull, context.Options)));
+        }
+
+        /// <summary>
+        /// An undefined policy is not Always: both of these documents read and write on the reflection
+        /// path, and folding the number onto a named member would refuse one of them.
+        /// </summary>
+        [Fact]
+        public void AnUndefinedConstructorPolicyBehavesAsOnReflection()
+        {
+            AssertPathsAgreeOnAnUndefinedPolicy(new RequiredUndefinedConstructorPolicyHolder { Id = 1, Name = null });
+            Assert.Equal(1, Cbor.Deserialize<RequiredUndefinedConstructorPolicyHolder>(("A1624964" + "01").HexToBytes()).Id);
+        }
+
+        [Fact]
+        public void AnUndefinedNegativeNamedPolicyBehavesAsOnReflection()
+        {
+            AssertPathsAgreeOnAnUndefinedPolicy(new RequiredNegativeNamedPolicyHolder { Id = 1, Name = null });
+            Assert.Equal(1, Cbor.Deserialize<RequiredNegativeNamedPolicyHolder>(("A1624964" + "01").HexToBytes()).Id);
+        }
     }
 }
+
