@@ -202,6 +202,44 @@ namespace Dahomey.Cbor.Tests
             Assert.Throws<CborException>(() => Helper.Read<TimeSpan>(hexBuffer, Duration()));
         }
 
+        /// <summary>
+        /// RFC 9581 section 3: an unsigned-integer key that is not understood is an error. Key 0 is
+        /// unsigned, so it is not elective like a negative or text key.
+        /// </summary>
+        [Fact]
+        public void AnUnknownUnsignedKeyZeroIsACborException()
+        {
+            Assert.Throws<CborException>(() => Helper.Read<TimeSpan>("D903EAA201050001", Duration()));
+        }
+
+        /// <summary>
+        /// A fraction whose own count of ticks exceeds a long, cancelled by a negative base: the total
+        /// is in range, so it reads.
+        /// </summary>
+        [Theory]
+        // {1: -1e12, -3: 1e15} -- 1e15 ms is 1e12 s
+        [InlineData("D903EAA2013B000000E8D4A50FFF221B00038D7EA4C68000", 0L)]
+        // {1: -1, -18: 1e18} -- 1e18 attoseconds is one second
+        [InlineData("D903EAA20120311B0DE0B6B3A7640000", 0L)]
+        // {1: -1e12, -3: 1e15 + 1500} -- a second and a half past zero
+        [InlineData("D903EAA2013B000000E8D4A50FFF221B00038D7EA4C685DC", 15000000L)]
+        public void AFractionLargerThanALongOfTicksCancelsAgainstANegativeBase(string hexBuffer, long expectedTicks)
+        {
+            Assert.Equal(TimeSpan.FromTicks(expectedTicks), Helper.Read<TimeSpan>(hexBuffer, Duration()));
+        }
+
+        [Theory]
+        // {1: 922337203685, -3: 1e15}
+        [InlineData("D903EAA2011B000000D6BF94D5E5221B00038D7EA4C68000")]
+        // {1: -2^63, -3: 2^64 - 1}
+        [InlineData("D903EAA2013B7FFFFFFFFFFFFFFF221BFFFFFFFFFFFFFFFF")]
+        // {1: 2^63 - 1, -3: 2^64 - 1}
+        [InlineData("D903EAA2011B7FFFFFFFFFFFFFFF221BFFFFFFFFFFFFFFFF")]
+        public void AGenuinelyOutOfRangeFractionIsACborException(string hexBuffer)
+        {
+            Assert.Throws<CborException>(() => Helper.Read<TimeSpan>(hexBuffer, Duration()));
+        }
+
         [Fact]
         public void AFinerFractionIsAcceptedWhenItIsAWholeNumberOfTicks()
         {

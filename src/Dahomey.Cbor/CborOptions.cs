@@ -192,7 +192,7 @@ namespace Dahomey.Cbor
         /// On read, keys 1 (integer or float), -3, -6, -9, -12, -15 and -18 are understood, and a
         /// timescale (keys -1, -13, 13) of UTC or TAI. A fraction finer than 100ns is refused unless it
         /// is an exact number of ticks; a negative fraction, a second fraction key, a base under key 4
-        /// or 5, an unknown critical (positive) key, another timescale, and a value outside the range of
+        /// or 5, an unknown critical (unsigned) key, another timescale, and a value outside the range of
         /// <see cref="TimeSpan"/> are each a <see cref="CborException"/>. Unknown elective keys (text
         /// strings and unrecognised negative integers) are skipped, except that an elective timescale
         /// (-1 or -13) with a value other than 0 or 1 is refused rather than skipped.

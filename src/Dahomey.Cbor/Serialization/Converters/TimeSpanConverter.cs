@@ -40,7 +40,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 case CborDataItemType.Signed:
                 case CborDataItemType.Unsigned:
-                    return FromWholeSeconds(reader.ReadInt64(), 0);
+                    return FromWholeSeconds(reader.ReadInt64(), 0, 0);
 
                 case CborDataItemType.Double:
                 case CborDataItemType.Single:
@@ -56,6 +56,7 @@ namespace Dahomey.Cbor.Serialization.Converters
             long seconds = 0;
             double floatSeconds = 0;
             bool hasFraction = false;
+            long fractionSeconds = 0;
             long fractionTicks = 0;
             bool hasTimescale = false;
 
@@ -94,27 +95,27 @@ namespace Dahomey.Cbor.Serialization.Converters
                         break;
 
                     case -3:
-                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 3);
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 3, out fractionSeconds);
                         break;
 
                     case -6:
-                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 6);
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 6, out fractionSeconds);
                         break;
 
                     case NanosecondsKey:
-                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 9);
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 9, out fractionSeconds);
                         break;
 
                     case -12:
-                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 12);
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 12, out fractionSeconds);
                         break;
 
                     case -15:
-                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 15);
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 15, out fractionSeconds);
                         break;
 
                     case -18:
-                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 18);
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 18, out fractionSeconds);
                         break;
 
                     case TimescaleElectiveKey:
@@ -145,9 +146,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                             $"A duration with its base under key {key} is not supported; use key 1");
 
                     default:
-                        if (key > 0)
+                        if (key >= 0)
                         {
-                            // Section 3: a positive key is critical, and a critical key this does not
+                            // Section 3: an unsigned key is critical, and a critical key this does not
                             // understand means the value cannot be read faithfully.
                             throw new CborException($"A duration holds the unsupported critical key {key}");
                         }
@@ -179,19 +180,23 @@ namespace Dahomey.Cbor.Serialization.Converters
                 throw new CborException("A duration needs a base under key 1");
             }
 
-            return FromWholeSeconds(seconds, fractionTicks);
+            return FromWholeSeconds(seconds, fractionSeconds, fractionTicks);
         }
 
         /// <summary>
-        /// Reads a fraction key's unsigned count of 10^-<paramref name="exponent"/> seconds as ticks.
+        /// Reads a fraction key's unsigned count of 10^-<paramref name="exponent"/> seconds, returning
+        /// the sub-second part in ticks and the whole seconds through <paramref name="wholeSeconds"/>.
         /// </summary>
         /// <remarks>
         /// The value is unsigned by definition (section 3.3), so a negative one is refused rather than
         /// read as a subtraction -- a sign there has no defined meaning. A TimeSpan resolves to 100ns,
         /// so a finer fraction is refused unless it is an exact multiple of a tick: truncating would
-        /// make a peer's value silently read as a different duration.
+        /// make a peer's value silently read as a different duration. The whole seconds are kept apart
+        /// from the ticks because a large fraction may be cancelled by a negative base, and must not be
+        /// refused before it is added to it.
         /// </remarks>
-        private static long ReadFraction(ref CborReader reader, ref bool hasFraction, int exponent)
+        private static long ReadFraction(
+            ref CborReader reader, ref bool hasFraction, int exponent, out long wholeSeconds)
         {
             if (hasFraction)
             {
@@ -207,6 +212,16 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             ulong count = reader.ReadUInt64();
 
+            // The smallest exponent is 3, so the whole seconds never exceed 2^64 / 1000 and fit a long.
+            ulong unit = 1;
+            for (int i = 0; i < exponent; i++)
+            {
+                unit *= 10;
+            }
+
+            wholeSeconds = (long)(count / unit);
+            ulong remainder = count % unit;
+
             // Ticks are 10^-7 s. Coarser keys scale up, finer ones divide down.
             if (exponent <= 7)
             {
@@ -216,12 +231,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                     scale *= 10;
                 }
 
-                if (count > long.MaxValue / scale)
-                {
-                    throw new CborException("A duration's fraction is out of range for a TimeSpan");
-                }
-
-                return (long)(count * scale);
+                return (long)(remainder * scale);
             }
 
             ulong divisor = 1;
@@ -230,25 +240,18 @@ namespace Dahomey.Cbor.Serialization.Converters
                 divisor *= 10;
             }
 
-            if (count % divisor != 0)
+            if (remainder % divisor != 0)
             {
                 throw new CborException(
                     $"A duration's fraction is finer than a TimeSpan's 100ns resolution ({count} x 1e-{exponent} s)");
             }
 
-            ulong ticks = count / divisor;
-
-            if (ticks > long.MaxValue)
-            {
-                throw new CborException("A duration's fraction is out of range for a TimeSpan");
-            }
-
-            return (long)ticks;
+            return (long)(remainder / divisor);
         }
 
         /// <summary>
         /// Reads one key. A key this cannot represent as an int is elective (section 3: a text string
-        /// or a negative integer) and is skipped together with its value, returning false; a positive
+        /// or a negative integer) and is skipped together with its value, returning false; an unsigned
         /// one is a critical key this cannot understand, and a key of any other type is not a key.
         /// </summary>
         private static bool TryReadKey(ref CborReader reader, out int key)
@@ -308,16 +311,15 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// <c>seconds + fraction</c>, the fraction being non-negative (section 3.3), checked against the
         /// range of a <see cref="TimeSpan"/>.
         /// </summary>
-        private static TimeSpan FromWholeSeconds(long seconds, long fractionTicks)
+        private static TimeSpan FromWholeSeconds(long seconds, long fractionSeconds, long fractionTicks)
         {
             try
             {
-                // A fraction of a second or more is moved into the base first, so that what is
-                // multiplied by TicksPerSecond below is the final number of seconds and the sub-second
-                // part is always in [0, 1 s). Otherwise an intermediate product could overflow
-                // although the sum is in range.
-                seconds = checked(seconds + fractionTicks / TimeSpan.TicksPerSecond);
-                fractionTicks %= TimeSpan.TicksPerSecond;
+                // The fraction's whole seconds are added to the base first, so that what is multiplied
+                // by TicksPerSecond below is the final number of seconds and the sub-second part is
+                // always in [0, 1 s). Otherwise an intermediate product could overflow although the
+                // sum is in range.
+                seconds = checked(seconds + fractionSeconds);
 
                 long ticks;
 
