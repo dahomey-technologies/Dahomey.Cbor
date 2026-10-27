@@ -66,7 +66,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                     break;
                 }
 
-                int key = reader.ReadInt32();
+                if (!TryReadKey(ref reader, out int key))
+                {
+                    continue;
+                }
 
                 switch (key)
                 {
@@ -244,6 +247,64 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         /// <summary>
+        /// Reads one key. A key this cannot represent as an int is elective (section 3: a text string
+        /// or a negative integer) and is skipped together with its value, returning false; a positive
+        /// one is a critical key this cannot understand, and a key of any other type is not a key.
+        /// </summary>
+        private static bool TryReadKey(ref CborReader reader, out int key)
+        {
+            key = 0;
+
+            switch (reader.GetCurrentDataItemType())
+            {
+                case CborDataItemType.Unsigned:
+                    ulong unsigned = reader.ReadUInt64();
+
+                    if (unsigned > int.MaxValue)
+                    {
+                        throw new CborException($"A duration holds the unsupported critical key {unsigned}");
+                    }
+
+                    key = (int)unsigned;
+                    return true;
+
+                case CborDataItemType.Signed:
+                    CborReaderBookmark bookmark = reader.GetBookmark();
+                    long signed;
+
+                    try
+                    {
+                        signed = reader.ReadInt64();
+                    }
+                    catch (CborException)
+                    {
+                        // Below -2^63, which no long holds; such a key is none this defines.
+                        reader.ReturnToBookmark(bookmark);
+                        reader.SkipDataItem();
+                        reader.SkipDataItem();
+                        return false;
+                    }
+
+                    if (signed < int.MinValue)
+                    {
+                        reader.SkipDataItem();
+                        return false;
+                    }
+
+                    key = (int)signed;
+                    return true;
+
+                case CborDataItemType.String:
+                    reader.SkipDataItem();
+                    reader.SkipDataItem();
+                    return false;
+
+                default:
+                    throw new CborException("A duration's keys must be integers or text strings");
+            }
+        }
+
+        /// <summary>
         /// <c>seconds + fraction</c>, the fraction being non-negative (section 3.3), checked against the
         /// range of a <see cref="TimeSpan"/>.
         /// </summary>
@@ -251,6 +312,13 @@ namespace Dahomey.Cbor.Serialization.Converters
         {
             try
             {
+                // A fraction of a second or more is moved into the base first, so that what is
+                // multiplied by TicksPerSecond below is the final number of seconds and the sub-second
+                // part is always in [0, 1 s). Otherwise an intermediate product could overflow
+                // although the sum is in range.
+                seconds = checked(seconds + fractionTicks / TimeSpan.TicksPerSecond);
+                fractionTicks %= TimeSpan.TicksPerSecond;
+
                 long ticks;
 
                 if (seconds < 0)

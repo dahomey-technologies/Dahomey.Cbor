@@ -151,6 +151,57 @@ namespace Dahomey.Cbor.Tests
             Assert.Throws<CborException>(() => Helper.Read<TimeSpan>(hexBuffer, Duration()));
         }
 
+        /// <summary>
+        /// RFC 9581 section 3: a text-string key, and a negative-integer key the reader does not
+        /// understand, are elective and ignored -- including one outside the range of an int.
+        /// </summary>
+        [Theory]
+        [InlineData("D903EAA20105617801")]                          // "x": 1
+        [InlineData("D903EAA201056178" + "82" + "01A1617902")]      // "x": [1, {"y": 2}]
+        [InlineData("D903EAA201056178A10102")]    // "x": {1: 2}
+        [InlineData("D903EAA201053B000000FFFFFFFFFF01")]            // -2^40 - 1: 1
+        [InlineData("D903EAA201053BFFFFFFFFFFFFFFFF01")]            // -2^64: 1, beyond a long
+        [InlineData("D903EAA201053A8000000082" + "0102")]           // -2^31 - 1: [1, 2]
+        public void ATextOrUnknownNegativeKeyIsIgnored(string hexBuffer)
+        {
+            Assert.Equal(TimeSpan.FromSeconds(5), Helper.Read<TimeSpan>(hexBuffer, Duration()));
+        }
+
+        [Theory]
+        [InlineData("D903EAA201051A8000000001")]                    // key 2^31, a critical key
+        [InlineData("D903EAA201051B000000010000000001")]            // key 2^32
+        [InlineData("D903EAA20105" + "1BFFFFFFFFFFFFFFFF01")]       // key 2^64 - 1
+        [InlineData("D903EAA2010541" + "7801")]                     // a byte-string key
+        public void AnUnknownPositiveOrMalformedKeyIsACborException(string hexBuffer)
+        {
+            Assert.Throws<CborException>(() => Helper.Read<TimeSpan>(hexBuffer, Duration()));
+        }
+
+        /// <summary>
+        /// A fraction of a second or more beside a negative base: the total is in range, so it reads,
+        /// whichever way the same instant is split between base and fraction.
+        /// </summary>
+        [Fact]
+        public void AFractionOfSeveralSecondsBesideANegativeBaseNearTheLimitIsRead()
+        {
+            // {1: -922337203690, -3: 5000} -- 5000 ms -- is -922337203685 s
+            TimeSpan split = Helper.Read<TimeSpan>("D903EAA2013B000000D6BF94D5E922191388", Duration());
+            // {1: -922337203685}
+            TimeSpan whole = Helper.Read<TimeSpan>("D903EAA1013B000000D6BF94D5E4", Duration());
+
+            Assert.Equal(whole, split);
+            Assert.Equal(-922337203685L * TimeSpan.TicksPerSecond, split.Ticks);
+        }
+
+        [Theory]
+        [InlineData("D903EAA1013B000000D6BF94D5E9")]                // -922337203690 s
+        [InlineData("D903EAA2013B000000D6BF94D5E922190BB8")]        // -922337203690 s + 3000 ms
+        [InlineData("D903EAA2011B000000D6BF94D5E522191388")]        // 922337203685 s + 5000 ms
+        public void AnOutOfRangeSumIsACborException(string hexBuffer)
+        {
+            Assert.Throws<CborException>(() => Helper.Read<TimeSpan>(hexBuffer, Duration()));
+        }
+
         [Fact]
         public void AFinerFractionIsAcceptedWhenItIsAWholeNumberOfTicks()
         {
