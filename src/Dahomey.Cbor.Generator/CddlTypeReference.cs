@@ -255,12 +255,11 @@ namespace Dahomey.Cbor.Generator
                 case SpecialType.System_UInt32:
                     return "0..4294967295";
 
-                // Spelled out rather than as the prelude's `int` and `uint`, which are wider than the
-                // CLR types: a CBOR integer reaches -2^64..2^64-1, so `int` admits values no long can
-                // hold and `uint` is only coincidentally the right size. Being explicit also keeps
-                // these consistent with the narrower widths above, and tells a code generator reading
-                // the schema which integer width to declare -- given a bare `uint` it has to guess,
-                // and zcbor guesses 32 bits.
+                // Spelled out rather than as the prelude's `int` and `uint`. `int` is wider than a
+                // long (a CBOR integer reaches -2^64..2^64-1), while `uint` has exactly a ulong's
+                // range. Both are ranges anyway: it keeps them consistent with the narrower widths
+                // above, and tells a code generator reading the schema which integer width to
+                // declare -- given a bare `int` or `uint` it has to guess, and zcbor guesses 32 bits.
                 case SpecialType.System_Int64:
                     return "-9223372036854775808..9223372036854775807";
 

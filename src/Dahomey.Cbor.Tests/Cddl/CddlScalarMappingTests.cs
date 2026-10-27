@@ -33,8 +33,9 @@ namespace Dahomey.Cbor.Tests.Cddl
         public (int, string) Pair { get; set; }
 
         /// <summary>
-        /// The 64-bit integers, which are rendered as explicit ranges: the prelude's <c>int</c> and
-        /// <c>uint</c> reach -2^64..2^64-1, wider than either CLR type.
+        /// The 64-bit integers, which are rendered as explicit ranges: the prelude's <c>int</c> is wider
+        /// than <c>long</c> (a CBOR integer reaches -2^64..2^64-1), while <c>uint</c> has exactly
+        /// <c>ulong</c>'s range.
         /// </summary>
         public long Signed64 { get; set; }
         public ulong Unsigned64 { get; set; }
@@ -124,9 +125,11 @@ namespace Dahomey.Cbor.Tests.Cddl
         }
 
         /// <summary>
-        /// Spelled out as ranges rather than the prelude's <c>int</c>/<c>uint</c>, which are wider than
-        /// the CLR types (a CBOR integer reaches -2^64..2^64-1). The range also tells a code generator
-        /// reading the schema which width to declare; given a bare <c>uint</c> it has to guess.
+        /// Spelled out as ranges rather than the prelude's <c>int</c>/<c>uint</c>. <c>int</c> is wider
+        /// than <c>long</c>; <c>uint</c> is the same set as <c>0..18446744073709551615</c>. The range
+        /// tells a code generator reading the schema which width to declare; given a bare <c>int</c> or
+        /// <c>uint</c> it has to guess. This test is what pins the <c>ulong</c> rendering: no instance
+        /// can distinguish the two spellings, so the validation test below cannot bind for it.
         /// </summary>
         [Fact]
         public void The64BitIntegersRenderAsTheirExactRanges()
@@ -138,8 +141,11 @@ namespace Dahomey.Cbor.Tests.Cddl
         }
 
         /// <summary>
-        /// The extremes validate, and the control binds: -2^64 is a legal CBOR integer that no
-        /// <c>long</c> can hold, so a schema saying <c>int</c> would accept it and the range refuses it.
+        /// The extremes validate, and the control binds for the <c>long</c> half only: -2^64 is a legal
+        /// CBOR integer that no <c>long</c> can hold, so a schema saying <c>int</c> would accept it and
+        /// the range refuses it. The <c>ulong</c> half cannot bind -- <c>uint</c> and
+        /// <c>0..18446744073709551615</c> accept the same values -- so it is a sanity check on the range
+        /// text, and <see cref="The64BitIntegersRenderAsTheirExactRanges"/> is what pins it.
         /// </summary>
         [CddlFact]
         public void The64BitExtremesValidateAndTheRangeRefusesWhatALongCannotHold()
