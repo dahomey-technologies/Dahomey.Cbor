@@ -31,6 +31,9 @@ namespace Dahomey.Cbor.Tests.Issues
         /// <summary>{"_t": 99, "Id": 7} — a discriminator no type here registers.</summary>
         private const string UnknownSubtype = "A2625F74186362496407";
 
+        /// <summary>{"Z": 1} -- a member nothing maps, so no discriminator is looked for by value.</summary>
+        private const string Unrelated = "A1615A01";
+
         /// <summary>{"_t": 1, "Id": 7} -- KnownChannel.</summary>
         private const string KnownSubtype = "A2625F740162496407";
 
@@ -333,6 +336,136 @@ namespace Dahomey.Cbor.Tests.Issues
             Assert.IsType<OtherFallbackChannel>(Cbor.Deserialize<BaseChannel>(UnknownSubtype.HexToBytes(), options));
         }
 
+        /// <summary>
+        /// A deterministic write orders its members by key, and the discriminator's key is one of them.
+        /// A convention that renames it has to reorder the output exactly as fresh options would.
+        /// </summary>
+        [Fact]
+        public void ADeterministicWriteIsReorderedByTheNewDiscriminatorName()
+        {
+            CborOptions options = DeterministicOptions();
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.RegisterType<KindChannel>();
+
+            // Id, _t, Kind: shortest key first, then bytewise.
+            Assert.Equal("A3" + "624964" + "01" + "625F74" + "02" + "644B696E64" + "03", Hex(Write(new KindChannel { Id = 1, Kind = 3 }, options)));
+
+            registry.ClearConventions();
+            registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "A"));
+            registry.RegisterType<KindChannel>();
+
+            CborOptions fresh = DeterministicOptions();
+            fresh.Registry.DiscriminatorConventionRegistry.ClearConventions();
+            fresh.Registry.DiscriminatorConventionRegistry.RegisterConvention(new DefaultDiscriminatorConvention<int>(fresh.Registry, "A"));
+            fresh.Registry.DiscriminatorConventionRegistry.RegisterType<KindChannel>();
+
+            byte[] expected = Write(new KindChannel { Id = 1, Kind = 3 }, fresh);
+            Assert.Equal("A3" + "614102" + "624964" + "01" + "644B696E64" + "03", Hex(expected));
+            Assert.Equal(expected, Write(new KindChannel { Id = 1, Kind = 3 }, options));
+        }
+
+        /// <summary>
+        /// The document a renamed convention wrote reads back through the base on options that held the
+        /// old convention, so nothing on the read side keeps the name it was built with.
+        /// </summary>
+        [Fact]
+        public void ADocumentWrittenUnderARenamedConventionReadsBackThroughTheBase()
+        {
+            CborOptions options = new CborOptions { DiscriminatorPolicy = CborDiscriminatorPolicy.Always };
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.RegisterType<KindChannel>();
+            Cbor.Deserialize<BaseChannel>(Write(new KindChannel { Id = 1, Kind = 3 }, options), options);
+
+            registry.ClearConventions();
+            registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "A"));
+            registry.RegisterType<KindChannel>();
+
+            KindChannel read = Assert.IsType<KindChannel>(
+                Cbor.Deserialize<BaseChannel>(Write(new KindChannel { Id = 4, Kind = 5 }, options), options));
+            Assert.Equal(4, read.Id);
+            Assert.Equal(5, read.Kind);
+        }
+
+        /// <summary>
+        /// The collision is refused on a read that reaches the type through its base, which dispatches
+        /// to the derived converter without that converter ever being the declared one.
+        /// </summary>
+        [Fact]
+        public void ACollidingNameIsRefusedOnAReadThroughTheBase()
+        {
+            const string Expected = "maps several fields/properties to the member name 'Kind'";
+            // {"Kind": 2, "Id": 1}
+            byte[] document = "A2644B696E640262496401".HexToBytes();
+
+            CborOptions fresh = new CborOptions();
+            fresh.Registry.DiscriminatorConventionRegistry.ClearConventions();
+            fresh.Registry.DiscriminatorConventionRegistry.RegisterConvention(new DefaultDiscriminatorConvention<int>(fresh.Registry, "Kind"));
+            fresh.Registry.DiscriminatorConventionRegistry.RegisterType<KindChannel>();
+            Assert.Contains(Expected, Assert.Throws<CborException>(() => Cbor.Deserialize<BaseChannel>(document, fresh)).Message);
+
+            CborOptions options = new CborOptions { DiscriminatorPolicy = CborDiscriminatorPolicy.Always };
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.RegisterType<KindChannel>();
+            Cbor.Deserialize<BaseChannel>(Write(new KindChannel { Id = 1, Kind = 3 }, options), options);
+
+            registry.ClearConventions();
+            registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "Kind"));
+            registry.RegisterType<KindChannel>();
+
+            Assert.Contains(Expected, Assert.Throws<CborException>(() => Cbor.Deserialize<BaseChannel>(document, options)).Message);
+        }
+
+        /// <summary>
+        /// Names are compared exactly, as fresh options compare them: <c>id</c> is not <c>Id</c>.
+        /// </summary>
+        [Fact]
+        public void ANameDifferingOnlyInCaseIsAccepted()
+        {
+            CborOptions fresh = new CborOptions { DiscriminatorPolicy = CborDiscriminatorPolicy.Always };
+            fresh.Registry.DiscriminatorConventionRegistry.ClearConventions();
+            fresh.Registry.DiscriminatorConventionRegistry.RegisterConvention(new DefaultDiscriminatorConvention<int>(fresh.Registry, "id"));
+            fresh.Registry.DiscriminatorConventionRegistry.RegisterType<KnownChannel>();
+            byte[] expected = Write(new KnownChannel { Id = 7 }, fresh);
+
+            CborOptions options = new CborOptions { DiscriminatorPolicy = CborDiscriminatorPolicy.Always };
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.RegisterType<KnownChannel>();
+            Write(new KnownChannel { Id = 7 }, options);
+
+            registry.ClearConventions();
+            registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "id"));
+            registry.RegisterType<KnownChannel>();
+
+            Assert.Equal(expected, Write(new KnownChannel { Id = 7 }, options));
+            Assert.IsType<KnownChannel>(Cbor.Deserialize<BaseChannel>(expected, options));
+        }
+
+        /// <summary>
+        /// A type whose mapping carries no discriminator member is not written beside one, so a
+        /// convention naming one of its members refuses nothing - which is also what fresh options do
+        /// when the type was mapped while no convention was registered.
+        /// </summary>
+        [Fact]
+        public void ANameCollidingWithAMemberOfATypeWithoutADiscriminatorMemberIsAccepted()
+        {
+            CborOptions options = new CborOptions { UnhandledNameMode = UnhandledNameMode.Silent };
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+
+            registry.ClearConventions();
+            Assert.Equal(0, Cbor.Deserialize<KnownChannel>(Unrelated.HexToBytes(), options).Id);
+            Assert.Empty(options.Registry.ObjectMappingRegistry.Lookup<KnownChannel>().MemberMappings.OfType<IDiscriminatorMapping>());
+
+            registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "Id"));
+            registry.RegisterType<KnownChannel>();
+
+            Assert.Equal(0, Cbor.Deserialize<KnownChannel>(Unrelated.HexToBytes(), options).Id);
+        }
+
+        private static CborOptions DeterministicOptions()
+            => new CborOptions { Deterministic = true, DiscriminatorPolicy = CborDiscriminatorPolicy.Always };
+
+        private static string Hex(byte[] bytes) => Convert.ToHexString(bytes);
+
         private static byte[] Write(BaseChannel value, CborOptions options)
         {
             ArrayBufferWriter<byte> buffer = new ArrayBufferWriter<byte>();
@@ -389,6 +522,12 @@ namespace Dahomey.Cbor.Tests.Issues
         [CborIntDiscriminator(1)]
         public class KnownChannel : BaseChannel
         {
+        }
+
+        [CborIntDiscriminator(2)]
+        public class KindChannel : BaseChannel
+        {
+            public int Kind { get; set; }
         }
 
         public class FallbackChannel : BaseChannel

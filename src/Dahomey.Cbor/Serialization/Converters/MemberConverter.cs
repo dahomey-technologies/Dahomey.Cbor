@@ -543,8 +543,22 @@ namespace Dahomey.Cbor.Serialization.Converters
             CborOptions options,
             IDiscriminatorConvention discriminatorConvention,
             CborDiscriminatorPolicy discriminatorPolicy,
+            CborObjectFormat objectFormat)
+            : this(options, discriminatorConvention, discriminatorPolicy, objectFormat, null)
+        {
+        }
+
+        /// <summary>
+        /// As the overload without a mapping, and given the mapping of the type this member is written
+        /// for: a convention resolved after the mapping was validated is then checked against that
+        /// type's members, as <c>MemberMappingErrors.ThrowIfDiscriminatorNameCollides</c> describes.
+        /// </summary>
+        public DiscriminatorMemberConverter(
+            CborOptions options,
+            IDiscriminatorConvention discriminatorConvention,
+            CborDiscriminatorPolicy discriminatorPolicy,
             CborObjectFormat objectFormat,
-            IObjectMapping? objectMapping = null)
+            IObjectMapping? objectMapping)
         {
             _options = options;
             _conventionRegistry = options.Registry.DiscriminatorConventionRegistry;
