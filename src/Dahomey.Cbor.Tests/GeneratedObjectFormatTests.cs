@@ -46,6 +46,10 @@ namespace Dahomey.Cbor.Tests
     [CborSerializable(typeof(GeneratedTakesArrayFormat))]
     public partial class RuntimeOptionsContext : CborSerializerContext
     {
+        public RuntimeOptionsContext() : this(new CborOptions { ObjectFormat = CborObjectFormat.Array })
+        {
+        }
+
         public RuntimeOptionsContext(CborOptions options) : base(options)
         {
         }
@@ -55,6 +59,10 @@ namespace Dahomey.Cbor.Tests
     [CborSerializable(typeof(GeneratedKeptMapFormat))]
     public partial class RuntimeOptionsDecoratedContext : CborSerializerContext
     {
+        public RuntimeOptionsDecoratedContext() : this(new CborOptions())
+        {
+        }
+
         public RuntimeOptionsDecoratedContext(CborOptions options) : base(options)
         {
         }
