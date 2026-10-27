@@ -19,10 +19,21 @@ namespace Dahomey.Cbor.Generator
         private readonly Dictionary<string, TypeModel> _models =
             new Dictionary<string, TypeModel>();
 
-        public TypeCollector(GenerationOptions options, List<DiagnosticInfo> diagnostics)
+        private readonly Func<ISymbol, bool> _isAccessible;
+
+        /// <param name="isAccessible">
+        /// Whether a symbol can be named from the generated context -- the one place generated code
+        /// calls a constructor from. Accessibility is a property of the call site, not of the symbol,
+        /// so it is asked of the compilation rather than inferred from <c>DeclaredAccessibility</c>:
+        /// that cannot tell an <c>internal</c> constructor in this assembly from one in another, or a
+        /// <c>protected</c> one from a context nested in the type.
+        /// </param>
+        public TypeCollector(
+            GenerationOptions options, List<DiagnosticInfo> diagnostics, Func<ISymbol, bool> isAccessible)
         {
             _options = options;
             _diagnostics = diagnostics;
+            _isAccessible = isAccessible;
         }
 
         public void Collect(ITypeSymbol type)
@@ -166,9 +177,27 @@ namespace Dahomey.Cbor.Generator
             // An abstract base is never instantiated -- its subtypes are -- so only a concrete type
             // without a constructor is a problem. The reflection path can reach a non-public
             // constructor or a [CborConstructor] creator mapping; a generated factory is `new T()`.
+            IMethodSymbol? creator = FindCreatorConstructor(type);
+            bool creatorUnreachable = false;
+
+            // A creator the generated context cannot call would be emitted as a call that does not
+            // compile (CS0122) -- the generator's contract is a diagnostic instead. Dropped after
+            // reporting, so nothing below emits a call to it.
+            if (creator is not null && !_isAccessible(creator))
+            {
+                _diagnostics.Add(DiagnosticInfo.Create(
+                    Diagnostics.InaccessibleCreatorConstructor,
+                    creator.Locations.FirstOrDefault(),
+                    type.ToDisplayString(),
+                    creator.DeclaredAccessibility.ToString().ToLowerInvariant()));
+                creator = null;
+                creatorUnreachable = true;
+            }
+
             if (!model.CanInstantiate
+                && !creatorUnreachable
                 && type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class }
-                && FindCreatorConstructor(type) is null)
+                && creator is null)
             {
                 _diagnostics.Add(DiagnosticInfo.Create(
                     Diagnostics.NoParameterlessConstructor,
@@ -178,7 +207,6 @@ namespace Dahomey.Cbor.Generator
 
             ReadTypeLevelAttributes(type, model);
             ReportUnsupportedFeatures(type);
-            IMethodSymbol? creator = FindCreatorConstructor(type);
 
             Dictionary<string, string> membersByCborName = new Dictionary<string, string>(StringComparer.Ordinal);
             Dictionary<int, string> membersByCborIndex = new Dictionary<int, string>();
@@ -302,7 +330,7 @@ namespace Dahomey.Cbor.Generator
 
                 if (suppliedByCreator)
                 {
-                    model.CreatorMembers[member.Name] = cborName;
+                    model.CreatorMembers[member.Name] = (cborName, cborIndex);
                 }
 
                 Collect(memberType);
@@ -322,12 +350,11 @@ namespace Dahomey.Cbor.Generator
             {
                 foreach (IParameterSymbol parameter in creator.Parameters)
                 {
-                    string? cborName = model.CreatorMembers
+                    KeyValuePair<string, (string CborName, int? Index)> supplied = model.CreatorMembers
                         .FirstOrDefault(entry => string.Equals(
-                            entry.Key, parameter.Name, StringComparison.OrdinalIgnoreCase))
-                        .Value;
+                            entry.Key, parameter.Name, StringComparison.OrdinalIgnoreCase));
 
-                    if (cborName is null)
+                    if (supplied.Key is null)
                     {
                         // A parameter naming no member cannot be filled from a document, and the
                         // reflection path leaves it at its default. Refusing here rather than emitting a
@@ -342,7 +369,7 @@ namespace Dahomey.Cbor.Generator
                         return;
                     }
 
-                    model.CreatorParameters.Add((FullNameOf(parameter.Type), cborName));
+                    model.CreatorParameters.Add((FullNameOf(parameter.Type), supplied.Value.CborName, supplied.Value.Index));
                 }
             }
         }
@@ -874,7 +901,7 @@ namespace Dahomey.Cbor.Generator
             return element.ToDisplayString() == "System.Half";
         }
 
-        private static bool HasAccessibleParameterlessConstructor(ITypeSymbol type)
+        private bool HasAccessibleParameterlessConstructor(ITypeSymbol type)
         {
             if (type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct)
             {
@@ -883,7 +910,7 @@ namespace Dahomey.Cbor.Generator
 
             return type is INamedTypeSymbol named
                 && named.InstanceConstructors.Any(c =>
-                    c.Parameters.Length == 0 && c.DeclaredAccessibility != Accessibility.Private);
+                    !c.IsStatic && c.Parameters.Length == 0 && _isAccessible(c));
         }
 
         private static string DescribeWhyUnsupported(ITypeSymbol type)
@@ -964,21 +991,22 @@ namespace Dahomey.Cbor.Generator
         /// <c>[CborConstructor]</c> — resolves the ambiguity for both paths at once.
         /// </para>
         /// </remarks>
-        private static IMethodSymbol? FindCreatorConstructor(ITypeSymbol type)
+        private IMethodSymbol? FindCreatorConstructor(ITypeSymbol type)
         {
             if (type is not INamedTypeSymbol named || named.IsAbstract)
             {
                 return null;
             }
 
-            // Implicitly declared ones are excluded, which is what keeps a record workable: its copy
-            // constructor is compiler-generated and protected, while the primary constructor is neither,
-            // so a positional record has exactly one candidate rather than two. Measured, not assumed --
+            // Every accessibility is considered, as the reflection path does (it binds NonPublic), so
+            // that a creator the context cannot call is reported by the caller rather than silently
+            // passed over for `new T()`. Implicitly declared ones are excluded, which is what keeps a
+            // record workable: its copy constructor is compiler-generated and protected, while the
+            // primary constructor is neither, so a positional record has exactly one candidate rather
+            // than two. Measured, not assumed --
             // Roslyn reports the primary as IsImplicitlyDeclared: false.
             List<IMethodSymbol> constructors = named.InstanceConstructors
-                .Where(c => !c.IsStatic
-                    && !c.IsImplicitlyDeclared
-                    && c.DeclaredAccessibility != Accessibility.Private)
+                .Where(c => !c.IsStatic && !c.IsImplicitlyDeclared)
                 .ToList();
 
             IMethodSymbol? marked = constructors.FirstOrDefault(

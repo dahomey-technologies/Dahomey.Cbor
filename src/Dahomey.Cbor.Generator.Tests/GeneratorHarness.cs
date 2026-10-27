@@ -40,6 +40,34 @@ namespace Dahomey.Cbor.GeneratorTests
                 .ToList();
         }
 
+        /// <summary>
+        /// Compiles <paramref name="librarySource"/> as its own assembly, then runs the generator over
+        /// <paramref name="source"/> referencing it. Returns the generator's diagnostics and the errors
+        /// from compiling its output -- what an <c>internal</c> member of another assembly looks like.
+        /// </summary>
+        public static (IReadOnlyList<Diagnostic> Reported, IReadOnlyList<Diagnostic> CompileErrors) RunAgainstLibrary(
+            string librarySource, string source)
+        {
+            CSharpCompilation library = CSharpCompilation.Create(
+                "GeneratorTestLibrary",
+                new[] { CSharpSyntaxTree.ParseText(librarySource) },
+                ReferenceSet(),
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+
+            CSharpCompilation compilation = CSharpCompilation.Create(
+                "GeneratorTestAssembly",
+                new[] { CSharpSyntaxTree.ParseText(source) },
+                ReferenceSet().Append(library.ToMetadataReference()),
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+
+            CSharpGeneratorDriver.Create(new CborSourceGenerator())
+                .RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out ImmutableArray<Diagnostic> reported);
+
+            return (
+                reported.OrderBy(d => d.Id).ToList(),
+                output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToList());
+        }
+
         public static string GeneratedSource(string source)
         {
             Run(source, out _, out Compilation output);

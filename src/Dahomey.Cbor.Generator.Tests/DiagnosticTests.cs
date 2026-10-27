@@ -521,6 +521,138 @@ public partial class Context : CborSerializerContext { }
 ");
         }
 
+        private static void AssertReportsAndEmitsNothingUncompilable(string id, string body)
+        {
+            AssertReports(id, body);
+
+            // The diagnostic is an error, so the build stops there; this is the other half of the
+            // contract: nothing is emitted that would also fail with CS0122.
+            Assert.DoesNotContain(
+                GeneratorHarness.CompileGeneratedOutput(Preamble + body),
+                d => d.Id == "CS0122");
+        }
+
+        /// <summary>
+        /// The generated context calls the constructor from its own class, so <c>protected</c> and
+        /// <c>private</c> ones are out of reach -- CS0122 in the emitted file if nothing says so.
+        /// </summary>
+        [Theory]
+        [InlineData("protected")]
+        [InlineData("private")]
+        [InlineData("private protected")]
+        public void AMarkedCreatorTheContextCannotCallIsReported(string accessibility)
+        {
+            AssertReportsAndEmitsNothingUncompilable("CBOR1015", $@"
+public class Holder
+{{
+    [CborConstructor]
+    {accessibility} Holder(int id) {{ Id = id; }}
+
+    public Holder() {{ }}
+
+    public int Id {{ get; set; }}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+");
+        }
+
+        [Theory]
+        [InlineData("protected")]
+        [InlineData("private")]
+        [InlineData("private protected")]
+        public void ASoleCreatorTheContextCannotCallIsReported(string accessibility)
+        {
+            AssertReportsAndEmitsNothingUncompilable("CBOR1015", $@"
+public class Holder
+{{
+    {accessibility} Holder(int id) {{ Id = id; }}
+
+    public int Id {{ get; }}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+");
+        }
+
+        /// <summary>
+        /// The same hole existed for <c>new T()</c>: a protected parameterless constructor counted as
+        /// accessible because only <c>private</c> was excluded.
+        /// </summary>
+        [Theory]
+        [InlineData("protected")]
+        [InlineData("private protected")]
+        public void AProtectedParameterlessConstructorIsReported(string accessibility)
+        {
+            AssertReportsAndEmitsNothingUncompilable("CBOR1010", $@"
+public class Holder
+{{
+    {accessibility} Holder() {{ }}
+
+    public int Id {{ get; set; }}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+");
+        }
+
+        /// <summary>The accessible routes still work, and the output compiles.</summary>
+        [Theory]
+        [InlineData("public")]
+        [InlineData("internal")]
+        [InlineData("protected internal")]
+        public void ACreatorTheContextCanCallIsNotReported(string accessibility)
+        {
+            string body = $@"
+public class Holder
+{{
+    {accessibility} Holder(int id) {{ Id = id; }}
+
+    public int Id {{ get; }}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+";
+            AssertClean(body);
+            Assert.Empty(GeneratorHarness.CompileGeneratedOutput(Preamble + body));
+        }
+
+        /// <summary>
+        /// <c>internal</c> means "this assembly", so the same declaration is reachable from a context
+        /// in the declaring assembly and not from one in another. Only the compilation can tell.
+        /// </summary>
+        [Theory]
+        [InlineData("internal", true)]
+        [InlineData("protected internal", false)]
+        [InlineData("public", false)]
+        public void AnInternalCreatorInAnotherAssemblyIsReported(string accessibility, bool expectReport)
+        {
+            (IReadOnlyList<Diagnostic> reported, IReadOnlyList<Diagnostic> errors) =
+                GeneratorHarness.RunAgainstLibrary(
+                    Preamble + $@"
+public class Holder
+{{
+    {accessibility} Holder(int id) {{ Id = id; }}
+
+    public int Id {{ get; }}
+}}
+",
+                    Preamble + @"
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+
+            // protected internal is protected OR internal, so from another assembly it is protected.
+            bool inaccessible = expectReport || accessibility == "protected internal";
+
+            Assert.Equal(inaccessible, reported.Any(d => d.Id == "CBOR1015"));
+            Assert.DoesNotContain(errors, d => d.Id == "CS0122");
+        }
+
         /// <summary>
         /// An abstract base is never instantiated — its subtypes are — so it must not be reported.
         /// </summary>

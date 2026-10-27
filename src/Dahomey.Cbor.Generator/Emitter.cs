@@ -444,7 +444,21 @@ namespace Dahomey.Cbor.Generator
                 builder.AppendLine(
                     $"{indent}            objectMapping.MapCreator("
                     + $"new System.Func<{signature}>(({parameters}) => new {fullName}({parameters})))");
-                builder.AppendLine($"{indent}                .SetMemberNames({names});");
+
+                // CreatorMapping matches parameters to members itself when told nothing, but for
+                // IntKeyMap and Array it does so through MemberInfo, which a generated member has
+                // none of -- so the key each format reads by is always given explicitly.
+                if (model.ObjectFormat == "StringKeyMap")
+                {
+                    builder.AppendLine($"{indent}                .SetMemberNames({names});");
+                }
+                else
+                {
+                    string indexes = string.Join(
+                        ", ", model.CreatorParameters.Select(p => p.Index!.Value.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture)));
+                    builder.AppendLine($"{indent}                .SetMemberIndexes({indexes});");
+                }
             }
 
             // SetDiscriminator inserts the discriminator entry at index 0 of the member list, so it

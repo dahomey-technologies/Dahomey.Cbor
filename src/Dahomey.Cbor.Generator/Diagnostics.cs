@@ -188,5 +188,18 @@ namespace Dahomey.Cbor.Generator
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
+
+        /// <summary>
+        /// The constructor a read builds the type through -- a <c>[CborConstructor]</c>, or the only one
+        /// it has -- cannot be called from the generated context. The reflection path reaches any
+        /// constructor; generated code is an ordinary call from the context's own class.
+        /// </summary>
+        public static readonly DiagnosticDescriptor InaccessibleCreatorConstructor = new(
+            id: "CBOR1015",
+            title: "Creator constructor is not accessible to the generated context",
+            messageFormat: "'{0}' is built through a {1} constructor, which the generated context cannot call. Make it public or internal (in an assembly that is the context's own), or exclude the type.",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
     }
 }

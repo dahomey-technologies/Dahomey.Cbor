@@ -144,12 +144,16 @@ namespace Dahomey.Cbor.Generator
         /// <c>[CborProperty("my-name")]</c> or by a naming convention need not be a legal C#
         /// identifier, and a lambda's parameters have to be.
         /// </remarks>
-        public List<(string Type, string CborName)> CreatorParameters { get; } =
-            new List<(string Type, string CborName)>();
+        /// <remarks>
+        /// Index is the member's <c>[CborProperty(n)]</c> index, which is what <c>IntKeyMap</c> and
+        /// <c>Array</c> read by; it is null for a member without one.
+        /// </remarks>
+        public List<(string Type, string CborName, int? Index)> CreatorParameters { get; } =
+            new List<(string Type, string CborName, int? Index)>();
 
-        /// <summary>C# member name to CBOR name, for the members a creator supplies.</summary>
-        public Dictionary<string, string> CreatorMembers { get; } =
-            new Dictionary<string, string>();
+        /// <summary>C# member name to CBOR name and index, for the members a creator supplies.</summary>
+        public Dictionary<string, (string CborName, int? Index)> CreatorMembers { get; } =
+            new Dictionary<string, (string CborName, int? Index)>();
 
         /// <summary>
         /// True when <see cref="Kind"/> is <see cref="TypeKind.Array"/> and the element type is one of

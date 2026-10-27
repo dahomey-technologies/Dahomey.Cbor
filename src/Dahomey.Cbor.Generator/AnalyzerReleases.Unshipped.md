@@ -6,3 +6,4 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|------------------------------------------------------------------
+CBOR1015 | Dahomey.Cbor.Generator | Error | Creator constructor is not accessible to the generated context

@@ -31,9 +31,33 @@ namespace Dahomey.Cbor.Tests
         public string Name { get; init; }
     }
 
+    /// <summary>Positional records for the two positional object formats.</summary>
+    public record GeneratedIndexedRecord(
+        [property: CborProperty(0)] int Id,
+        [property: CborProperty(1)] string Name);
+
+    /// <summary>The same shape under a discriminator, which takes slot 0 in the Array format.</summary>
+    [CborDiscriminator("indexed")]
+    public record GeneratedDiscriminatedRecord(
+        [property: CborProperty(1)] int Id,
+        [property: CborProperty(2)] string Name);
+
     [CborSerializable(typeof(GeneratedRecord))]
     [CborSerializable(typeof(GeneratedCreatorHolder))]
     public partial class CreatorContext : CborSerializerContext
+    {
+    }
+
+    [CborSerializable(typeof(GeneratedIndexedRecord))]
+    [CborSerializable(typeof(GeneratedDiscriminatedRecord))]
+    [CborSourceGenerationOptions(ObjectFormat = CborObjectFormat.Array)]
+    public partial class CreatorArrayContext : CborSerializerContext
+    {
+    }
+
+    [CborSerializable(typeof(GeneratedIndexedRecord))]
+    [CborSourceGenerationOptions(ObjectFormat = CborObjectFormat.IntKeyMap)]
+    public partial class CreatorIntKeyContext : CborSerializerContext
     {
     }
 
@@ -87,6 +111,45 @@ namespace Dahomey.Cbor.Tests
             // And the reflection path agrees, which is what makes this the right constructor rather
             // than merely a working one.
             Assert.Equal("seven", Cbor.Deserialize<GeneratedCreatorHolder>(generated.HexToBytes()).Name);
+        }
+
+        private static void AssertIndexedRoundTrip(CborSerializerContext context, CborObjectFormat format)
+        {
+            GeneratedIndexedRecord value = new GeneratedIndexedRecord(7, "seven");
+            CborOptions reflection = new CborOptions { ObjectFormat = format };
+
+            string generated = Helper.Write(value, context.Options);
+
+            Assert.Equal(Helper.Write(value, reflection), generated, ignoreCase: true);
+            Assert.Equal(value, Cbor.Deserialize<GeneratedIndexedRecord>(generated.HexToBytes(), context.Options));
+            Assert.Equal(value, Cbor.Deserialize<GeneratedIndexedRecord>(generated.HexToBytes(), reflection));
+        }
+
+        [Fact]
+        public void ARecordRoundTripsInTheArrayFormat()
+        {
+            AssertIndexedRoundTrip(new CreatorArrayContext(), CborObjectFormat.Array);
+        }
+
+        [Fact]
+        public void ARecordRoundTripsInTheIntKeyMapFormat()
+        {
+            AssertIndexedRoundTrip(new CreatorIntKeyContext(), CborObjectFormat.IntKeyMap);
+        }
+
+        /// <summary>
+        /// A discriminator takes slot 0 of an Array, so the declared indexes start at 1 -- the creator
+        /// is told those same indexes, not positions counted from the first parameter.
+        /// </summary>
+        [Fact]
+        public void ADiscriminatedRecordKeepsItsDeclaredIndexes()
+        {
+            CreatorArrayContext context = new CreatorArrayContext();
+            GeneratedDiscriminatedRecord value = new GeneratedDiscriminatedRecord(7, "seven");
+
+            string generated = Helper.Write(value, context.Options);
+
+            Assert.Equal(value, Cbor.Deserialize<GeneratedDiscriminatedRecord>(generated.HexToBytes(), context.Options));
         }
 
         internal static GeneratedRecord SampleRecord() => new GeneratedRecord(7, "seven");

@@ -223,6 +223,16 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedCreatorTests.SampleRecord();
             }
 
+            if (type == typeof(GeneratedIndexedRecord))
+            {
+                return new GeneratedIndexedRecord(7, "seven");
+            }
+
+            if (type == typeof(GeneratedDiscriminatedRecord))
+            {
+                return new GeneratedDiscriminatedRecord(7, "seven");
+            }
+
             if (type == typeof(GeneratedCreatorHolder))
             {
                 return GeneratedCreatorTests.SampleHolder();
