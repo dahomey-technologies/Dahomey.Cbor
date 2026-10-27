@@ -66,6 +66,18 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 return new BigIntegerConverter();
             }
 
+#if NET6_0_OR_GREATER
+            if (type == typeof(DateOnly))
+            {
+                return new DateOnlyConverter(options);
+            }
+
+            if (type == typeof(TimeOnly))
+            {
+                return new TimeOnlyConverter(options);
+            }
+#endif
+
             if (type == typeof(DateTimeOffset))
             {
                 return new DateTimeOffsetConverter(options);

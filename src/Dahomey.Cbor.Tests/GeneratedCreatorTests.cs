@@ -319,8 +319,15 @@ namespace Dahomey.Cbor.Tests
         public required int Id { get; set; }
     }
 
+    /// <summary>A creator beside the two member-level features that decide what is written and read.</summary>
+    public record GeneratedCreatorMemberFeatures([property: CborRequired] int Id, string Name)
+    {
+        public bool ShouldSerializeName() => Name != null;
+    }
+
     [CborSerializable(typeof(GeneratedRecord))]
     [CborSerializable(typeof(GeneratedCreatorHolder))]
+    [CborSerializable(typeof(GeneratedCreatorMemberFeatures))]
     [CborSerializable(typeof(GeneratedRequiredCreator))]
     [CborSerializable(typeof(GeneratedRequiredStruct))]
     [CborSerializable(typeof(GeneratedWide17))]
@@ -799,6 +806,31 @@ namespace Dahomey.Cbor.Tests
                 Helper.Write(new GeneratedRequiredStruct(7)));
 
             Assert.Equal(7, read.Id);
+        }
+
+        [Fact]
+        public void ACreatorCoexistsWithShouldSerializeAndRequiredMembers()
+        {
+            CreatorContext context = new CreatorContext();
+
+            // Written whole, and with Name omitted by ShouldSerializeName.
+            foreach (GeneratedCreatorMemberFeatures value in new[]
+            {
+                new GeneratedCreatorMemberFeatures(7, "n"),
+                new GeneratedCreatorMemberFeatures(7, null),
+            })
+            {
+                Assert.Equal(value, AssertMatchesReflection(
+                    context, CborObjectFormat.StringKeyMap, value, Helper.Write(value)));
+            }
+
+            // Id is required: a document without it ({"Name": "n"}) is refused by both paths alike.
+            const string WithoutId = "A1" + "644E616D65" + "616E";
+
+            Assert.Throws<CborException>(() => Cbor.Deserialize<GeneratedCreatorMemberFeatures>(
+                WithoutId.HexToBytes(), context.Options));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<GeneratedCreatorMemberFeatures>(
+                WithoutId.HexToBytes(), new CborOptions()));
         }
 
         internal static GeneratedRecord SampleRecord() => new GeneratedRecord(7, "seven");

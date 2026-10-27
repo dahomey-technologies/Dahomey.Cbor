@@ -341,6 +341,20 @@ namespace Dahomey.Cbor.Generator
                 case "Dahomey.Cbor.CborBigFloat":
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
 
+                // The two RFC 8943 tags, chosen by the same option that governs a DateTime: 1004 over
+                // a full-date string, 100 over a count of days. Both numeric formats write the day
+                // count, since a date has no time of day to carry milliseconds.
+                case "System.DateOnly":
+                    return options.DateTimeFormat is "Unix" or "UnixMilliseconds"
+                        ? "#6.100(int)"
+                        : "#6.1004(tstr)";
+
+                // Untagged, alone among the date and time types: no registered tag describes a time of
+                // day, so TimeOnlyConverter writes none and the schema must not claim one. One
+                // encoding whatever DateTimeFormat says.
+                case "System.TimeOnly":
+                    return "tstr";
+
                 // The same three forms a DateTime takes, since it is the same pair of tags. Only tag 0
                 // carries the offset; tag 1 names an instant and drops it.
                 case "System.DateTimeOffset":

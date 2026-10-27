@@ -72,6 +72,30 @@ namespace Dahomey.Cbor.Generator
         /// <summary>The C# member name, used to build the accessor lambdas.</summary>
         public string Name { get; }
 
+        /// <summary>
+        /// The <c>[CborRequired]</c> policy as a <c>RequirementPolicy</c> member name, or null where the
+        /// member is not required.
+        /// </summary>
+        public string? RequirementPolicy { get; set; }
+
+        /// <summary>
+        /// The name of the <c>ShouldSerialize&lt;Member&gt;()</c> method governing this member, or null
+        /// where the type declares none the reflection path would use.
+        /// </summary>
+        /// <remarks>
+        /// Carried by name rather than as a symbol because all the emitter needs is the call, and the
+        /// rules for which method counts — public, no parameters, returning <c>bool</c> — are the
+        /// reflection path's and are applied where the member is collected.
+        /// </remarks>
+        public string? ShouldSerializeMethod { get; set; }
+
+        /// <summary>
+        /// The fully qualified type declaring <see cref="ShouldSerializeMethod"/>, which the emitted
+        /// call is cast to. Not the object's own type: the method may be inherited, and a derived type
+        /// may hide it with one the reflection path does not see.
+        /// </summary>
+        public string? ShouldSerializeOwner { get; set; }
+
         /// <summary>The wire name, after naming convention and <c>[CborProperty]</c>.</summary>
         public string CborName { get; }
 
