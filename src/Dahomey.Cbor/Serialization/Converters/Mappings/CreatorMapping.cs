@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Dahomey.Cbor.Serialization.Converters.Mappings
@@ -171,7 +170,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                                             }
                                             else
                                             {
-                                                _memberNames.Add(new RawString(memberMapping.MemberName, Encoding.ASCII));
+                                                _memberNames.Add(new RawString(memberMapping.MemberName));
                                             }
                                         }
                                         else
