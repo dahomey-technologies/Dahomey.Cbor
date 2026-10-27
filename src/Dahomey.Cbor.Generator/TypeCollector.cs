@@ -522,6 +522,7 @@ namespace Dahomey.Cbor.Generator
                     case "CborObjectFormatAttribute":
                         if (attribute.ConstructorArguments.Length == 1)
                         {
+                            model.ObjectFormatDeclared = true;
                             model.ObjectFormat = attribute.ConstructorArguments[0].Value switch
                             {
                                 1 => "IntKeyMap",

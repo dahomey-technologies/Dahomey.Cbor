@@ -42,8 +42,66 @@ namespace Dahomey.Cbor.Tests
     {
     }
 
+    /// <summary>A context with no source-generation options: the format comes from the options passed in.</summary>
+    [CborSerializable(typeof(GeneratedTakesArrayFormat))]
+    public partial class RuntimeOptionsContext : CborSerializerContext
+    {
+        public RuntimeOptionsContext(CborOptions options) : base(options)
+        {
+        }
+    }
+
+    /// <summary>The decorated counterpart, in its own context so each case fails for its own reason.</summary>
+    [CborSerializable(typeof(GeneratedKeptMapFormat))]
+    public partial class RuntimeOptionsDecoratedContext : CborSerializerContext
+    {
+        public RuntimeOptionsDecoratedContext(CborOptions options) : base(options)
+        {
+        }
+    }
+
     public class GeneratedObjectFormatTests
     {
+        /// <summary>
+        /// An undecorated type must not be pinned to a format by the generated code: an ObjectFormat
+        /// supplied through the options handed to the context applies to it, as on the reflection path.
+        /// </summary>
+        [Fact]
+        public void AnUndecoratedTypeTakesTheFormatOfTheOptionsPassedToTheContext()
+        {
+            CborOptions supplied = new CborOptions { ObjectFormat = CborObjectFormat.Array };
+            RuntimeOptionsContext context = new RuntimeOptionsContext(supplied);
+            GeneratedTakesArrayFormat value = new GeneratedTakesArrayFormat { Id = 7, Name = "n" };
+
+            string generated = Helper.Write(value, context.Options);
+
+            Assert.StartsWith("82", generated, System.StringComparison.OrdinalIgnoreCase);
+
+            CborOptions reflection = new CborOptions { ObjectFormat = CborObjectFormat.Array };
+            Assert.Equal(Helper.Write(value, reflection), generated, ignoreCase: true);
+
+            GeneratedTakesArrayFormat read =
+                Cbor.Deserialize<GeneratedTakesArrayFormat>(generated.HexToBytes(), context.Options);
+            Assert.Equal(7, read.Id);
+            Assert.Equal("n", read.Name);
+        }
+
+        /// <summary>A decorated type still beats the options passed in, and matches reflection.</summary>
+        [Fact]
+        public void ADecoratedTypeKeepsItsFormatUnderTheOptionsPassedToTheContext()
+        {
+            RuntimeOptionsDecoratedContext context =
+                new RuntimeOptionsDecoratedContext(new CborOptions { ObjectFormat = CborObjectFormat.Array });
+            GeneratedKeptMapFormat value = new GeneratedKeptMapFormat { Id = 7, Name = "n" };
+
+            string generated = Helper.Write(value, context.Options);
+
+            Assert.StartsWith("A2", generated, System.StringComparison.OrdinalIgnoreCase);
+
+            CborOptions reflection = new CborOptions { ObjectFormat = CborObjectFormat.Array };
+            Assert.Equal(Helper.Write(value, reflection), generated, ignoreCase: true);
+        }
+
         [Fact]
         public void ATypeDeclaringMapFormatKeepsItUnderAnArrayDefault()
         {

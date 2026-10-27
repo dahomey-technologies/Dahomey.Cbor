@@ -101,6 +101,13 @@ namespace Dahomey.Cbor.Generator
         public string ObjectFormat { get; set; } = "StringKeyMap";
 
         /// <summary>
+        /// Whether the type itself carries <c>[CborObjectFormat]</c>. Only then is the format stated in
+        /// the generated registration: an undecorated type takes the options' format, as it does on the
+        /// reflection path.
+        /// </summary>
+        public bool ObjectFormatDeclared { get; set; }
+
+        /// <summary>
         /// A tuple's type arguments, when <see cref="Kind"/> is <see cref="TypeKind.Tuple"/>: one per
         /// element up to seven, and for a longer tuple the seven plus the <c>Rest</c> holding the
         /// overflow. These are the converter's type arguments, so the eighth is the <c>Rest</c>'s own
