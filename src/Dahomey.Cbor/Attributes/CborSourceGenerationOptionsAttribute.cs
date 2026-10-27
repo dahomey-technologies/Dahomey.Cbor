@@ -60,6 +60,7 @@ namespace Dahomey.Cbor.Attributes
         public DecimalFormat DecimalFormat { get; set; } = DecimalFormat.DecimalFloat;
 
         /// <summary>
+        /// How a <see cref="TimeSpan"/> is written and read. Mirrors
         /// <see cref="CborOptions.TimeSpanFormat"/>.
         /// </summary>
         /// <remarks>
@@ -68,5 +69,11 @@ namespace Dahomey.Cbor.Attributes
         /// as an object, and a value supplied at run time arrives after the context is generated.
         /// </remarks>
         public TimeSpanFormat TimeSpanFormat { get; set; } = TimeSpanFormat.Members;
+
+        /// <summary>
+        /// How a <see cref="System.Guid"/> in an untagged byte string is read. Mirrors
+        /// <see cref="CborOptions.UntaggedGuidFormat"/>.
+        /// </summary>
+        public UntaggedGuidFormat UntaggedGuidFormat { get; set; } = UntaggedGuidFormat.Refuse;
     }
 }

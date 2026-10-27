@@ -2,6 +2,7 @@
 using System.Buffers.Text;
 using System.Globalization;
 using System.Text;
+using Dahomey.Cbor.Util;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -109,32 +110,21 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return false;
             }
 
-            int milliseconds = 0;
-            if (TryReadByte(ref buffer, (byte)'.'))
+            if (!Rfc3339.TryReadSecondFraction(ref buffer, out long fractionTicks))
             {
-                if (!TryReadInt32(ref buffer, 1, out int digit))
-                {
-                    value = default;
-                    return false;
-                }
-
-                milliseconds = digit;
-
-                while (TryReadInt32(ref buffer, 1, out digit))
-                {
-                    milliseconds = milliseconds * 10 + digit;
-                }
+                value = default;
+                return false;
             }
 
             // unspecified time zone => DateTimeKind is taken from the option UnqualifiedTimeZoneDateTimeKind, Local beeing the default
             if (buffer.IsEmpty)
             {
-                value = new DateTime(year, month, day, hours, minutes, seconds, milliseconds, _options.UnqualifiedTimeZoneDateTimeKind);
+                value = new DateTime(year, month, day, hours, minutes, seconds, _options.UnqualifiedTimeZoneDateTimeKind).AddTicks(fractionTicks);
             }
             // UTC
             else if (TryReadByte(ref buffer, (byte)'Z'))
             {
-                value = new DateTime(year, month, day, hours, minutes, seconds, milliseconds, DateTimeKind.Utc);
+                value = new DateTime(year, month, day, hours, minutes, seconds, DateTimeKind.Utc).AddTicks(fractionTicks);
             }
             // Other time zones => convert to UTC
             else
@@ -181,7 +171,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                     offsetMinutes = -offsetMinutes;
                 }
 
-                value = new DateTime(year, month, day, hours, minutes, seconds, milliseconds, DateTimeKind.Utc)
+                value = new DateTime(year, month, day, hours, minutes, seconds, DateTimeKind.Utc)
+                    .AddTicks(fractionTicks)
                     .AddHours(offsetHours)
                     .AddMinutes(offsetMinutes);
             }

@@ -40,6 +40,45 @@ namespace Dahomey.Cbor.GeneratorTests
                 .ToList();
         }
 
+        /// <summary>
+        /// Compiles <paramref name="librarySource"/> into its own assembly and runs the generator over
+        /// <paramref name="consumerSource"/> referencing it, so every type from the library reaches the
+        /// generator as a metadata symbol rather than as source. Returns the generator's diagnostics
+        /// and what it generated.
+        /// </summary>
+        public static (IReadOnlyList<Diagnostic> Diagnostics, string Generated) RunAgainstLibrary(
+            string librarySource, string consumerSource)
+        {
+            CSharpCompilation library = CSharpCompilation.Create(
+                "GeneratorTestLibrary",
+                new[] { CSharpSyntaxTree.ParseText(librarySource) },
+                ReferenceSet(),
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+
+            using System.IO.MemoryStream image = new System.IO.MemoryStream();
+            var emitted = library.Emit(image);
+            if (!emitted.Success)
+            {
+                throw new InvalidOperationException(
+                    "The library did not compile: " + string.Join(", ", emitted.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)));
+            }
+
+            MetadataReference libraryReference = MetadataReference.CreateFromImage(image.ToArray());
+
+            CSharpCompilation consumer = CSharpCompilation.Create(
+                "GeneratorTestConsumer",
+                new[] { CSharpSyntaxTree.ParseText(consumerSource) },
+                ReferenceSet().Append(libraryReference),
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+
+            CSharpGeneratorDriver.Create(new CborSourceGenerator())
+                .RunGeneratorsAndUpdateCompilation(consumer, out Compilation output, out ImmutableArray<Diagnostic> diagnostics);
+
+            return (
+                diagnostics.OrderBy(diagnostic => diagnostic.Id).ToList(),
+                string.Join(Environment.NewLine, output.SyntaxTrees.Skip(1).Select(tree => tree.ToString())));
+        }
+
         public static string GeneratedSource(string source)
         {
             Run(source, out _, out Compilation output);

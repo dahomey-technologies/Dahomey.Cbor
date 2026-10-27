@@ -57,7 +57,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor MissingMemberIndex = new(
             id: "CBOR1005",
             title: "Member needs an explicit index",
-            messageFormat: "'{0}.{1}' needs [CborProperty(index)] because '{0}' uses the {2} object format",
+            messageFormat: "'{0}.{1}' needs [CborProperty(index)] because '{0}' uses the {2} object format{3}",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -185,6 +185,21 @@ namespace Dahomey.Cbor.Generator
             id: "CBOR1014",
             title: "Two members map to one CBOR index",
             messageFormat: "'{0}' maps both '{1}' and '{2}' to CBOR index {3}; a document can only carry one of them, so give one a different [CborProperty] index",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// A <c>public bool ShouldSerialize&lt;Member&gt;()</c> that the reflection path cannot turn
+        /// into a call: it builds an expression over the method, which throws for a static or an open
+        /// generic one, and <c>GetMethod</c> throws before that when the generic and non-generic
+        /// versions are both public. The type is unusable there, so a generated context that wrote the
+        /// member regardless would be accepting what the reflection path refuses.
+        /// </summary>
+        public static readonly DiagnosticDescriptor ShouldSerializeRefused = new(
+            id: "CBOR1017",
+            title: "ShouldSerialize method cannot be used",
+            messageFormat: "'{0}.{1}' is governed by '{2}', which cannot be called as a predicate: {3}. The reflection path throws for it when it builds the mapping. Make it a public, non-generic instance method returning bool, or make it non-public.",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);

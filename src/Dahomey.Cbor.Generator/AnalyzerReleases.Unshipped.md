@@ -6,3 +6,4 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|------------------------------------------------------------------
+CBOR1017 | Dahomey.Cbor.Generator | Error | ShouldSerialize method cannot be used

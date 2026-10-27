@@ -328,6 +328,7 @@ namespace Dahomey.Cbor.Generator
         public string? TypedArrayMode { get; private set; }
         public string? DecimalFormat { get; private set; }
         public string? TimeSpanFormat { get; private set; }
+        public string? UntaggedGuidFormat { get; private set; }
 
         /// <summary>
         /// Whether this context writes RFC 8746 typed arrays, which is the only half of
@@ -452,6 +453,14 @@ namespace Dahomey.Cbor.Generator
                         options.TimeSpanFormat = named.Value.Value switch
                         {
                             1 => "Duration",
+                            _ => null,
+                        };
+                        break;
+
+                    case "UntaggedGuidFormat":
+                        options.UntaggedGuidFormat = named.Value.Value switch
+                        {
+                            1 => "ClrByteOrder",
                             _ => null,
                         };
                         break;

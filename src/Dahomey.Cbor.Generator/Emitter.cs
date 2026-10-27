@@ -263,6 +263,21 @@ namespace Dahomey.Cbor.Generator
                             $"new DictionaryConverter<{FullName(model.Symbol)}, {FullName(model.ElementType!)}, {FullName(model.ValueType!)}>(options)");
                         break;
 
+                    // An interface cannot be instantiated, so the read fills the backing collection and
+                    // hands it back as the interface. Naming that backing type here is what the
+                    // reflection path reaches MakeGenericType for, and the reason these were CBOR1002:
+                    // nothing in the source mentions List<T> merely because a member said IList<T>.
+                    case TypeKind.InterfaceCollection:
+                        EmitSimpleRegistration(builder, indent, model.Symbol,
+                            $"new InterfaceCollectionConverter<{model.BackingType}<{FullName(model.ElementType!)}>, "
+                            + $"{FullName(model.Symbol)}, {FullName(model.ElementType!)}>(options)");
+                        break;
+
+                    case TypeKind.InterfaceDictionary:
+                        EmitSimpleRegistration(builder, indent, model.Symbol,
+                            $"new InterfaceDictionaryConverter<{FullName(model.ElementType!)}, {FullName(model.ValueType!)}>(options)");
+                        break;
+
                     // One converter per arity, named with the tuple's own type arguments -- so the
                     // instantiation is written out here rather than made at run time, which is the whole
                     // point: the reflection provider reaches MakeGenericType, and a tuple was therefore
@@ -359,6 +374,12 @@ namespace Dahomey.Cbor.Generator
                 wrote = true;
             }
 
+            if (options.UntaggedGuidFormat is not null)
+            {
+                builder.AppendLine($"{indent}        options.UntaggedGuidFormat = UntaggedGuidFormat.{options.UntaggedGuidFormat};");
+                wrote = true;
+            }
+
             if (wrote)
             {
                 builder.AppendLine();
@@ -410,7 +431,12 @@ namespace Dahomey.Cbor.Generator
             builder.AppendLine($"{indent}        options.Registry.ObjectMappingRegistry.Register<{fullName}>(objectMapping =>");
             builder.AppendLine($"{indent}        {{");
 
-            if (model.ObjectFormat != "StringKeyMap")
+            // Stated whenever the type declares or inherits [CborObjectFormat], StringKeyMap included, and only then.
+            // The mapping's own default is the *options* format, so a declared StringKeyMap that is
+            // skipped is lost under a context whose options say Array. An undecorated type must not
+            // state it: pinning it would defeat an ObjectFormat supplied through the CborOptions
+            // passed to the context. The reflection path behaves the same way.
+            if (model.ObjectFormatDeclared)
             {
                 builder.AppendLine($"{indent}            objectMapping.SetObjectFormat(CborObjectFormat.{model.ObjectFormat});");
             }
@@ -479,10 +505,21 @@ namespace Dahomey.Cbor.Generator
                 ? $".SetMemberIndex({member.CborIndex})"
                 : $".SetMemberName({Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(member.CborName, quote: true)})";
 
+            // Both are calls DelegateMemberMapping has always offered; what was missing was the
+            // generator making them, which is why they were CBOR1007 rather than a shape it could not
+            // reproduce. Order follows the reflection path's: the predicate, then the requirement.
+            string shouldSerialize = member.ShouldSerializeMethod is null || member.ShouldSerializeOwner is null
+                ? string.Empty
+                : $".SetShouldSerializeMethod(o => (({member.ShouldSerializeOwner})o).{member.ShouldSerializeMethod}())";
+
+            string required = member.RequirementPolicy is null
+                ? string.Empty
+                : $".SetRequired({member.RequirementPolicy})";
+
             builder.AppendLine($"{indent}                new {mappingType}(");
             builder.AppendLine($"{indent}                    converters,");
             builder.AppendLine($"{indent}                    {getter},");
-            builder.AppendLine($"{indent}                    {setter}){key},");
+            builder.AppendLine($"{indent}                    {setter}){key}{shouldSerialize}{required},");
         }
 
         private static string FullName(ITypeSymbol type)

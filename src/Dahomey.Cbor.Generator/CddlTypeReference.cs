@@ -119,6 +119,9 @@ namespace Dahomey.Cbor.Generator
 
                     goto case TypeKind.Collection;
 
+                // A collection interface describes the same document as the concrete collection behind
+                // it: the backing type decides what the reader hands back, not what goes on the wire.
+                case TypeKind.InterfaceCollection:
                 case TypeKind.Collection:
                 {
                     string? element = Render(
@@ -127,6 +130,7 @@ namespace Dahomey.Cbor.Generator
                     break;
                 }
 
+                case TypeKind.InterfaceDictionary:
                 case TypeKind.Dictionary:
                 {
                     string? dictionaryKey = Render(
@@ -255,11 +259,16 @@ namespace Dahomey.Cbor.Generator
                 case SpecialType.System_UInt32:
                     return "0..4294967295";
 
+                // Spelled out rather than as the prelude's `int` and `uint`. `int` is wider than a
+                // long (a CBOR integer reaches -2^64..2^64-1), while `uint` has exactly a ulong's
+                // range. Both are ranges anyway: it keeps them consistent with the narrower widths
+                // above, and tells a code generator reading the schema which integer width to
+                // declare -- given a bare `int` or `uint` it has to guess, and zcbor guesses 32 bits.
                 case SpecialType.System_Int64:
-                    return "int";
+                    return "-9223372036854775808..9223372036854775807";
 
                 case SpecialType.System_UInt64:
-                    return "uint";
+                    return "0..18446744073709551615";
 
                 // CborWriter.WriteSingle and WriteDouble both emit the shortest form that round-trips,
                 // unconditionally, so a double may arrive on the wire as float16, float32 or float64.
@@ -333,10 +342,34 @@ namespace Dahomey.Cbor.Generator
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
 
                 // Reachable only under TimeSpanFormat.Duration -- otherwise the type is an object and
-                // never arrives here. The nanosecond entry (an unsigned fraction added to the base) is written only for a value that has a
-                // fractional part, so it is optional in the schema.
+                // never arrives here. The nanosecond entry, an unsigned fraction added to the base, is
+                // written only for a value that has a fractional part, so it is optional in the schema.
                 case "System.TimeSpan":
                     return "#6.1002({1 => int, ? -9 => uint})";
+
+                // The two RFC 8943 tags, chosen by the same option that governs a DateTime: 1004 over
+                // a full-date string, 100 over a count of days. Both numeric formats write the day
+                // count, since a date has no time of day to carry milliseconds.
+                case "System.DateOnly":
+                    return options.DateTimeFormat is "Unix" or "UnixMilliseconds"
+                        ? "#6.100(int)"
+                        : "#6.1004(tstr)";
+
+                // Untagged, alone among the date and time types: no registered tag describes a time of
+                // day, so TimeOnlyConverter writes none and the schema must not claim one. One
+                // encoding whatever DateTimeFormat says.
+                case "System.TimeOnly":
+                    return "tstr";
+
+                // The same three forms a DateTime takes, since it is the same pair of tags. Only tag 0
+                // carries the offset; tag 1 names an instant and drops it.
+                case "System.DateTimeOffset":
+                    return options.DateTimeFormat switch
+                    {
+                        "Unix" => "#6.1(int)",
+                        "UnixMilliseconds" => "#6.1(float)",
+                        _ => "#6.0(tstr)",
+                    };
 
                 // HalfConverter writes through CborWriter.WriteHalf, which emits binary16 and nothing
                 // wider -- unlike WriteSingle and WriteDouble, which pick the shortest form that round
@@ -344,11 +377,15 @@ namespace Dahomey.Cbor.Generator
                 // than merely permitted.
                 case "System.Half":
                     return "float16";
+
+                // RFC 9562's binary UUID. Always tagged and always sixteen bytes, so no option
+                // reaches it and the size is part of the schema.
+                case "System.Guid":
+                    return "#6.37(bstr .size 16)";
             }
 
-            // Guid and DateTimeOffset have no scalar converter. System.Decimal reaches here only in
-            // its default encoding, which is likewise indescribable. Each falls through to CBOR1011
-            // rather than asserting a row no converter backs.
+            // System.Decimal reaches here only in its default encoding, which is indescribable: it
+            // falls through to CBOR1011 rather than asserting a row no converter backs.
             return null;
         }
 
