@@ -570,7 +570,13 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 if (context.converter == null)
                 {
+                    // A container with no items never reached ReadItem, which is where the instance is
+                    // made and the deserializing callbacks run, so the object is begun here instead.
+                    // With no item there is no discriminator either, so the object is this
+                    // converter's type -- as it is for a map holding nothing but a name no member
+                    // answers to -- and an interface or an abstract class is refused the same way.
                     context.converter = this;
+                    BeginObject(ref context);
                 }
                 IObjectMapping objectMapping = context.converter.ObjectMapping;
 
@@ -816,6 +822,31 @@ namespace Dahomey.Cbor.Serialization.Converters
             return WriteItem(ref writer, ref context);
         }
 
+        /// <summary>
+        /// Makes the instance the members are read into and runs the deserializing callbacks, for a
+        /// type that is not built from a creator mapping afterwards.
+        /// </summary>
+        /// <remarks>
+        /// Reached from the first item of a container and, when it has none, from the end of the read:
+        /// the two have to do the same thing, or an object holding nothing is a different object from
+        /// one holding something.
+        /// </remarks>
+        private void BeginObject(ref ReaderContext context)
+        {
+            if (context.creatorValues == null && context.creatorValuesByIndex == null)
+            {
+                if (!_isStruct && context.obj == null)
+                {
+                    context.obj = context.converter.CreateInstance();
+                }
+
+                if (context.converter.ObjectMapping.OnDeserializingMethod != null)
+                {
+                    ((Action<T>)context.converter.ObjectMapping.OnDeserializingMethod)(context.obj);
+                }
+            }
+        }
+
         private void ReadItem(ref CborReader reader, ref ReaderContext context)
         {
             // Only the Array arm below consumes what it read to resolve the type; the map arms hand
@@ -968,18 +999,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                 // resolved by the converter chosen here, so the ordinals its entries carry mean the
                 // same thing for the whole read -- which is what lets one bitmask stand for "already
                 // read" across it.
-                if (context.creatorValues == null && context.creatorValuesByIndex == null)
-                {
-                    if (!_isStruct && context.obj == null)
-                    {
-                        context.obj = context.converter.CreateInstance();
-                    }
-
-                    if (context.converter.ObjectMapping.OnDeserializingMethod != null)
-                    {
-                        ((Action<T>)context.converter.ObjectMapping.OnDeserializingMethod)(context.obj);
-                    }
-                }
+                BeginObject(ref context);
 
                 if (discriminatorConsumed)
                 {
