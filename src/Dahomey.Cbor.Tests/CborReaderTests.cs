@@ -243,6 +243,14 @@ namespace Dahomey.Cbor.Tests
         [InlineData("FC0DED017037E8D1950000000000100000", "100.3459873459458453", null)]
         [InlineData("FCFFFFFFFFFFFFFFFFFFFFFFFF80000000", "-79228162514264337593543950335", null)]
         [InlineData("FCFFFFFFFFFFFFFFFFFFFFFFFF00000000", "79228162514264337593543950335", null)]
+        // A float is read as the shortest text that reads back as it, not to 7 or 15 significant digits.
+        [InlineData("FA4B800000", "16777216", null)]
+        [InlineData("FA3DCCCCCD", "0.1", null)]
+        [InlineData("FB3FD3333333333334", "0.30000000000000004", null)]
+        [InlineData("FB4340000000000000", "9007199254740992", null)]
+        [InlineData("FB3FB999999999999A", "0.1", null)]
+        [InlineData("F93E00", "1.5", null)]
+        [InlineData("FA00000001", "0", null)]
         public void ReadDecimal2(string hexBuffer, string expectedValue, Type expectedExceptionType)
         {
             if (!decimal.TryParse(expectedValue, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal decimalValue)) throw new InvalidCastException("Specified string cannot be cast to a decimal value");

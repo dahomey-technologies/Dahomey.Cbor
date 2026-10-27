@@ -1357,7 +1357,10 @@ namespace Dahomey.Cbor.Serialization
         // this reader catches; the range is checked first instead. The comparison is false for NaN.
         private const double DecimalLimit = 79228162514264337593543950336.0; // 2^96
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        // Both go through the shortest text that reads back as the same float, which is what a JSON
+        // reader parsing "0.30000000000000004" into a decimal sees. Convert.ToDecimal rounds to 7
+        // significant digits for a float and 15 for a double, so float32 16777216 read as 16777220
+        // and the double 0.30000000000000004 as 0.3.
         private decimal ToDecimal(float value)
         {
             if (!(Math.Abs(value) < DecimalLimit))
@@ -1365,10 +1368,15 @@ namespace Dahomey.Cbor.Serialization
                 ThrowNotADecimal(value.ToString("R", CultureInfo.InvariantCulture));
             }
 
-            return Convert.ToDecimal(value);
+#if NETSTANDARD2_0
+            return ParseDecimal(value.ToString("R", CultureInfo.InvariantCulture));
+#else
+            Span<char> text = stackalloc char[32];
+            value.TryFormat(text, out int length, "R", CultureInfo.InvariantCulture);
+            return ParseDecimal(text.Slice(0, length));
+#endif
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private decimal ToDecimal(double value)
         {
             if (!(Math.Abs(value) < DecimalLimit))
@@ -1376,7 +1384,22 @@ namespace Dahomey.Cbor.Serialization
                 ThrowNotADecimal(value.ToString("R", CultureInfo.InvariantCulture));
             }
 
-            return Convert.ToDecimal(value);
+#if NETSTANDARD2_0
+            return ParseDecimal(value.ToString("R", CultureInfo.InvariantCulture));
+#else
+            Span<char> text = stackalloc char[32];
+            value.TryFormat(text, out int length, "R", CultureInfo.InvariantCulture);
+            return ParseDecimal(text.Slice(0, length));
+#endif
+        }
+
+#if NETSTANDARD2_0
+        private static decimal ParseDecimal(string text)
+#else
+        private static decimal ParseDecimal(ReadOnlySpan<char> text)
+#endif
+        {
+            return decimal.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
         }
 
         private void ThrowNotADecimal(string value)
