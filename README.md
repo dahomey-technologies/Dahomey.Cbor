@@ -160,7 +160,7 @@ Where the discriminator is written, when it is written, and how to change its na
 | [Object mapping](docs/object-mapping.md) | `ObjectMappingRegistry`, `AutoMap`, adjusting a single member |
 | [Polymorphism](docs/polymorphism.md) | Discriminators, policies and conventions |
 | [Typed arrays](docs/typed-arrays.md) | RFC 8746, `TypedArrayMode`, and what reads what |
-| [Numbers](docs/numbers.md) | `BigInteger`, `decimal`, `CborDecimalFraction` and `CborBigFloat` |
+| [Numbers](docs/numbers.md) | `BigInteger`, `decimal`, `CborDecimalFraction`, `CborBigFloat` and `Half` |
 | [Dates and times](docs/dates-and-times.md) | `DateTime`, `DateOnly`, `TimeOnly` and `DateTimeFormat` |
 | [Strings](docs/strings.md) | Indefinite-length strings, and why tag 25 is not supported |
 | [Tuples](docs/tuples.md) | `ValueTuple` at any arity, and the Native AOT requirement |

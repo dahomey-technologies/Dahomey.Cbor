@@ -2,8 +2,8 @@
 
 [← back to the README](../README.md)
 
-Three encodings beyond the basic integers and floats: bignums (tags 2 and 3), decimal fractions
-(tag 4) and bigfloats (tag 5).
+Three encodings beyond the basic integers and floats — bignums (tags 2 and 3), decimal fractions
+(tag 4) and bigfloats (tag 5) — and one at the other end of the range, half-precision floats.
 
 ## Bignums (RFC 8949 §3.4.3)
 
@@ -156,3 +156,38 @@ Equality is structural over the pair as encoded, so `10e0` and `1e1` are the sam
 equal, and neither is normalised on the way out — a document round-trips byte for byte. Two encodings of
 one number are therefore two distinct dictionary keys, and under `CborOptions.Deterministic` they sort as
 the different byte strings they are.
+
+## Half-precision floats (RFC 8949 §3.3)
+
+A member typed `System.Half` reads and writes binary16 — major type 7, additional information 25.
+
+```csharp
+public class Reading
+{
+    public Half Temperature { get; set; }
+}
+```
+
+```csharp
+// (Half)1.5     -> F9 3E00
+// Half.MaxValue -> F9 7BFF   (65504)
+// Half.Epsilon  -> F9 0001   (the smallest subnormal)
+```
+
+**The writer emits binary16 and nothing wider**, where `float` and `double` members emit the shortest
+form that round-trips and so may go out as any of the three widths. That is what lets a generated CDDL
+schema describe a `Half` as `float16` where a `float` needs the prelude's looser `float`. A NaN of any
+payload is written as the canonical `F9 7E00`, so a deterministic encoding admits one spelling of NaN
+rather than 2046.
+
+Reading is as tolerant as a `float` member's, because it is the same reader: an integer, a text string,
+or any of the three float widths all decode. A value past binary16's range saturates to infinity, which
+is what the IEEE conversion does; it is not an error.
+
+`Half` is also the tenth [typed-array](typed-arrays.md) element type, tag 84 little-endian.
+
+> **The encoding changed.** Before `Half` had a converter it fell through to the object mapper and was
+> written as the struct's own members — a document no other decoder reads, and write-only besides, since
+> those members are computed or read-only and a read returned `default`. Such a document is now refused
+> with `Invalid major type Map` rather than silently yielding zero. Nothing that round-tripped before
+> round-trips differently now, because nothing round-tripped.
