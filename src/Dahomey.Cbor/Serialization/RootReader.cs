@@ -27,9 +27,9 @@ namespace Dahomey.Cbor.Serialization
             {
                 return converter.Read(ref reader);
             }
-            catch (CborException exception)
+            catch (CborException exception) when (exception.MarkPathKnownAndDecline())
             {
-                exception.MarkPathKnown();
+                // Not entered: the filter marks the path and declines.
                 throw;
             }
         }
@@ -41,9 +41,9 @@ namespace Dahomey.Cbor.Serialization
             {
                 return converter.Read(ref reader);
             }
-            catch (CborException exception)
+            catch (CborException exception) when (exception.MarkPathKnownAndDecline())
             {
-                exception.MarkPathKnown();
+                // Not entered: the filter marks the path and declines.
                 throw;
             }
         }

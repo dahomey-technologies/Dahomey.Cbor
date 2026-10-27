@@ -646,9 +646,9 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                 return context.obj;
             }
-            catch (CborException exception)
+            catch (CborException exception) when (exception.MarkPathKnownAndDecline())
             {
-                exception.MarkPathKnown();
+                // Not entered: the filter marks the path and declines.
                 throw;
             }
         }
@@ -1048,11 +1048,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                                 }
                             }
                         }
-                        catch (CborException exception)
+                        // The name as it appears in the document. Decoding it in the filter rather than
+                        // keeping it around costs nothing until something has already failed.
+                        catch (CborException exception) when (exception.PrependPathMemberAndDecline(Encoding.UTF8.GetString(memberName)))
                         {
-                            // The name as it appears in the document. Decoding it here rather than
-                            // keeping it around costs nothing until something has already failed.
-                            exception.PrependPathMember(Encoding.UTF8.GetString(memberName));
+                            // Not entered: the filter records the name and declines.
                             throw;
                         }
                     }
@@ -1086,9 +1086,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                                 }
                             }
                         }
-                        catch (CborException exception)
+                        catch (CborException exception) when (PushMemberSegmentAndDecline(exception, context.converter, memberIndex))
                         {
-                            PushMemberSegment(exception, context.converter, memberIndex);
+                            // Not entered: the filter records the member and declines.
                             throw;
                         }
                     }
@@ -1142,9 +1142,9 @@ namespace Dahomey.Cbor.Serialization.Converters
                                 }
                             }
                         }
-                        catch (CborException exception)
+                        catch (CborException exception) when (PushMemberSegmentAndDecline(exception, context.converter, memberIndex))
                         {
-                            PushMemberSegment(exception, context.converter, memberIndex);
+                            // Not entered: the filter records the member and declines.
                             throw;
                         }
                     }
@@ -1156,9 +1156,10 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// Names the member at <paramref name="memberIndex"/> in the failure path, by the name it has
         /// on the type rather than by its position, which is what a caller reading the message is
         /// looking for. Falls back to the position when the index maps to no member -- an index the
-        /// document invented, which has no name to give.
+        /// document invented, which has no name to give. Returns <c>false</c> so that it can be an
+        /// exception filter; see <see cref="CborException.PrependPathMemberAndDecline(string)"/>.
         /// </summary>
-        private static void PushMemberSegment(CborException exception, IObjectConverter converter, int memberIndex)
+        private static bool PushMemberSegmentAndDecline(CborException exception, IObjectConverter converter, int memberIndex)
         {
             // The name comes from the mapping rather than from the member converter: an integer-keyed
             // member has no name in the document, so the converter carries an empty one, and the name
@@ -1168,11 +1169,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                 if (memberMapping.MemberIndex == memberIndex && memberMapping.MemberInfo != null)
                 {
                     exception.PrependPathMember(memberMapping.MemberInfo.Name);
-                    return;
+                    return false;
                 }
             }
 
             exception.PrependPathIndex(memberIndex);
+            return false;
         }
 
         private void ReadValueForStruct(ref CborReader reader, ref T instance, ReadOnlySpan<byte> memberName, ref MemberReadState state)
