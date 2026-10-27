@@ -193,7 +193,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
                                             // name that only matches ignoring case would otherwise never be found.
                                             if (memberMapping.MemberName != null && memberMapping.MemberName != memberName)
                                             {
-                                                _memberNames[i] = new RawString(memberMapping.MemberName, Encoding.ASCII);
+                                                _memberNames[i] = new RawString(memberMapping.MemberName);
                                             }
                                         }
 
