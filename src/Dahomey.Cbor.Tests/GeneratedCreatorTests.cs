@@ -281,8 +281,48 @@ namespace Dahomey.Cbor.Tests
         int A01, string A02, long A03, int A04, int A05, int A06, int A07, int A08, int A09, int A10,
         int A11, int A12, int A13, int A14, int A15, int A16, string A17, int A18, int A19, long A20);
 
+    /// <summary>
+    /// A required member satisfied by a creator marked [SetsRequiredMembers], beside a plain
+    /// parameterless constructor that is not: the read goes through the creator, so no
+    /// <c>new T()</c> is generated for it.
+    /// </summary>
+    public class GeneratedRequiredCreator
+    {
+        [CborConstructor]
+        [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+        public GeneratedRequiredCreator(string name)
+        {
+            Name = name;
+        }
+
+        public GeneratedRequiredCreator()
+        {
+            Name = "unused";
+        }
+
+        public required string Name { get; set; }
+
+        public override bool Equals(object obj) => obj is GeneratedRequiredCreator other && other.Name == Name;
+
+        public override int GetHashCode() => Name?.GetHashCode() ?? 0;
+    }
+
+    public struct GeneratedRequiredStruct
+    {
+        [CborConstructor]
+        [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+        public GeneratedRequiredStruct(int id)
+        {
+            Id = id;
+        }
+
+        public required int Id { get; set; }
+    }
+
     [CborSerializable(typeof(GeneratedRecord))]
     [CborSerializable(typeof(GeneratedCreatorHolder))]
+    [CborSerializable(typeof(GeneratedRequiredCreator))]
+    [CborSerializable(typeof(GeneratedRequiredStruct))]
     [CborSerializable(typeof(GeneratedWide17))]
     [CborSerializable(typeof(GeneratedWide20))]
     [CborSerializable(typeof(GeneratedRenamedRecord))]
@@ -736,6 +776,30 @@ namespace Dahomey.Cbor.Tests
 
         internal static GeneratedWide20 SampleWide20() => new GeneratedWide20(
             1, "two", 3L, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, "seventeen", 18, 19, 20L);
+
+        [Fact]
+        public void ARequiredMemberTheCreatorSatisfiesIsReadThroughTheCreator()
+        {
+            GeneratedRequiredCreator read = AssertMatchesReflection(
+                new CreatorContext(),
+                CborObjectFormat.StringKeyMap,
+                new GeneratedRequiredCreator("n"),
+                Helper.Write(new GeneratedRequiredCreator("n")));
+
+            Assert.Equal("n", read.Name);
+        }
+
+        [Fact]
+        public void ARequiredStructMemberTheCreatorSatisfiesIsReadThroughTheCreator()
+        {
+            GeneratedRequiredStruct read = AssertMatchesReflection(
+                new CreatorContext(),
+                CborObjectFormat.StringKeyMap,
+                new GeneratedRequiredStruct(7),
+                Helper.Write(new GeneratedRequiredStruct(7)));
+
+            Assert.Equal(7, read.Id);
+        }
 
         internal static GeneratedRecord SampleRecord() => new GeneratedRecord(7, "seven");
 

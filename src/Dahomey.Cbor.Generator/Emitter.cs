@@ -545,7 +545,11 @@ namespace Dahomey.Cbor.Generator
             builder.AppendLine($"{indent}        }});");
             builder.AppendLine();
 
-            string factory = model.CanInstantiate ? $", () => new {fullName}()" : string.Empty;
+            // A type with a creator is read through it; the factory would never be called, and for a type
+            // with a [SetsRequiredMembers] creator it would not compile.
+            string factory = model.CanInstantiate && model.CreatorParameters.Count == 0
+                ? $", () => new {fullName}()"
+                : string.Empty;
             builder.AppendLine($"{indent}        RegisterGeneratedConverter(");
             builder.AppendLine($"{indent}            converters, typeof({fullName}), new ObjectConverter<{fullName}>(options{factory}));");
             builder.AppendLine();

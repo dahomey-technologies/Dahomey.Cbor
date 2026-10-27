@@ -328,6 +328,16 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedCreatorTests.SampleWide20();
             }
 
+            if (type == typeof(GeneratedRequiredCreator))
+            {
+                return new GeneratedRequiredCreator("n");
+            }
+
+            if (type == typeof(GeneratedRequiredStruct))
+            {
+                return new GeneratedRequiredStruct(7);
+            }
+
             if (type == typeof(GeneratedCreatorHolder))
             {
                 return GeneratedCreatorTests.SampleHolder();

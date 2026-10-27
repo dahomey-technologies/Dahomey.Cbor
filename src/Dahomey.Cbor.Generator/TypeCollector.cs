@@ -292,22 +292,6 @@ namespace Dahomey.Cbor.Generator
                     creator = null;
                     creatorUnreachable = true;
                 }
-
-                IMethodSymbol? parameterless = (type as INamedTypeSymbol)?.InstanceConstructors
-                    .FirstOrDefault(c => !c.IsStatic && c.Parameters.Length == 0);
-
-                if (model.CanInstantiate
-                    && (parameterless is null || !HasAttribute(parameterless, "SetsRequiredMembersAttribute")))
-                {
-                    _diagnostics.Add(DiagnosticInfo.Create(
-                        Diagnostics.CreatorNotReproducible,
-                        (parameterless?.Locations.FirstOrDefault() ?? type.Locations.FirstOrDefault()),
-                        type.ToDisplayString(),
-                        $"member '{requiredMember}' is required, which only an object initializer or a constructor marked "
-                            + "[SetsRequiredMembers] can satisfy, and a generated context calls `new T()` without one"));
-                    model.CanInstantiate = false;
-                    creatorUnreachable = true;
-                }
             }
 
             if (!model.CanInstantiate
@@ -453,7 +437,7 @@ namespace Dahomey.Cbor.Generator
 
                 model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite));
 
-                walked.Add(new WalkedMember(member.Name, cborName, cborIndex, memberType, canWrite, initOnly));
+                walked.Add(new WalkedMember(member, member.Name, cborName, cborIndex, memberType, canWrite, initOnly));
 
                 Collect(memberType);
 
@@ -484,6 +468,30 @@ namespace Dahomey.Cbor.Generator
                 model.CreatorParameters.Clear();
                 model.CreatorMatchesByName = false;
                 resolution = CreatorResolution.None;
+            }
+
+            // The `new T()` factory is emitted only for a type with no creator -- a read that has a
+            // creator never calls it -- so it can only fail to compile for one that ends up without.
+            // Judged here, after the creator is resolved, because a struct's creator may have just
+            // been dropped. A marked parameterless creator was judged with the creators above.
+            if (requiredMember is not null
+                && model.CanInstantiate
+                && model.CreatorParameters.Count == 0
+                && declaredCreator is not { Parameters.Length: 0 })
+            {
+                IMethodSymbol? parameterless = (type as INamedTypeSymbol)?.InstanceConstructors
+                    .FirstOrDefault(c => !c.IsStatic && c.Parameters.Length == 0);
+
+                if (parameterless is null || !HasAttribute(parameterless, "SetsRequiredMembersAttribute"))
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.CreatorNotReproducible,
+                        parameterless?.Locations.FirstOrDefault() ?? type.Locations.FirstOrDefault(),
+                        type.ToDisplayString(),
+                        $"member '{requiredMember}' is required, which only an object initializer or a constructor marked "
+                            + "[SetsRequiredMembers] can satisfy, and a generated context calls `new T()` without one"));
+                    model.CanInstantiate = false;
+                }
             }
 
             if (ambiguousStruct && readOnlyMembers.Count > 0)
@@ -551,8 +559,9 @@ namespace Dahomey.Cbor.Generator
         private readonly struct WalkedMember
         {
             public WalkedMember(
-                string name, string cborName, int? index, ITypeSymbol type, bool canWrite, bool initOnly)
+                ISymbol symbol, string name, string cborName, int? index, ITypeSymbol type, bool canWrite, bool initOnly)
             {
+                Symbol = symbol;
                 Name = name;
                 CborName = cborName;
                 Index = index;
@@ -561,6 +570,7 @@ namespace Dahomey.Cbor.Generator
                 InitOnly = initOnly;
             }
 
+            public ISymbol Symbol { get; }
             public string Name { get; }
             public string CborName { get; }
             public int? Index { get; }
@@ -691,7 +701,7 @@ namespace Dahomey.Cbor.Generator
 
                         if (renamed.InitOnly)
                         {
-                            if (!IsPositionalRecordConstructor(creator))
+                            if (!IsVerbatimPositionalParameter(creator, renamed.Symbol))
                             {
                                 // Passing the value through the constructor is the same object only
                                 // if the parameter is assigned verbatim, which is what a record's
@@ -763,15 +773,28 @@ namespace Dahomey.Cbor.Generator
         }
 
         /// <summary>
-        /// A record's primary constructor, whose parameters the compiler assigns verbatim to the
-        /// properties of the same name. Told apart from an explicit one by where it is declared: the
-        /// record's own header, not a constructor declaration.
+        /// Whether the compiler itself assigns this constructor parameter, unchanged, to this member:
+        /// the record's primary constructor and a property the compiler synthesised from its
+        /// parameter list, on that same record. A synthesised property is told apart from one the
+        /// record declares by its syntax: a parameter of the header, not a property declaration (the
+        /// symbol does not report itself as implicitly declared).
         /// </summary>
-        private static bool IsPositionalRecordConstructor(IMethodSymbol constructor)
+        /// <remarks>
+        /// Both halves are needed. A record may declare the property itself
+        /// (<c>public int X { get; init; } = X * 2;</c>), in which case the parameter is not assigned
+        /// verbatim, and a derived record's parameter can name a property of its base, which the
+        /// derived constructor passes to the base constructor and which is not synthesised again.
+        /// The primary constructor is told apart from an explicit one by where it is declared: the
+        /// record's own header, not a constructor declaration.
+        /// </remarks>
+        private static bool IsVerbatimPositionalParameter(IMethodSymbol constructor, ISymbol member)
         {
             return constructor.ContainingType.IsRecord
                 && constructor.DeclaringSyntaxReferences.Any(
-                    reference => reference.GetSyntax() is Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax);
+                    reference => reference.GetSyntax() is Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax)
+                && member.DeclaringSyntaxReferences.Any(
+                    reference => reference.GetSyntax() is Microsoft.CodeAnalysis.CSharp.Syntax.ParameterSyntax)
+                && SymbolEqualityComparer.Default.Equals(member.ContainingType, constructor.ContainingType);
         }
 
         private static string DescribeTypeMismatch(IParameterSymbol parameter, WalkedMember member)

@@ -1391,7 +1391,10 @@ public partial class Context : CborSerializerContext {{ }}
 [CborSerializable(typeof(Holder))]
 public partial class Context : CborSerializerContext { }
 ";
-            Assert.Contains(Run(source), d => d.Id == "CBOR1016" || d.Id == "CBOR1010");
+            IReadOnlyList<Diagnostic> reported = Run(source);
+
+            Assert.Contains(reported, d => d.Id == "CBOR1016");
+            Assert.DoesNotContain(reported, d => d.Id == "CBOR1010");
             Assert.DoesNotContain(CompileErrorsOf(source), d => d.Id == "CS9035");
         }
 
@@ -1457,6 +1460,63 @@ public record Holder
 [CborSerializable(typeof(Holder))]
 public partial class Context : CborSerializerContext { }
 ");
+        }
+
+        /// <summary>
+        /// A read that has a creator never calls <c>new T()</c>, so the factory is not emitted for it --
+        /// which is what lets a creator marked [SetsRequiredMembers] sit beside a plain parameterless
+        /// constructor, and a struct (whose implicit constructor cannot carry the attribute) have a
+        /// creator at all.
+        /// </summary>
+        [Theory]
+        [InlineData("public class Holder { [CborConstructor, System.Diagnostics.CodeAnalysis.SetsRequiredMembers] public Holder(string name) { Name = name; } public Holder() { } public required string Name { get; set; } }")]
+        [InlineData("public struct Holder { [CborConstructor, System.Diagnostics.CodeAnalysis.SetsRequiredMembers] public Holder(int id) { Id = id; } public required int Id { get; set; } }")]
+        public void ARequiredMemberACreatorSatisfiesNeedsNoFactory(string declaration)
+        {
+            string source = declaration + @"
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+";
+            AssertClean(source);
+            Assert.Empty(CompileErrorsOf(source));
+            Assert.DoesNotContain("() => new", GeneratorHarness.GeneratedSource(Preamble + source));
+        }
+
+        /// <summary>The same type without a creator still needs a factory, and still cannot have one.</summary>
+        [Fact]
+        public void ARequiredMemberStillRefusesTheFactoryWhenThereIsNoCreator()
+        {
+            AssertReports("CBOR1016", @"
+public class Holder { [System.Diagnostics.CodeAnalysis.SetsRequiredMembers] public Holder(string name) { Name = name; } public Holder() { } public required string Name { get; set; } }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// The compiler assigns a positional parameter to the property only when it synthesised the
+        /// property itself. A property the record declares (initialised from the parameter however it
+        /// likes), or one a derived record inherits from its base, is not assigned verbatim, so routing
+        /// the value through the parameter would differ from the reflection path.
+        /// </summary>
+        [Theory]
+        [InlineData("public record Holder(int FirstValue) { public int FirstValue { get; init; } = FirstValue * 2 + 1; }")]
+        [InlineData("public record Base(int FirstValue) { public int FirstValue { get; init; } = FirstValue * 2 + 1; } public record Holder(int FirstValue, int Other) : Base(FirstValue);")]
+        [InlineData("public record Base(int FirstValue) { public int FirstValue { get; init; } = FirstValue * 2 + 1; } public record Holder(int FirstValue, int Other) : Base(FirstValue) { }")]
+        public void ARecordParameterTheCompilerDoesNotAssignVerbatimIsNotRouted(string declaration)
+        {
+            AssertReports("CBOR1016", declaration + "\n" + SnakeContext);
+        }
+
+        /// <summary>A synthesised property on the record itself, under a convention that renames it.</summary>
+        [Fact]
+        public void ASynthesisedPositionalPropertyIsStillRoutedUnderARenamingConvention()
+        {
+            string body = "public record Holder(int FirstValue, int Other);\n" + SnakeContext;
+
+            AssertClean(body);
+            Assert.Empty(CompileErrorsOf(body));
         }
 
         /// <summary>
