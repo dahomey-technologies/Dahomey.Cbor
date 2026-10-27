@@ -875,6 +875,10 @@ namespace Dahomey.Cbor.Generator
                 case "System.Numerics.BigInteger":
                 case "Dahomey.Cbor.CborDecimalFraction":
                 case "Dahomey.Cbor.CborBigFloat":
+                // Reachable only from a target where these exist at all; on netstandard2.0 the
+                // library compiles no converter for them and the consumer has no type to name.
+                case "System.DateOnly":
+                case "System.TimeOnly":
                 case "System.DateTimeOffset":
                 case "System.Half":
                     return true;
