@@ -738,7 +738,7 @@ namespace Dahomey.Cbor.Generator
         private static bool HasNoConcreteConverter(ITypeSymbol type)
         {
             return type.SpecialType == SpecialType.System_Object
-                || type.ToDisplayString() is "System.Half" or "System.Guid" or "System.DateTimeOffset";
+                || type.ToDisplayString() is "System.Guid" or "System.DateTimeOffset";
         }
 
         private static bool IsPrimitive(ITypeSymbol type)
@@ -764,20 +764,26 @@ namespace Dahomey.Cbor.Generator
                     return true;
             }
 
-            // BigInteger has no SpecialType, but PrimitiveConverterProvider does resolve it to a
-            // concrete BigIntegerConverter, so it belongs with the cases above rather than with the
-            // unsupported types below. The same holds for the two RFC 8949 §3.4.4 types: without an
-            // entry here they are collected as objects and a generated context writes their Mantissa
-            // and Exponent as members, which is a green build and the wrong bytes.
+            // MATCHED PAIR: every case below duplicates a row of
+            // src/Dahomey.Cbor/Serialization/Converters/Providers/PrimitiveConverterProvider.cs. It
+            // cannot be shared -- the generator is an analyzer assembly and must not reference the
+            // runtime library -- so the two must be edited together. A type this list omits while the
+            // provider resolves it is collected as an object, and a generated context then writes its
+            // properties where the reflection path writes a scalar: a green build and the wrong bytes.
+            // A type this list names while the provider does not is worse, because nothing catches it
+            // until run time. PrimitiveConverterProviderParityTests is what holds the two in step.
+            //
+            // None of these has a SpecialType, so each is matched by name.
             switch (type.ToDisplayString())
             {
                 case "System.Numerics.BigInteger":
                 case "Dahomey.Cbor.CborDecimalFraction":
                 case "Dahomey.Cbor.CborBigFloat":
+                case "System.Half":
                     return true;
             }
 
-            // System.Half, System.Guid, System.DateTimeOffset and System.Object are deliberately absent.
+            // System.Guid, System.DateTimeOffset and System.Object are deliberately absent.
             // PrimitiveConverterProvider has no case for any of them, so at run time they fall through
             // to ObjectConverterProvider and reach MakeGenericType -- the exact failure a generated
             // context exists to prevent, and one the AOT analyzer cannot see either. Classifying them

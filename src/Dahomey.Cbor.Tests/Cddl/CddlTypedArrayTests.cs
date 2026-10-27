@@ -22,11 +22,9 @@ namespace Dahomey.Cbor.Tests.Cddl
         public float[] Samples { get; set; }
         public double[] Precise { get; set; }
 
-        // Half[] is deliberately absent, for the same reason it is absent from GeneratedTypedArrays:
-        // System.Half has no concrete converter in PrimitiveConverterProvider, so a context declaring
-        // Half[] is refused by CBOR1002 before typed arrays are reached. Nine of the ten RFC 8746
-        // element types are therefore all a generated schema can describe, and tag 84 is unreachable
-        // from here rather than untested.
+        // The tenth element type. It is the only one matched by name rather than by SpecialType, on
+        // both sides of the pair, so it is the row most likely to be missed by an edit to either.
+        public Half[] Levels { get; set; }
     }
 
     [CborSerializable(typeof(CddlTypedArrays))]
@@ -52,6 +50,7 @@ namespace Dahomey.Cbor.Tests.Cddl
             Balances = new[] { -1L, 2L },
             Samples = new[] { 1.5f },
             Precise = new[] { 1.25 },
+            Levels = new[] { (Half)1.5f },
         };
 
         /// <summary>
@@ -68,6 +67,7 @@ namespace Dahomey.Cbor.Tests.Cddl
         [InlineData("Offsets", 78)]    // sint32 little endian
         [InlineData("Ticks", 71)]      // uint64 little endian
         [InlineData("Balances", 79)]   // sint64 little endian
+        [InlineData("Levels", 84)]     // binary16 little endian
         [InlineData("Samples", 85)]    // binary32 little endian
         [InlineData("Precise", 86)]    // binary64 little endian
         public void EveryTypedArrayTagIsEmitted(string member, int tag)

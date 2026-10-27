@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization;
@@ -7,10 +8,10 @@ using Xunit;
 namespace Dahomey.Cbor.Tests.Cddl
 {
     /// <summary>
-    /// The two scalars whose CDDL is neither a prelude name nor a range, and which reach
+    /// The scalars whose CDDL is neither a prelude name nor a range, and which reach
     /// <c>CddlTypeReference.RenderPrimitive</c> by a route of their own: <c>char</c> is a
-    /// <c>SpecialType</c> that renders as text rather than as a number, and <c>BigInteger</c> has no
-    /// <c>SpecialType</c> at all and is matched by name.
+    /// <c>SpecialType</c> that renders as text rather than as a number, and <c>BigInteger</c>,
+    /// <c>Half</c> and the two §3.4.4 types have no <c>SpecialType</c> at all and are matched by name.
     /// </summary>
     public class CddlScalars
     {
@@ -18,6 +19,12 @@ namespace Dahomey.Cbor.Tests.Cddl
         public BigInteger Big { get; set; }
         public CborDecimalFraction Price { get; set; }
         public CborBigFloat Scale { get; set; }
+
+        /// <summary>
+        /// The one member whose row is narrower than the float family's, so it also proves the two are
+        /// rendered apart rather than by one shared branch.
+        /// </summary>
+        public Half Level { get; set; }
 
         /// <summary>
         /// A tuple, which is a fixed heterogeneous array rather than a collection of one type -- the one
@@ -77,6 +84,21 @@ namespace Dahomey.Cbor.Tests.Cddl
         }
 
         /// <summary>
+        /// <c>float16</c> and not the prelude's <c>float</c>: <c>CborWriter.WriteHalf</c> emits binary16
+        /// unconditionally, where <c>WriteSingle</c> and <c>WriteDouble</c> pick the shortest form that
+        /// round-trips and so may emit any of the three widths. The narrower row is what the writer
+        /// actually produces, and a schema that said <c>float</c> would admit documents this context
+        /// never writes.
+        /// </summary>
+        [Fact]
+        public void AHalfIsBinary16RatherThanTheWholeFloatFamily()
+        {
+            string schema = CddlScalarsContext.CddlSchema.Replace("\r\n", "\n");
+
+            Assert.Contains("\"Level\": float16,", schema);
+        }
+
+        /// <summary>
         /// A tuple is a fixed, heterogeneous array: one entry per element, in order, with the
         /// <c>Rest</c> chain flattened because that is what the writer emits. <c>[* X]</c> would say any
         /// length of one type, which is the one shape a tuple is not.
@@ -106,6 +128,7 @@ namespace Dahomey.Cbor.Tests.Cddl
                 // mantissa's choice rather than only the int one.
                 Scale = new CborBigFloat(BigInteger.Parse("18446744073709551616"), -1),
                 Pair = (7, "seven"),
+                Level = (Half)1.5f,
             };
 
             byte[] cbor = Helper.Write(value, Context.Options).HexToBytes();
