@@ -207,7 +207,7 @@ namespace Dahomey.Cbor.Generator
                     : new GeneratedContext(null, null, new EquatableArray<DiagnosticInfo>(diagnostics));
             }
 
-            TypeCollector collector = new TypeCollector(options, diagnostics);
+            TypeCollector collector = new TypeCollector(options, diagnostics, contextSymbol.ContainingAssembly);
 
             foreach (ITypeSymbol root in roots)
             {
