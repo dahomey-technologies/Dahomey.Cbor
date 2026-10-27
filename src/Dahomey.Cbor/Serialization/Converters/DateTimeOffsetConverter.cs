@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Text;
+using Dahomey.Cbor.Util;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -134,35 +135,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return false;
             }
 
-            int milliseconds = 0;
-
-            if (TryReadByte(ref buffer, (byte)'.'))
+            if (!Rfc3339.TryReadSecondFraction(ref buffer, out long fractionTicks))
             {
-                if (!TryReadInt32(ref buffer, 1, out int digit))
-                {
-                    value = default;
-                    return false;
-                }
-
-                int places = 1;
-                milliseconds = digit;
-
-                while (TryReadInt32(ref buffer, 1, out digit))
-                {
-                    // Past three places the digits are finer than the milliseconds this reads, and are
-                    // dropped rather than refused -- a peer with a more precise clock is interoperating
-                    // correctly.
-                    if (places < 3)
-                    {
-                        milliseconds = milliseconds * 10 + digit;
-                        places++;
-                    }
-                }
-
-                for (; places < 3; places++)
-                {
-                    milliseconds *= 10;
-                }
+                value = default;
+                return false;
             }
 
             if (!TryReadOffset(ref buffer, out TimeSpan? offset) || !buffer.IsEmpty)
@@ -180,14 +156,15 @@ namespace Dahomey.Cbor.Serialization.Converters
                 {
                     value = new DateTimeOffset(
                         new DateTime(
-                            year, month, day, hours, minutes, seconds, milliseconds,
-                            _options.UnqualifiedTimeZoneDateTimeKind));
+                            year, month, day, hours, minutes, seconds,
+                            _options.UnqualifiedTimeZoneDateTimeKind).AddTicks(fractionTicks));
 
                     return true;
                 }
 
                 value = new DateTimeOffset(
-                    year, month, day, hours, minutes, seconds, milliseconds, offset.Value);
+                    new DateTime(year, month, day, hours, minutes, seconds).AddTicks(fractionTicks),
+                    offset.Value);
 
                 return true;
             }

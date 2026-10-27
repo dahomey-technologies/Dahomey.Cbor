@@ -2,6 +2,7 @@
 using System.Buffers.Text;
 using System.Globalization;
 using System.Text;
+using Dahomey.Cbor.Util;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -109,31 +110,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                 return false;
             }
 
-            // time-secfrac = "." 1*DIGIT (RFC 3339 section 5.6) is a decimal fraction of a second, so each
-            // digit is worth a tenth of the one before it. A DateTime resolves 100 ns, which is the first
-            // seven digits; any further ones are consumed and truncated, never rounded, so the fraction
-            // cannot carry into the next second.
-            long fractionTicks = 0;
-            if (TryReadByte(ref buffer, (byte)'.'))
+            if (!Rfc3339.TryReadSecondFraction(ref buffer, out long fractionTicks))
             {
-                int fractionDigits = 0;
-                long scale = 1_000_000;
-                while (!buffer.IsEmpty && buffer[0] >= (byte)'0' && buffer[0] <= (byte)'9')
-                {
-                    if (fractionDigits < 7)
-                    {
-                        fractionTicks += (buffer[0] - (byte)'0') * scale;
-                        scale /= 10;
-                    }
-                    fractionDigits++;
-                    buffer = buffer.Slice(1);
-                }
-
-                if (fractionDigits == 0)
-                {
-                    value = default;
-                    return false;
-                }
+                value = default;
+                return false;
             }
 
             // unspecified time zone => DateTimeKind is taken from the option UnqualifiedTimeZoneDateTimeKind, Local beeing the default
