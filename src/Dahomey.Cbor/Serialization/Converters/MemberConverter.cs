@@ -367,9 +367,13 @@ namespace Dahomey.Cbor.Serialization.Converters
             throw new NotSupportedException();
         }
 
+        // The two members below are reached when a boxed struct is written through an object slot -
+        // an object member, a List<object>, Serialize<object> - where the write runs on
+        // ObjectConverter<object> and hands every member the boxed value.
         public void Write(ref CborWriter writer, object obj)
         {
-            throw new NotSupportedException();
+            T instance = (T)obj;
+            Write(ref writer, ref instance);
         }
 
         public object Read(ref CborReader reader)
@@ -384,7 +388,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public bool ShouldSerialize(object obj, Type declaredType, CborOptions options)
         {
-            throw new NotSupportedException();
+            T instance = (T)obj;
+            return ShouldSerialize(ref instance, declaredType);
         }
 
         public void Read(ref CborReader reader, ref T instance)

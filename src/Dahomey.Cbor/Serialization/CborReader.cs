@@ -1574,9 +1574,9 @@ namespace Dahomey.Cbor.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ReadOnlySpan<byte> ReadDataItem(bool advance = true)
         {
-            int positionBefore = _currentPos;
-            var stateBefore = _state;
-            
+            // A bookmark rather than the position alone: on a sequence the SequenceReader has moved too.
+            CborReaderBookmark bookmark = GetBookmark();
+
             int headerOffset = _state == CborReaderState.Header ? 1 : 0;
             int currentDataItemPos = _currentPos - headerOffset;
 
@@ -1584,13 +1584,24 @@ namespace Dahomey.Cbor.Serialization
 
             int size = _currentPos - currentDataItemPos;
 
+            // A sequence-backed reader has no span: _buffer is empty, and slicing it threw
+            // ArgumentOutOfRangeException.
+            ReadOnlySpan<byte> dataItem = _sequence.HasValue
+                ? SliceSequence(currentDataItemPos, size)
+                : _buffer.Slice(currentDataItemPos, size);
+
             if (!advance)
             {
-                _currentPos = positionBefore;
-                _state = stateBefore;
+                ReturnToBookmark(bookmark);
             }
 
-            return _buffer.Slice(currentDataItemPos, size);
+            return dataItem;
+        }
+
+        private ReadOnlySpan<byte> SliceSequence(int start, int length)
+        {
+            ReadOnlySequence<byte> slice = _sequence!.Value.Slice(start, length);
+            return slice.IsSingleSegment ? slice.First.Span : slice.ToArray();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
