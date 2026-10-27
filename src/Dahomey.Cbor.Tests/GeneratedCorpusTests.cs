@@ -407,6 +407,11 @@ namespace Dahomey.Cbor.Tests
                 return new MutualB { Id = 2, Peer = new MutualA { Id = 1 } };
             }
 
+            if (type == typeof(EnumWidthHolder))
+            {
+                return EnumConverterTests.WidthSample();
+            }
+
             // The CDDL fixtures. They are declared to exercise schema emission, but a context is a
             // context: enrolling them here is what keeps their generated converters pinned to the
             // reflection path's bytes, which no CDDL test asserts -- those compare a schema against a
