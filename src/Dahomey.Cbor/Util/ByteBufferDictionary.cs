@@ -178,7 +178,12 @@ namespace Dahomey.Cbor.Util
             Node? node;
             int len = key.Length;
 
-            if (len <= 8)
+            if (len == 0)
+            {
+                // Add stores the empty key on the root itself, as it has no segment to walk.
+                node = _root;
+            }
+            else if (len <= 8)
             {
                 ulong singleKey = 0;
 

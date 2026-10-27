@@ -52,6 +52,29 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
+        /// The empty key is a key like any other: <c>[CborProperty("")]</c> names a member with it.
+        /// </summary>
+        /// <remarks>
+        /// It has no eight-byte segment, so it is stored on the root node, which the lookup never
+        /// looked at: the entry was added and could not be found.
+        /// </remarks>
+        [Fact]
+        public void TheEmptyKeyIsFound()
+        {
+            ByteBufferDictionary<int> dictionary = new ByteBufferDictionary<int>();
+            Assert.False(dictionary.TryGetValue(ReadOnlySpan<byte>.Empty, out int _));
+
+            dictionary.Add(Encoding.UTF8.GetBytes("short"), 1);
+            dictionary.Add(ReadOnlySpan<byte>.Empty, 2);
+            dictionary.Add(Encoding.UTF8.GetBytes("longervaluethaneightbytes"), 3);
+
+            Assert.True(dictionary.TryGetValue(ReadOnlySpan<byte>.Empty, out int found));
+            Assert.Equal(2, found);
+            Assert.False(dictionary.TryGetValue(new byte[] { 0 }, out int _));
+            Assert.Throws<ArgumentException>(() => dictionary.Add(ReadOnlySpan<byte>.Empty, 4));
+        }
+
+        /// <summary>
         /// Adding a key twice is refused rather than silently replacing the first entry.
         /// </summary>
         /// <remarks>

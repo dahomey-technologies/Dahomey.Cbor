@@ -377,6 +377,11 @@ namespace Dahomey.Cbor.Tests
                 return new GeneratedPropertiesDerivedAddsField { BP = 1, DF = 2 };
             }
 
+            if (type == typeof(EmptyMemberName))
+            {
+                return new EmptyMemberName { A = 5, B = 6 };
+            }
+
             if (type == typeof(GeneratedMixedDerived))
             {
                 return new GeneratedMixedDerived { BF = 1, BP = 2, DF = 3, DP = 4 };
