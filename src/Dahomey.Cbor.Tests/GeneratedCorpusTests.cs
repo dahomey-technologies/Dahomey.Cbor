@@ -218,6 +218,56 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedTupleTests.Sample();
             }
 
+            if (type == typeof(GeneratedKeptMapFormat))
+            {
+                return new GeneratedKeptMapFormat { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedArrayDerived))
+            {
+                return new InheritedArrayDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedGenericDerived))
+            {
+                return new InheritedGenericDerived { Value = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedPolymorphicDerived))
+            {
+                return new InheritedPolymorphicDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedMapDerived))
+            {
+                return new InheritedMapDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedOverrideDerived))
+            {
+                return new InheritedOverrideDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedLeaf))
+            {
+                return new InheritedLeaf { Id = 7, Name = "n", Extra = 9 };
+            }
+
+            if (type == typeof(InheritedDiscriminatorDerived))
+            {
+                return new InheritedDiscriminatorDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedIntDiscriminatorDerived))
+            {
+                return new InheritedIntDiscriminatorDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(GeneratedTakesArrayFormat))
+            {
+                return new GeneratedTakesArrayFormat { Id = 7, Name = "n" };
+            }
+
             if (type == typeof(Issues.Issue0240.HalfHolder))
             {
                 return new Issues.Issue0240.HalfHolder { Value = (System.Half)1.5f };
