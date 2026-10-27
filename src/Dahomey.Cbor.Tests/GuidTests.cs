@@ -185,8 +185,9 @@ namespace Dahomey.Cbor.Tests
         /// <summary>
         /// The README documents Guid as the worked example of a converter for a type you do not own,
         /// registered through <c>[CborConverter]</c> or <c>SetConverter</c>. Both bypass the provider
-        /// chain, so that example still governs and still produces its own bytes -- this addition makes
-        /// it unnecessary for Guid, not broken.
+        /// chain, so that example still governs and still produces its own bytes. Those bytes are not the
+        /// built-in encoding (untagged, CLR byte order), so a caller keeping it keeps reading and
+        /// writing the old layout until the data has been migrated.
         /// </summary>
         [Fact]
         public void AUserSuppliedConverterStillWins()

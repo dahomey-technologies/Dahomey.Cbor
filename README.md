@@ -143,6 +143,10 @@ dropped. A source-generated context sets the same thing with
 `[CborSourceGenerationOptions(UntaggedGuidFormat = UntaggedGuidFormat.ClrByteOrder)]`. Until data has
 been migrated, keep registering your own converter and the built-in one is not consulted.
 
+The reverse also applies: a reader still on an older version, or still using the sample converter,
+reads the new tag-37 bytes without error as a *different* Guid. Upgrade every reader, or have them all
+accept tag 37, before any writer drops the old converter.
+
 Converters are what the library uses internally for standard types and for classes discovered by
 reflection, so a converter of your own gets the same features and the same performance.
 
