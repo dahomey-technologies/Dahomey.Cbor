@@ -104,6 +104,9 @@ namespace Dahomey.Cbor.Tests
         [Theory]
         [InlineData("190E8B")]               // 3723, seconds since midnight
         [InlineData("FA4568B000")]           // 3723.0
+        [InlineData("1A00015180")]           // 86400
+        [InlineData("20")]                   // -1
+        [InlineData("FB7FF8000000000000")]   // NaN
         public void ANumberIsNotATimeOnly(string hexBuffer)
         {
             Assert.Throws<CborException>(() => Helper.Read<TimeOnly>(hexBuffer));
@@ -156,6 +159,93 @@ namespace Dahomey.Cbor.Tests
             Assert.Throws<CborException>(() => Helper.Read<TimeOnly>("A164486F757203"));   // {"Hour": 3}
         }
 
+        [Fact]
+        public void ReadTimeOnlyFromTicksAloneAndTicksWinOverTheComponents()
+        {
+            // {"Hour": 9, "Minute": 59, "Ticks": 37450000000} -- the components disagree with Ticks,
+            // which carries the whole value and so decides: 01:02:25.
+            Assert.Equal(
+                new TimeOnly(1, 2, 25),
+                Helper.Read<TimeOnly>("A364486F757209664D696E757465183B655469636B731B00000008B831A680"));
+        }
+
+        [Theory]
+        [InlineData("A1655469636B731B000000C92A69C000")]   // {"Ticks": 864000000000}, the next midnight
+        [InlineData("A1655469636B7320")]                   // {"Ticks": -1}
+        public void ALegacyTimeOnlyMapWithTicksOutOfRangeIsRefused(string hexBuffer)
+        {
+            Assert.Throws<CborException>(() => Helper.Read<TimeOnly>(hexBuffer));
+        }
+
+        [Fact]
+        public void LegacyKeysAreMatchedWithoutRegardToCase()
+        {
+            // {"year": 2026, "month": 8, "day": 17}, as a camel-case naming convention wrote it
+            Assert.Equal(
+                new DateOnly(2026, 8, 17),
+                Helper.Read<DateOnly>("A364796561721907EA656D6F6E7468086364617911"));
+        }
+
+        [Fact]
+        public void ReadDateOnlyFromDayNumberAlone()
+        {
+            // {"DayNumber": 739844}
+            Assert.Equal(new DateOnly(2026, 8, 17), Helper.Read<DateOnly>("A1694461794E756D6265721A000B4A04"));
+        }
+
+        [Fact]
+        public void ALegacyDateOnlyMapWithDayNumberOutOfRangeIsRefused()
+        {
+            // {"DayNumber": 3652059}, one past DateOnly.MaxValue
+            Assert.Throws<CborException>(() => Helper.Read<DateOnly>("A1694461794E756D6265721A0037B9DB"));
+        }
+
+        // {"Year": 2026, "Year": 1999, "Month": 8, "Day": 17}
+        private const string LegacyDateWithRepeatedYear =
+            "A464596561721907EA64596561721907CF654D6F6E7468086344617911";
+
+        // {"Ticks": 1, "Ticks": 37450000000}
+        private const string LegacyTimeWithRepeatedTicks =
+            "A2655469636B7301655469636B731B00000008B831A680";
+
+        [Fact]
+        public void ARepeatedKeyInALegacyMapIsRefusedByDefault()
+        {
+            CborException date = Assert.Throws<CborException>(
+                () => Helper.Read<DateOnly>(LegacyDateWithRepeatedYear));
+            Assert.Contains("Duplicate map key: Year", date.Message);
+
+            CborException time = Assert.Throws<CborException>(
+                () => Helper.Read<TimeOnly>(LegacyTimeWithRepeatedTicks));
+            Assert.Contains("Duplicate map key: Ticks", time.Message);
+        }
+
+        [Fact]
+        public void ARepeatedKeyInALegacyMapTakesTheLastUnderLastWins()
+        {
+            var options = new CborOptions { DuplicateKeyMode = DuplicateKeyMode.LastWins };
+
+            Assert.Equal(new DateOnly(1999, 8, 17), Helper.Read<DateOnly>(LegacyDateWithRepeatedYear, options));
+            Assert.Equal(new TimeOnly(1, 2, 25), Helper.Read<TimeOnly>(LegacyTimeWithRepeatedTicks, options));
+        }
+
+        public class DateAndTimeThenMore
+        {
+            public DateOnly Date { get; set; }
+            public TimeOnly Time { get; set; }
+            public string After { get; set; }
+        }
+
+        [Fact]
+        public void ANonTextKeyInALegacyMapIsRefusedRatherThanLosingTheParentsPlace()
+        {
+            // {"Date": {"Year": 2026, "Month": 8, "Day": 17, 1: "x"}, "Time": "01:02:03", "After": "hello"}
+            // The stray key used to be left unread, so the members after the date were misaligned and
+            // came back as 00:00 and null without any error.
+            Assert.Throws<CborException>(() => Helper.Read<DateAndTimeThenMore>(
+                "A36444617465A464596561721907EA654D6F6E74680863446179110161786454696D656830313A30323A30336541667465726568656C6C6F"));
+        }
+
         // DateOnly was written as an object of its public properties, which is the map below. Unlike
         // the TimeOnly map above these bytes are built from the BCL's member list rather than
         // captured: DateOnly's creator mapping does not resolve on net10.0, where the old code
@@ -205,15 +295,6 @@ namespace Dahomey.Cbor.Tests
         public void OutOfRangeDayCountIsRefused(string hexBuffer)
         {
             Assert.Throws<CborException>(() => Helper.Read<DateOnly>(hexBuffer));
-        }
-
-        [Theory]
-        [InlineData("1A00015180")]             // 86400 seconds is the next midnight, not a time
-        [InlineData("20")]                       // -1
-        [InlineData("FB7FF8000000000000")]       // NaN, which fails every range comparison
-        public void OutOfRangeSecondsAreRefused(string hexBuffer)
-        {
-            Assert.Throws<CborException>(() => Helper.Read<TimeOnly>(hexBuffer));
         }
 
         /// <summary>

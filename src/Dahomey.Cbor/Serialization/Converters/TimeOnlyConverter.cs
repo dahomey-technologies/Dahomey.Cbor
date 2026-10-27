@@ -19,16 +19,19 @@ namespace Dahomey.Cbor.Serialization.Converters
     /// chooses between representations of an instant, and a time of day is not one.
     /// </para>
     /// <para>
-    /// Also read, never written: the map earlier versions
-    /// wrote for a <see cref="TimeOnly"/> before it had a converter.
+    /// Also read, never written: the map earlier versions wrote for a <see cref="TimeOnly"/> before it
+    /// had a converter. <see cref="CborOptions.DuplicateKeyMode"/> governs a repeated key in it.
     /// </para>
     /// </remarks>
     public class TimeOnlyConverter : CborConverterBase<TimeOnly>
     {
         private const long TicksPerSecond = TimeSpan.TicksPerSecond;
 
-        public TimeOnlyConverter()
+        private readonly CborOptions _options;
+
+        public TimeOnlyConverter(CborOptions options)
         {
+            _options = options;
         }
 
         public override TimeOnly Read(ref CborReader reader)
@@ -66,9 +69,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// properties. <c>Ticks</c> carries the whole value, seconds and fraction included, so it is
         /// authoritative; <c>Hour</c>, <c>Minute</c> and the finer members are the fallback.
         /// </summary>
-        private static TimeOnly ReadLegacyMap(ref CborReader reader)
+        private TimeOnly ReadLegacyMap(ref CborReader reader)
         {
-            Dictionary<string, long> members = LegacyDateTimeMap.Read(ref reader);
+            Dictionary<string, long> members = LegacyDateTimeMap.Read(ref reader, _options);
 
             if (members.TryGetValue("Ticks", out long ticks))
             {

@@ -16,45 +16,69 @@ namespace Dahomey.Cbor.Serialization.Converters
     /// </remarks>
     internal sealed class LegacyDateTimeMap : ICborMapReader<LegacyDateTimeMap.Context>
     {
-        public static readonly LegacyDateTimeMap Instance = new LegacyDateTimeMap();
+        private static readonly LegacyDateTimeMap _rejectDuplicates = new LegacyDateTimeMap(true);
+        private static readonly LegacyDateTimeMap _lastWins = new LegacyDateTimeMap(false);
+
+        private readonly bool _reject;
+
+        private LegacyDateTimeMap(bool reject)
+        {
+            _reject = reject;
+        }
 
         public struct Context
         {
             internal Dictionary<string, long> Members;
+            internal HashSet<string> Seen;
         }
 
-        public static Dictionary<string, long> Read(ref CborReader reader)
+        /// <summary>
+        /// Reads the map, honouring <see cref="CborOptions.DuplicateKeyMode"/> exactly as a mapped
+        /// class does: a repeated key is refused under <see cref="DuplicateKeyMode.Reject"/>, and the
+        /// last one wins otherwise.
+        /// </summary>
+        public static Dictionary<string, long> Read(ref CborReader reader, CborOptions options)
         {
             Context context = default;
-            reader.ReadMap(Instance, ref context);
+            reader.ReadMap(
+                options.DuplicateKeyMode == DuplicateKeyMode.LastWins ? _lastWins : _rejectDuplicates,
+                ref context);
             return context.Members;
         }
 
         void ICborMapReader<Context>.ReadBeginMap(int size, ref Context context)
         {
             context.Members = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            context.Seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
         void ICborMapReader<Context>.ReadMapItem(ref CborReader reader, ref Context context)
         {
-            string? key = reader.GetCurrentDataItemType() == CborDataItemType.String
-                ? reader.ReadString()
-                : null;
+            // The key is always consumed, so the parent keeps its place whatever the map holds. These
+            // maps only ever had the property names as keys.
+            if (reader.GetCurrentDataItemType() != CborDataItemType.String)
+            {
+                throw reader.BuildException("A date or time map has only text keys");
+            }
+
+            string key = reader.ReadString() ?? string.Empty;
+
+            if (!context.Seen.Add(key) && _reject)
+            {
+                throw reader.BuildException(MapKeyErrors.Duplicate(key));
+            }
 
             switch (reader.GetCurrentDataItemType())
             {
                 case CborDataItemType.Signed:
                 case CborDataItemType.Unsigned:
-                    long value = reader.ReadInt64();
-
-                    if (key != null)
-                    {
-                        context.Members[key] = value;
-                    }
-
+                    context.Members[key] = reader.ReadInt64();
                     break;
 
                 default:
+                    // Not a member this reader uses. Under LastWins it still replaces an earlier
+                    // value for the same key, which then no longer counts.
+                    context.Members.Remove(key);
                     reader.SkipDataItem();
                     break;
             }

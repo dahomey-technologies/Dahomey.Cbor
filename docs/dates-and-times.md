@@ -18,6 +18,12 @@ is not one.
 Reading ignores the setting: every form above is accepted whichever one is configured, tagged or not.
 The option describes what this end emits, and a peer's choice is not yours to make.
 
+## `DateTime`
+
+A `DateTime` read from a string carrying a numeric offset is converted to UTC, and the offset itself is
+not retained — `DateTime` has nowhere to put it, only a `DateTimeKind`. A string with no offset and no
+`Z` is given the kind named by `CborOptions.UnqualifiedTimeZoneDateTimeKind`.
+
 ## `DateOnly` (RFC 8943)
 
 ```csharp
@@ -44,8 +50,9 @@ nothing for `UnixMilliseconds` to make finer.
 Before it had a converter a `DateOnly` was written as a map of its public properties (`Year`, `Month`,
 `Day`, `DayOfWeek`, `DayOfYear`, `DayNumber`). That form is still **read**, whatever the setting, and is
 never written. `DayNumber` decides when present, and `Year`, `Month` and `Day` otherwise; a map with
-neither is refused. Keys match without regard to case, so a naming convention does not matter. Only the
-string-keyed map is recognised, not the `IntKeyMap` or `Array` object formats.
+neither is refused. Keys match without regard to case, so a naming convention does not matter, and a
+repeated key follows `CborOptions.DuplicateKeyMode` like any other map. A key that is not text is
+refused. Only the string-keyed map is recognised, not the `IntKeyMap` or `Array` object formats.
 
 ## `TimeOnly`
 
@@ -65,10 +72,6 @@ is interoperating correctly.
 
 `DateTimeFormat` has no effect on a `TimeOnly`: with `Unix` or `UnixMilliseconds` set it is still the
 string above, fraction included.
-
-A `DateTime` read from a string carrying a numeric offset is converted to UTC, and the offset itself is
-not retained — `DateTime` has nowhere to put it, only a `DateTimeKind`. A string with no offset and no
-`Z` is given the kind named by `CborOptions.UnqualifiedTimeZoneDateTimeKind`.
 
 ### Documents written before `TimeOnly` had a converter
 

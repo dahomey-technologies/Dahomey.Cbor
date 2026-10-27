@@ -466,8 +466,8 @@ namespace Dahomey.Cbor.Tests
             }
 
             // Carried by three contexts differing only in DateTimeFormat, so the date stays a day count
-            // across both numeric settings while the time beside it moves from an integer to a float.
-            // The fractional second is what makes that visible: whole seconds would render the same.
+            // across both numeric settings while the time beside it is the same string under all
+            // three. The fractional second keeps the time's fraction in view.
             if (type == typeof(Cddl.CddlDateHolder))
             {
                 return new Cddl.CddlDateHolder

@@ -68,9 +68,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// <c>DayNumber</c> is authoritative, with <c>Year</c>, <c>Month</c> and <c>Day</c> as the
         /// fallback.
         /// </summary>
-        private static DateOnly ReadLegacyMap(ref CborReader reader)
+        private DateOnly ReadLegacyMap(ref CborReader reader)
         {
-            Dictionary<string, long> members = LegacyDateTimeMap.Read(ref reader);
+            Dictionary<string, long> members = LegacyDateTimeMap.Read(ref reader, _options);
 
             if (members.TryGetValue("DayNumber", out long dayNumber))
             {
