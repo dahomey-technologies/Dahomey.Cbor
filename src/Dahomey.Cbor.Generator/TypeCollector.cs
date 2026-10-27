@@ -34,13 +34,14 @@ namespace Dahomey.Cbor.Generator
                 return;
             }
 
-            TypeKind kind = Classify(type, out ITypeSymbol? element, out ITypeSymbol? value, out ITypeSymbol? underlying);
+            TypeKind kind = Classify(type, out ITypeSymbol? element, out ITypeSymbol? value, out ITypeSymbol? underlying, out string? backing);
 
             TypeModel model = new TypeModel(type, kind)
             {
                 ElementType = element,
                 ValueType = value,
                 UnderlyingType = underlying,
+                BackingType = backing,
                 IsTypedArray = kind == TypeKind.Array && IsTypedArrayElementType(element!),
             };
 
@@ -75,11 +76,13 @@ namespace Dahomey.Cbor.Generator
 
                 case TypeKind.Array:
                 case TypeKind.Collection:
+                case TypeKind.InterfaceCollection:
                     Collect(element!);
                     model.Dependencies.Add(element!);
                     break;
 
                 case TypeKind.Dictionary:
+                case TypeKind.InterfaceDictionary:
                     Collect(element!);
                     Collect(value!);
                     model.Dependencies.Add(element!);
@@ -130,6 +133,68 @@ namespace Dahomey.Cbor.Generator
             return type.MetadataName.StartsWith("ValueTuple`", System.StringComparison.Ordinal)
                 && type.ContainingNamespace is { Name: "System" }
                 && type.ContainingNamespace.ContainingNamespace is { IsGlobalNamespace: true };
+        }
+
+        /// <summary>
+        /// Which converter a collection interface resolves to, and the concrete type it is built into
+        /// while being read, mirroring <c>CollectionConverterProvider</c>'s choices exactly.
+        /// </summary>
+        /// <remarks>
+        /// The backing type is what makes these constructible at all: an interface cannot be
+        /// instantiated, so the read fills a concrete collection and hands it back as the interface.
+        /// <c>List&lt;T&gt;</c> for the ordered interfaces and <c>HashSet&lt;T&gt;</c> for
+        /// <c>ISet&lt;T&gt;</c> — the same pair the reflection path picks, because a document written
+        /// through one path has to read back through the other.
+        /// <para>
+        /// <c>IReadOnlyList&lt;T&gt;</c> and <c>IReadOnlyCollection&lt;T&gt;</c> are included even
+        /// though a caller cannot add to what they hand back: the converter builds a <c>List&lt;T&gt;</c>
+        /// and returns it as the read-only interface, which is what the reflection path does.
+        /// </para>
+        /// </remarks>
+        private static TypeKind ClassifyCollectionInterface(
+            INamedTypeSymbol named,
+            out ITypeSymbol? element,
+            out ITypeSymbol? value,
+            out string? backing)
+        {
+            element = null;
+            value = null;
+            backing = null;
+
+            string constructed = named.ConstructedFrom.ToDisplayString();
+
+            if (constructed == "System.Collections.Generic.IDictionary<TKey, TValue>"
+                && named.TypeArguments.Length == 2)
+            {
+                element = named.TypeArguments[0];
+                value = named.TypeArguments[1];
+                return TypeKind.InterfaceDictionary;
+            }
+
+            if (named.TypeArguments.Length != 1)
+            {
+                return TypeKind.Unsupported;
+            }
+
+            switch (constructed)
+            {
+                case "System.Collections.Generic.ISet<T>":
+                    element = named.TypeArguments[0];
+                    backing = "global::System.Collections.Generic.HashSet";
+                    return TypeKind.InterfaceCollection;
+
+                case "System.Collections.Generic.IList<T>":
+                case "System.Collections.Generic.ICollection<T>":
+                case "System.Collections.Generic.IEnumerable<T>":
+                case "System.Collections.Generic.IReadOnlyList<T>":
+                case "System.Collections.Generic.IReadOnlyCollection<T>":
+                    element = named.TypeArguments[0];
+                    backing = "global::System.Collections.Generic.List";
+                    return TypeKind.InterfaceCollection;
+
+                default:
+                    return TypeKind.Unsupported;
+            }
         }
 
         /// <summary>
@@ -628,11 +693,13 @@ namespace Dahomey.Cbor.Generator
             ITypeSymbol type,
             out ITypeSymbol? element,
             out ITypeSymbol? value,
-            out ITypeSymbol? underlying)
+            out ITypeSymbol? underlying,
+            out string? backing)
         {
             element = null;
             value = null;
             underlying = null;
+            backing = null;
 
             if (type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Enum)
             {
@@ -684,6 +751,19 @@ namespace Dahomey.Cbor.Generator
                 if (IsValueTuple(named))
                 {
                     return TypeKind.Tuple;
+                }
+
+                // The collection interfaces, before the tests below: IList<T> implements ICollection<T>,
+                // so it would otherwise be taken for a concrete collection and then refused for having
+                // no parameterless constructor -- which is exactly the CBOR1002 this replaces.
+                if (named.TypeKind == Microsoft.CodeAnalysis.TypeKind.Interface)
+                {
+                    TypeKind interfaceKind = ClassifyCollectionInterface(named, out element, out value, out backing);
+
+                    if (interfaceKind != TypeKind.Unsupported)
+                    {
+                        return interfaceKind;
+                    }
                 }
 
                 // Dictionary<K,V> and anything implementing IDictionary<K,V>.
