@@ -292,7 +292,8 @@ namespace Dahomey.Cbor.Generator
                 model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite)
                 {
                     RequirementPolicy = ReadRequirementPolicy(member),
-                    ShouldSerializeMethod = FindShouldSerializeMethod(type, member),
+                    ShouldSerializeOwner = FindShouldSerializeOwner(type, member),
+                    ShouldSerializeMethod = ShouldSerializeNameFor(type, member),
                 });
 
                 Collect(memberType);
@@ -971,36 +972,62 @@ namespace Dahomey.Cbor.Generator
 
         /// <summary>
         /// The <c>ShouldSerialize&lt;Member&gt;()</c> method the reflection path would use for this
-        /// member, or null where the type declares none that qualifies.
+        /// member, or null where there is none -- including every member of a struct.
         /// </summary>
         /// <remarks>
-        /// The test is <c>DefaultObjectMappingConvention.ProcessShouldSerializeMethod</c>'s, repeated
-        /// rather than approximated: public, no parameters, returning <c>bool</c>, named for the member.
-        /// A method that misses any of those is ignored by the reflection path, so picking it up here
-        /// would make the two paths disagree about whether the member is written at all — which is a
-        /// silent divergence rather than a loud one.
+        /// <c>DefaultObjectMappingConvention.ProcessShouldSerializeMethod</c> calls
+        /// <c>GetMethod(name, no parameters)</c> on the member's <b>declaring</b> type, so the search
+        /// starts there and goes up its bases, never down: a predicate declared only on a derived type
+        /// is invisible to a member a base declares, and one hiding the base's with <c>new</c> loses to
+        /// it. Only public methods are visible to that lookup, so a non-public one is skipped rather
+        /// than ending the search; the first public one found is the answer, and it is used only if it
+        /// returns <c>bool</c> and is an instance method -- the reflection path ignores the first and
+        /// throws for the second, and the generated one ignores both. A struct's member converter never
+        /// consults a predicate at all, so none is emitted for one.
         /// </remarks>
-        private static string? FindShouldSerializeMethod(ITypeSymbol type, ISymbol member)
+        private static IMethodSymbol? FindShouldSerializeMethod(ITypeSymbol type, ISymbol member)
         {
+            if (type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct)
+            {
+                return null;
+            }
+
             string name = "ShouldSerialize" + member.Name;
 
-            foreach (ISymbol candidate in AllMembers(type))
+            for (ITypeSymbol? current = member.ContainingType;
+                 current is not null && current.SpecialType != SpecialType.System_Object;
+                 current = current.BaseType)
             {
-                if (candidate is IMethodSymbol
-                    {
-                        Parameters.Length: 0,
-                        DeclaredAccessibility: Accessibility.Public,
-                        IsStatic: false,
-                    } method
-                    && method.Name == name
-                    && method.ReturnType.SpecialType == SpecialType.System_Boolean)
+                foreach (ISymbol candidate in current.GetMembers(name))
                 {
-                    return name;
+                    if (candidate is IMethodSymbol
+                        {
+                            Parameters.Length: 0,
+                            DeclaredAccessibility: Accessibility.Public,
+                            TypeParameters.Length: 0,
+                        } method)
+                    {
+                        return !method.IsStatic && method.ReturnType.SpecialType == SpecialType.System_Boolean
+                            ? method
+                            : null;
+                    }
                 }
             }
 
             return null;
         }
+
+        private static string? ShouldSerializeNameFor(ITypeSymbol type, ISymbol member)
+            => FindShouldSerializeMethod(type, member)?.Name;
+
+        /// <summary>
+        /// The type the emitted call is cast to: the one that declares the method found, so that C#
+        /// binds the same method the reflection lookup did instead of re-running its own lookup from
+        /// the generated type, which could pick a different (derived or non-public) one.
+        /// </summary>
+        private static string? FindShouldSerializeOwner(ITypeSymbol type, ISymbol member)
+            => FindShouldSerializeMethod(type, member)?.ContainingType
+                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         private static bool HasInheritedAttribute(ISymbol member, string attributeName)
         {

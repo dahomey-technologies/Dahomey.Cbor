@@ -476,9 +476,9 @@ namespace Dahomey.Cbor.Generator
             // Both are calls DelegateMemberMapping has always offered; what was missing was the
             // generator making them, which is why they were CBOR1007 rather than a shape it could not
             // reproduce. Order follows the reflection path's: the predicate, then the requirement.
-            string shouldSerialize = member.ShouldSerializeMethod is null
+            string shouldSerialize = member.ShouldSerializeMethod is null || member.ShouldSerializeOwner is null
                 ? string.Empty
-                : $".SetShouldSerializeMethod(o => (({ownerName})o).{member.ShouldSerializeMethod}())";
+                : $".SetShouldSerializeMethod(o => (({member.ShouldSerializeOwner})o).{member.ShouldSerializeMethod}())";
 
             string required = member.RequirementPolicy is null
                 ? string.Empty

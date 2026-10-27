@@ -73,6 +73,13 @@ namespace Dahomey.Cbor.Generator
         /// </remarks>
         public string? ShouldSerializeMethod { get; set; }
 
+        /// <summary>
+        /// The fully qualified type declaring <see cref="ShouldSerializeMethod"/>, which the emitted
+        /// call is cast to. Not the object's own type: the method may be inherited, and a derived type
+        /// may hide it with one the reflection path does not see.
+        /// </summary>
+        public string? ShouldSerializeOwner { get; set; }
+
         /// <summary>The wire name, after naming convention and <c>[CborProperty]</c>.</summary>
         public string CborName { get; }
 
