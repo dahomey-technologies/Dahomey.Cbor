@@ -85,10 +85,20 @@ namespace Dahomey.Cbor.ObjectModel
 
         private static class Cache<T1, T2>
         {
-            public readonly static Func<T1, T2> Converter = (Func<T1, T2>)_converters[(typeof(T1), typeof(T2))];
+            // Null for a pair with no conversion. Indexing the dictionary here threw from the static
+            // constructor, so the caller got a TypeInitializationException, not NotSupportedException.
+            public readonly static Func<T1, T2>? Converter =
+                _converters.TryGetValue((typeof(T1), typeof(T2)), out Delegate? converter)
+                    ? (Func<T1, T2>)converter
+                    : null;
         }
 
-        public static Func<T1, T2> Get<T1, T2>() => Cache<T1, T2>.Converter;
+        public static Func<T1, T2> Get<T1, T2>()
+        {
+            return Cache<T1, T2>.Converter
+                ?? throw new NotSupportedException(
+                    string.Format("Cannot convert a {0} value to {1}", typeof(T1).Name, typeof(T2).Name));
+        }
     }
 
     internal struct Primitive<T1, T2>

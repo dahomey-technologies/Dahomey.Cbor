@@ -115,9 +115,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 return new ByteArrayConverter();
             }
 
-            if (typeof(CborValue).IsAssignableFrom(type))
+            if (type == typeof(CborValue) || type == typeof(CborObject) || type == typeof(CborArray))
             {
                 return CreateConverter(options, typeof(CborValueConverter));
+            }
+
+            if (typeof(CborValue).IsAssignableFrom(type))
+            {
+                return CreateGenericConverter(options, typeof(CborValueSubtypeConverter<>), type);
             }
 
             return null;
