@@ -34,6 +34,14 @@ namespace Dahomey.Cbor.Tests.Cddl
         /// shape <c>[* X]</c> cannot describe.
         /// </summary>
         public (int, string) Pair { get; set; }
+
+        /// <summary>
+        /// The 64-bit integers, which are rendered as explicit ranges: the prelude's <c>int</c> is wider
+        /// than <c>long</c> (a CBOR integer reaches -2^64..2^64-1), while <c>uint</c> has exactly
+        /// <c>ulong</c>'s range.
+        /// </summary>
+        public long Signed64 { get; set; }
+        public ulong Unsigned64 { get; set; }
     }
 
     [CborSerializable(typeof(CddlScalars))]
@@ -127,6 +135,52 @@ namespace Dahomey.Cbor.Tests.Cddl
             Assert.Contains(
                 "\"Pair\": [-2147483648..2147483647, tstr / nil],",
                 CddlScalarsContext.CddlSchema.Replace("\r\n", "\n"));
+        }
+
+        /// <summary>
+        /// Spelled out as ranges rather than the prelude's <c>int</c>/<c>uint</c>. <c>int</c> is wider
+        /// than <c>long</c>; <c>uint</c> is the same set as <c>0..18446744073709551615</c>. The range
+        /// tells a code generator reading the schema which width to declare; given a bare <c>int</c> or
+        /// <c>uint</c> it has to guess. This test is what pins the <c>ulong</c> rendering: no instance
+        /// can distinguish the two spellings, so the validation test below cannot bind for it.
+        /// </summary>
+        [Fact]
+        public void The64BitIntegersRenderAsTheirExactRanges()
+        {
+            string schema = CddlScalarsContext.CddlSchema.Replace("\r\n", "\n");
+
+            Assert.Contains("\"Signed64\": -9223372036854775808..9223372036854775807,", schema);
+            Assert.Contains("\"Unsigned64\": 0..18446744073709551615,", schema);
+        }
+
+        /// <summary>
+        /// The extremes validate, and the control binds for the <c>long</c> half only: -2^64 is a legal
+        /// CBOR integer that no <c>long</c> can hold, so a schema saying <c>int</c> would accept it and
+        /// the range refuses it. The <c>ulong</c> half cannot bind -- <c>uint</c> and
+        /// <c>0..18446744073709551615</c> accept the same values -- so it is a sanity check on the range
+        /// text, and <see cref="The64BitIntegersRenderAsTheirExactRanges"/> is what pins it.
+        /// </summary>
+        [CddlFact]
+        public void The64BitExtremesValidateAndTheRangeRefusesWhatALongCannotHold()
+        {
+            CddlScalars value = new CddlScalars
+            {
+                Initial = 'A',
+                Signed64 = long.MinValue,
+                Unsigned64 = ulong.MaxValue,
+            };
+
+            string hex = Helper.Write(value, Context.Options);
+
+            CddlResult ok = CddlTool.Validate(CddlScalarsContext.CddlSchema, "CddlScalars", hex.HexToBytes());
+            Assert.True(ok.Ok, ok.Output);
+
+            // 3B 7FFF.. is -2^63 (long.MinValue); 3B FFFF.. is -2^64, one past what a long holds.
+            Assert.Contains("3B7FFFFFFFFFFFFFFF", hex.ToUpperInvariant());
+            string tooWide = hex.ToUpperInvariant().Replace("3B7FFFFFFFFFFFFFFF", "3BFFFFFFFFFFFFFFFF");
+
+            CddlResult refused = CddlTool.Validate(CddlScalarsContext.CddlSchema, "CddlScalars", tooWide.HexToBytes());
+            Assert.False(refused.Ok, refused.Output);
         }
 
         [CddlFact]
