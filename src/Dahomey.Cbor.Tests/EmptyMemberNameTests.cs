@@ -50,5 +50,17 @@ namespace Dahomey.Cbor.Tests
                 Assert.Equal(6, value.B);
             }
         }
+
+        /// <summary>
+        /// A key is matched by its whole length: "B\0" is not "B", nor "\0" the empty name.
+        /// </summary>
+        [Theory]
+        [InlineData("A2600562420006")]
+        [InlineData("A2610005614206")]
+        public void TrailingZeroBytesAreNotIgnored(string hexBuffer)
+        {
+            CborOptions strict = new CborOptions { UnhandledNameMode = UnhandledNameMode.ThrowException };
+            Assert.Throws<CborException>(() => Helper.Read<EmptyMemberName>(hexBuffer, strict));
+        }
     }
 }
