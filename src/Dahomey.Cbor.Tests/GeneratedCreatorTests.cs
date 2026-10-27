@@ -1,5 +1,6 @@
 using Dahomey.Cbor.Attributes;
 using Dahomey.Cbor.Serialization;
+using Dahomey.Cbor.Serialization.Conventions;
 using Dahomey.Cbor.Tests.Extensions;
 using Xunit;
 
@@ -96,11 +97,154 @@ namespace Dahomey.Cbor.Tests
         }
     }
 
+    /// <summary>
+    /// A naming convention renames <c>FirstName</c> to <c>first_name</c>, so the unlisted parameter no
+    /// longer matches its CBOR name. The reflection path leaves it at its default and lets the
+    /// <c>init</c> accessor supply the value.
+    /// </summary>
+    public record GeneratedSnakeRecord(int FirstName, int Age);
+
+    public record GeneratedKebabRecord(int FirstName, int Age);
+
+    /// <summary>The same rename by attribute, under default options.</summary>
+    public record GeneratedRenamedRecord([property: CborProperty("fn")] int FirstName, int Age);
+
+    /// <summary>A settable member: reflection leaves the parameter at its default and runs the setter.</summary>
+    public class GeneratedSnakeClass
+    {
+        public GeneratedSnakeClass(int firstName, int age)
+        {
+            FirstName = firstName;
+            Age = age;
+        }
+
+        public int FirstName { get; set; }
+
+        public int Age { get; set; }
+
+        public override bool Equals(object obj) =>
+            obj is GeneratedSnakeClass other && other.FirstName == FirstName && other.Age == Age;
+
+        public override int GetHashCode() => FirstName * 31 + Age;
+    }
+
+    /// <summary>
+    /// A constructor that transforms its arguments tells the two kinds of parameter apart: the one the
+    /// document supplies (<c>age</c>) is transformed, the one left to its setter (<c>firstName</c>) is
+    /// overwritten with the document's value untouched.
+    /// </summary>
+    public class GeneratedSnakeTransform
+    {
+        public GeneratedSnakeTransform(int firstName, int age)
+        {
+            FirstName = firstName * 10;
+            Age = age * 10;
+        }
+
+        public int FirstName { get; set; }
+
+        public int Age { get; set; }
+    }
+
+    /// <summary>Tuple element names are erased at run time, so these are one type.</summary>
+    public class GeneratedTupleCreator
+    {
+        public GeneratedTupleCreator((int, int) p)
+        {
+            P = p;
+        }
+
+        public (int X, int Y) P { get; }
+
+        public override bool Equals(object obj) => obj is GeneratedTupleCreator other && other.P.Equals(P);
+
+        public override int GetHashCode() => P.GetHashCode();
+    }
+
+    /// <summary>
+    /// A listed name is compared with the member without regard to case but with the document's key
+    /// exactly, so <c>"a"</c> finds member <c>A</c> and then no value under <c>"a"</c>.
+    /// </summary>
+    public record GeneratedCaseLower
+    {
+        [CborConstructor("a", "B")]
+        public GeneratedCaseLower(int a, int b)
+        {
+            A = a;
+            B = b;
+        }
+
+        public int A { get; }
+
+        public int B { get; set; }
+    }
+
+    public record GeneratedCaseUpper
+    {
+        [CborConstructor("ALPHA", "beta")]
+        public GeneratedCaseUpper(int alpha, int beta)
+        {
+            Alpha = alpha;
+            Beta = beta;
+        }
+
+        public int Alpha { get; }
+
+        public int Beta { get; set; }
+    }
+
+    /// <summary>A struct whose sole constructor leaves <c>Y</c> unsupplied: read as default plus setters.</summary>
+    public struct GeneratedPartialStruct
+    {
+        public int X;
+        public int Y;
+
+        public GeneratedPartialStruct(int x)
+        {
+            X = x;
+            Y = 0;
+        }
+    }
+
+    /// <summary>A struct whose constructor supplies every member is built through it.</summary>
+    public struct GeneratedCompleteStruct
+    {
+        public GeneratedCompleteStruct(int x, int y)
+        {
+            X = x;
+            Y = y;
+        }
+
+        public int X { get; }
+
+        public int Y { get; }
+    }
+
     [CborSerializable(typeof(GeneratedRecord))]
     [CborSerializable(typeof(GeneratedCreatorHolder))]
+    [CborSerializable(typeof(GeneratedRenamedRecord))]
+    [CborSerializable(typeof(GeneratedTupleCreator))]
+    [CborSerializable(typeof(GeneratedCaseLower))]
+    [CborSerializable(typeof(GeneratedCaseUpper))]
+    [CborSerializable(typeof(GeneratedPartialStruct))]
+    [CborSerializable(typeof(GeneratedCompleteStruct))]
     [CborSerializable(typeof(GeneratedListedNames))]
     [CborSerializable(typeof(GeneratedSealedRecord))]
     public partial class CreatorContext : CborSerializerContext
+    {
+    }
+
+    [CborSerializable(typeof(GeneratedSnakeRecord))]
+    [CborSerializable(typeof(GeneratedSnakeClass))]
+    [CborSerializable(typeof(GeneratedSnakeTransform))]
+    [CborSourceGenerationOptions(NamingConvention = typeof(SnakeCaseNamingConvention))]
+    public partial class CreatorSnakeContext : CborSerializerContext
+    {
+    }
+
+    [CborSerializable(typeof(GeneratedKebabRecord))]
+    [CborSourceGenerationOptions(NamingConvention = typeof(KebabCaseNamingConvention))]
+    public partial class CreatorKebabContext : CborSerializerContext
     {
     }
 
@@ -206,8 +350,12 @@ namespace Dahomey.Cbor.Tests
         private static T AssertMatchesReflection<T>(
             CborSerializerContext context, CborObjectFormat format, T value, string document)
         {
-            CborOptions reflection = new CborOptions { ObjectFormat = format };
+            return AssertMatchesReflection(context, new CborOptions { ObjectFormat = format }, value, document);
+        }
 
+        private static T AssertMatchesReflection<T>(
+            CborSerializerContext context, CborOptions reflection, T value, string document)
+        {
             Assert.Equal(
                 Helper.Write(value, reflection), Helper.Write(value, context.Options), ignoreCase: true);
 
@@ -320,6 +468,151 @@ namespace Dahomey.Cbor.Tests
                 context, CborObjectFormat.StringKeyMap, new GeneratedSealedRecord(7), "A1624964" + "07");
 
             Assert.Equal(7, read.Id);
+        }
+
+        // {"first_name": 1, "age": 2}
+        private const string SnakeDocument = "A2" + "6A66697273745F6E616D65" + "01" + "63616765" + "02";
+
+        [Fact]
+        public void ARecordWhoseMemberTheConventionRenamedIsReadBack()
+        {
+            GeneratedSnakeRecord read = AssertMatchesReflection(
+                new CreatorSnakeContext(),
+                new CborOptions { DefaultNamingConvention = new SnakeCaseNamingConvention() },
+                new GeneratedSnakeRecord(1, 2),
+                SnakeDocument);
+
+            Assert.Equal(new GeneratedSnakeRecord(1, 2), read);
+        }
+
+        [Fact]
+        public void AKebabCaseRecordIsReadBack()
+        {
+            GeneratedKebabRecord read = AssertMatchesReflection(
+                new CreatorKebabContext(),
+                new CborOptions { DefaultNamingConvention = new KebabCaseNamingConvention() },
+                new GeneratedKebabRecord(1, 2),
+                "A2" + "6A66697273742D6E616D65" + "01" + "63616765" + "02");
+
+            Assert.Equal(new GeneratedKebabRecord(1, 2), read);
+        }
+
+        [Fact]
+        public void ARecordWhoseMemberAnAttributeRenamedIsReadBack()
+        {
+            // {"fn": 1, "Age": 2}
+            GeneratedRenamedRecord read = AssertMatchesReflection(
+                new CreatorContext(),
+                CborObjectFormat.StringKeyMap,
+                new GeneratedRenamedRecord(1, 2),
+                "A2" + "62666E" + "01" + "63416765" + "02");
+
+            Assert.Equal(new GeneratedRenamedRecord(1, 2), read);
+        }
+
+        [Fact]
+        public void AClassWhoseSettableMemberTheConventionRenamedIsReadBack()
+        {
+            GeneratedSnakeClass read = AssertMatchesReflection(
+                new CreatorSnakeContext(),
+                new CborOptions { DefaultNamingConvention = new SnakeCaseNamingConvention() },
+                new GeneratedSnakeClass(1, 2),
+                SnakeDocument);
+
+            Assert.Equal(new GeneratedSnakeClass(1, 2), read);
+        }
+
+        /// <summary>
+        /// <c>FirstName</c> is left to its setter and keeps the document's 1; <c>Age</c> goes through
+        /// the constructor and arrives as 20. The generated path has to agree on both, which a
+        /// round-trip of plain assignments cannot show.
+        /// </summary>
+        [Fact]
+        public void ASettableMemberTheConventionRenamedIsSetAfterConstruction()
+        {
+            CreatorSnakeContext context = new CreatorSnakeContext();
+            CborOptions reflection = new CborOptions { DefaultNamingConvention = new SnakeCaseNamingConvention() };
+
+            GeneratedSnakeTransform fromReflection =
+                Cbor.Deserialize<GeneratedSnakeTransform>(SnakeDocument.HexToBytes(), reflection);
+            GeneratedSnakeTransform fromGenerated =
+                Cbor.Deserialize<GeneratedSnakeTransform>(SnakeDocument.HexToBytes(), context.Options);
+
+            Assert.Equal(1, fromReflection.FirstName);
+            Assert.Equal(20, fromReflection.Age);
+            Assert.Equal(fromReflection.FirstName, fromGenerated.FirstName);
+            Assert.Equal(fromReflection.Age, fromGenerated.Age);
+        }
+
+        [Fact]
+        public void TupleElementNamesDoNotMakeAParameterAnotherType()
+        {
+            GeneratedTupleCreator read = AssertMatchesReflection(
+                new CreatorContext(),
+                CborObjectFormat.StringKeyMap,
+                new GeneratedTupleCreator((1, 2)),
+                Helper.Write(new GeneratedTupleCreator((1, 2))));
+
+            Assert.Equal((1, 2), read.P);
+        }
+
+        /// <summary>
+        /// Reflection finds member <c>A</c> for the listed <c>"a"</c> and then looks for a value under
+        /// <c>"a"</c>, so <c>A</c> stays 0 although the document carries it. Passing the listed text on
+        /// verbatim is what reproduces that; passing the member's own key would read 1.
+        /// </summary>
+        [Theory]
+        [InlineData("A2" + "6141" + "01" + "6142" + "02", 0, 2)]
+        public void AListedNameIsComparedWithTheDocumentKeyExactly(string document, int a, int b)
+        {
+            GeneratedCaseLower read = AssertMatchesReflection(
+                new CreatorContext(), CborObjectFormat.StringKeyMap, new GeneratedCaseLower(1, 2), document);
+
+            Assert.Equal(a, read.A);
+            Assert.Equal(b, read.B);
+        }
+
+        [Fact]
+        public void ListedNamesInTheWrongCaseFindNoValue()
+        {
+            // {"Alpha": 1, "Beta": 2}
+            GeneratedCaseUpper read = AssertMatchesReflection(
+                new CreatorContext(),
+                CborObjectFormat.StringKeyMap,
+                new GeneratedCaseUpper(1, 2),
+                "A2" + "65416C706861" + "01" + "644265" + "7461" + "02");
+
+            // Alpha has no setter and its listed key finds nothing. Beta's finds nothing either, but
+            // its setter still supplies the document's 2 afterwards.
+            Assert.Equal(0, read.Alpha);
+            Assert.Equal(2, read.Beta);
+        }
+
+        /// <summary>
+        /// Built through its constructor on master's behaviour: default plus the setters. The reflection
+        /// path throws NotSupportedException for this struct, so there is nothing to compare against --
+        /// the point is that the generated path keeps reading it.
+        /// </summary>
+        [Fact]
+        public void AStructWhoseConstructorLeavesAMemberUnsuppliedStillReads()
+        {
+            GeneratedPartialStruct read = Cbor.Deserialize<GeneratedPartialStruct>(
+                ("A2" + "6158" + "01" + "6159" + "02").HexToBytes(), new CreatorContext().Options);
+
+            Assert.Equal(1, read.X);
+            Assert.Equal(2, read.Y);
+        }
+
+        [Fact]
+        public void AStructWhoseConstructorSuppliesEveryMemberIsBuiltThroughIt()
+        {
+            GeneratedCompleteStruct read = AssertMatchesReflection(
+                new CreatorContext(),
+                CborObjectFormat.StringKeyMap,
+                new GeneratedCompleteStruct(1, 2),
+                "A2" + "6158" + "01" + "6159" + "02");
+
+            Assert.Equal(new GeneratedCompleteStruct(1, 2), read);
         }
 
         internal static GeneratedRecord SampleRecord() => new GeneratedRecord(7, "seven");

@@ -447,8 +447,15 @@ namespace Dahomey.Cbor.Generator
             // because a CBOR name need not be a legal C# identifier and a parameter must be.
             if (model.CreatorParameters.Count > 0)
             {
+                // Positional names, except where the runtime has to match parameters to members by
+                // name itself: it reads those names off the delegate, so they must be the real ones.
                 string parameters = string.Join(
-                    ", ", model.CreatorParameters.Select((p, i) => $"a{i}"));
+                    ", ",
+                    model.CreatorParameters.Select((p, i) => model.CreatorMatchesByName
+                        ? Microsoft.CodeAnalysis.CSharp.SyntaxFacts.GetKeywordKind(p.ParameterName) != Microsoft.CodeAnalysis.CSharp.SyntaxKind.None
+                            ? "@" + p.ParameterName
+                            : p.ParameterName
+                        : $"a{i}"));
                 string signature = string.Join(
                     ", ", model.CreatorParameters.Select(p => p.Type).Concat(new[] { fullName }));
                 string names = string.Join(
@@ -456,22 +463,33 @@ namespace Dahomey.Cbor.Generator
                     model.CreatorParameters.Select(
                         p => Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(p.CborName, quote: true)));
 
-                builder.AppendLine(
+                string mapCreator =
                     $"{indent}            objectMapping.MapCreator("
-                    + $"new System.Func<{signature}>(({parameters}) => new {fullName}({parameters})))");
+                    + $"new System.Func<{signature}>(({parameters}) => new {fullName}({parameters})))";
 
                 // CreatorMapping matches parameters to members itself when told nothing, but for
                 // IntKeyMap and Array it does so through MemberInfo, which a generated member has
-                // none of -- so the key each format reads by is always given explicitly.
+                // none of -- so the key each format reads by is always given explicitly. Under
+                // StringKeyMap it is left to the runtime only when a parameter has to stay unlisted
+                // (see TypeModel.CreatorMatchesByName).
                 if (model.ObjectFormat == "StringKeyMap")
                 {
-                    builder.AppendLine($"{indent}                .SetMemberNames({names});");
+                    if (model.CreatorMatchesByName)
+                    {
+                        builder.AppendLine(mapCreator + ";");
+                    }
+                    else
+                    {
+                        builder.AppendLine(mapCreator);
+                        builder.AppendLine($"{indent}                .SetMemberNames({names});");
+                    }
                 }
                 else
                 {
                     string indexes = string.Join(
                         ", ", model.CreatorParameters.Select(p => p.Index!.Value.ToString(
                             System.Globalization.CultureInfo.InvariantCulture)));
+                    builder.AppendLine(mapCreator);
                     builder.AppendLine($"{indent}                .SetMemberIndexes({indexes});");
                 }
             }

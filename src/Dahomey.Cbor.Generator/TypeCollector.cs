@@ -20,6 +20,7 @@ namespace Dahomey.Cbor.Generator
             new Dictionary<string, TypeModel>();
 
         private readonly Func<ISymbol, bool> _isAccessible;
+        private readonly Func<ITypeSymbol, ITypeSymbol, bool> _isIdentical;
 
         /// <param name="isAccessible">
         /// Whether a symbol can be named from the generated context -- the one place generated code
@@ -28,12 +29,22 @@ namespace Dahomey.Cbor.Generator
         /// that cannot tell an <c>internal</c> constructor in this assembly from one in another, or a
         /// <c>protected</c> one from a context nested in the type.
         /// </param>
+        /// <param name="isIdentical">
+        /// Whether two types are the same type to the runtime. <c>CreatorMapping</c> compares
+        /// <c>System.Type</c>s, so differences the runtime erases do not count: tuple element names,
+        /// <c>dynamic</c> against <c>object</c>, nullable reference annotations. Symbol equality counts
+        /// the first two, and an identity conversion does not.
+        /// </param>
         public TypeCollector(
-            GenerationOptions options, List<DiagnosticInfo> diagnostics, Func<ISymbol, bool> isAccessible)
+            GenerationOptions options,
+            List<DiagnosticInfo> diagnostics,
+            Func<ISymbol, bool> isAccessible,
+            Func<ITypeSymbol, ITypeSymbol, bool> isIdentical)
         {
             _options = options;
             _diagnostics = diagnostics;
             _isAccessible = isAccessible;
+            _isIdentical = isIdentical;
         }
 
         public void Collect(ITypeSymbol type)
@@ -271,6 +282,15 @@ namespace Dahomey.Cbor.Generator
                     type.ToDisplayString()));
             }
 
+            // A struct is always "instantiable" (`new T()` exists), so several unmarked constructors
+            // would otherwise be settled silently as default-plus-setters while the reflection path
+            // takes the first one. That is only harmless when every member can be set afterwards, so
+            // it is reported once the members are known and one of them cannot.
+            bool ambiguousStruct = creator is null
+                && !creatorUnreachable
+                && type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct
+                && HasSeveralUnmarkedConstructors(type);
+
             ReadTypeLevelAttributes(type, model);
             ReportUnsupportedFeatures(type);
 
@@ -289,6 +309,7 @@ namespace Dahomey.Cbor.Generator
                 ITypeSymbol memberType;
                 bool canRead;
                 bool canWrite;
+                bool initOnly = false;
 
                 switch (member)
                 {
@@ -303,6 +324,8 @@ namespace Dahomey.Cbor.Generator
                         // An `init` accessor cannot be assigned from a lambda, so it is not usable as a
                         // setter here even though the property is technically settable.
                         canWrite = property.SetMethod is { IsInitOnly: false }
+                            && property.SetMethod.DeclaredAccessibility == Accessibility.Public;
+                        initOnly = property.SetMethod is { IsInitOnly: true }
                             && property.SetMethod.DeclaredAccessibility == Accessibility.Public;
                         break;
 
@@ -388,7 +411,7 @@ namespace Dahomey.Cbor.Generator
 
                 model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite));
 
-                walked.Add(new WalkedMember(member.Name, cborName, cborIndex, memberType));
+                walked.Add(new WalkedMember(member.Name, cborName, cborIndex, memberType, canWrite, initOnly));
 
                 Collect(memberType);
 
@@ -403,24 +426,58 @@ namespace Dahomey.Cbor.Generator
             // Resolved after the member walk, because a parameter is named for the member it fills and
             // that member's CBOR name is only settled once its attributes and the naming convention
             // have been read.
-            HashSet<string> suppliedByCreator = creator is not null
-                ? ResolveCreator(type, model, creator, walked)
-                : new HashSet<string>(StringComparer.Ordinal);
+            CreatorResolution resolution = creator is not null
+                ? ResolveCreator(type, model, creator, walked, quiet: type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct)
+                : CreatorResolution.None;
+
+            // A struct that a creator does not fill completely is read as it was before creators
+            // existed: `new T()` and the setters. Building it through the constructor instead would
+            // leave the unsupplied members to a setter lambda, which a struct member cannot take.
+            // Quiet because that is what the generated path has always done for such a struct -- the
+            // reflection path refuses it (NotSupportedException) and this stays lenient.
+            if (creator is not null
+                && type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct
+                && (resolution.Failed || walked.Any(w => !resolution.Supplied.Contains(w.Name))))
+            {
+                model.CreatorParameters.Clear();
+                model.CreatorMatchesByName = false;
+                resolution = CreatorResolution.None;
+            }
+
+            if (ambiguousStruct && readOnlyMembers.Count > 0)
+            {
+                _diagnostics.Add(DiagnosticInfo.Create(
+                    Diagnostics.NoParameterlessConstructor,
+                    type.Locations.FirstOrDefault(),
+                    type.ToDisplayString()));
+            }
 
             foreach (ISymbol member in readOnlyMembers)
             {
-                if (suppliedByCreator.Contains(member.Name))
+                if (resolution.Supplied.Contains(member.Name))
                 {
                     continue;
                 }
 
-                // An unreachable creator is already an error; "add a setter or a creator" on the
-                // members it would have supplied would point away from the real remedy.
-                if (creatorUnreachable
-                    && declaredCreator!.Parameters.Any(
-                        p => string.Equals(p.Name, member.Name, StringComparison.OrdinalIgnoreCase)))
+                // A creator that is already an error -- unreachable, or refused -- gets the remedy
+                // for it; "add a setter or a creator" on the members it would have supplied would
+                // point away from that.
+                IMethodSymbol? failedCreator = creatorUnreachable ? declaredCreator : resolution.Failed ? creator : null;
+
+                if (failedCreator is not null)
                 {
-                    continue;
+                    WalkedMember? serialized = walked
+                        .Where(w => w.Name == member.Name)
+                        .Select(w => (WalkedMember?)w)
+                        .FirstOrDefault();
+
+                    if (failedCreator.Parameters.Any(
+                        p => string.Equals(p.Name, member.Name, StringComparison.OrdinalIgnoreCase)
+                            || (serialized is not null
+                                && string.Equals(p.Name, serialized.Value.CborName, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        continue;
+                    }
                 }
 
                 _diagnostics.Add(DiagnosticInfo.Create(
@@ -431,38 +488,78 @@ namespace Dahomey.Cbor.Generator
             }
         }
 
+        private readonly struct CreatorResolution
+        {
+            public static readonly CreatorResolution None =
+                new CreatorResolution(new HashSet<string>(StringComparer.Ordinal), failed: false);
+
+            public CreatorResolution(HashSet<string> supplied, bool failed)
+            {
+                Supplied = supplied;
+                Failed = failed;
+            }
+
+            /// <summary>C# names of the members that take a value from a constructor parameter.</summary>
+            public HashSet<string> Supplied { get; }
+
+            /// <summary>The creator cannot be reproduced; the reason has been reported unless quiet.</summary>
+            public bool Failed { get; }
+        }
+
         private readonly struct WalkedMember
         {
-            public WalkedMember(string name, string cborName, int? index, ITypeSymbol type)
+            public WalkedMember(
+                string name, string cborName, int? index, ITypeSymbol type, bool canWrite, bool initOnly)
             {
                 Name = name;
                 CborName = cborName;
                 Index = index;
                 Type = type;
+                CanWrite = canWrite;
+                InitOnly = initOnly;
             }
 
             public string Name { get; }
             public string CborName { get; }
             public int? Index { get; }
             public ITypeSymbol Type { get; }
+
+            /// <summary>A public, non-<c>init</c> setter or a non-readonly field.</summary>
+            public bool CanWrite { get; }
+
+            /// <summary>A public <c>init</c> accessor, which only a constructor or initializer can call.</summary>
+            public bool InitOnly { get; }
         }
 
         /// <summary>
         /// Maps each creator parameter to the member it is filled from, exactly as
-        /// <c>CreatorMapping</c> does, and returns the C# names of the members that supply one.
+        /// <c>CreatorMapping</c> does, and reports the C# names of the members that supply one.
         /// </summary>
         /// <remarks>
         /// <c>[CborConstructor(...)]</c> arguments are honoured: names for <c>StringKeyMap</c>, indexes
         /// for the other two, positionally against the constructor's parameters -- and the other kind
         /// is ignored, as the reflection path ignores it. Without arguments a parameter is matched
         /// case-insensitively by the member's CBOR name under <c>StringKeyMap</c> and by its C# name
-        /// under the other two, which is what <c>CreatorMapping</c> compares. A shape the reflection
-        /// path refuses when the mapping is built (wrong count, no such member, a parameter of another
-        /// type) is reported here instead; a parameter it would leave at its default is reported too,
-        /// so the two paths cannot disagree about what the object comes back holding.
+        /// under the other two, which is what <c>CreatorMapping</c> compares.
+        /// <para>
+        /// A shape the reflection path refuses when the mapping is built (wrong count, a listed key
+        /// that matches nothing, a parameter of another type than its member) is reported. So is an
+        /// unlisted parameter that matches no member, which that path leaves at its default.
+        /// </para>
+        /// <para>
+        /// Under <c>StringKeyMap</c> an unlisted parameter whose CBOR name matches nothing may still
+        /// share its C# name with a member -- a naming convention or <c>[CborProperty("x")]</c> renamed
+        /// it -- and the reflection path then leaves the parameter at its default and lets the member's
+        /// setter supply the value afterwards. A member with a setter is handled the same way here,
+        /// by not naming the parameter at all (the runtime's own matching then does what reflection
+        /// does). An <c>init</c>-only member has no setter a generated context can call, so its value
+        /// is passed through the parameter under the member's real key instead: the object ends up
+        /// the same, and only a constructor that inspects the argument would see the difference. A
+        /// member with no setter at all loses its value on the reflection path, which is reported.
+        /// </para>
         /// </remarks>
-        private HashSet<string> ResolveCreator(
-            ITypeSymbol type, TypeModel model, IMethodSymbol creator, List<WalkedMember> walked)
+        private CreatorResolution ResolveCreator(
+            ITypeSymbol type, TypeModel model, IMethodSymbol creator, List<WalkedMember> walked, bool quiet)
         {
             HashSet<string> supplied = new HashSet<string>(StringComparer.Ordinal);
             bool byName = model.ObjectFormat == "StringKeyMap";
@@ -470,22 +567,33 @@ namespace Dahomey.Cbor.Generator
             bool hasListedKeys = byName ? names is not null : indexes is not null;
             int listedCount = byName ? names?.Length ?? 0 : indexes?.Length ?? 0;
 
-            void Refuse(string what)
+            CreatorResolution Refuse(string what)
             {
-                _diagnostics.Add(DiagnosticInfo.Create(
-                    Diagnostics.UnsupportedFeature,
-                    creator.Locations.FirstOrDefault(),
-                    type.ToDisplayString(),
-                    what));
+                if (!quiet)
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.CreatorNotReproducible,
+                        creator.Locations.FirstOrDefault(),
+                        type.ToDisplayString(),
+                        what));
+                }
+
                 model.CreatorParameters.Clear();
+                model.CreatorMatchesByName = false;
+                return new CreatorResolution(supplied, failed: true);
             }
+
+            const string RefusedAtBuild = "the reflection path refuses this mapping with a CborException when it is built";
 
             if (hasListedKeys && listedCount != creator.Parameters.Length)
             {
-                Refuse($"a [CborConstructor] listing {listedCount} member "
-                    + (byName ? "names" : "indexes") + $" for {creator.Parameters.Length} constructor parameters");
-                return supplied;
+                return Refuse($"[CborConstructor] lists {listedCount} member "
+                    + (byName ? "names" : "indexes")
+                    + $" for {creator.Parameters.Length} constructor parameters; {RefusedAtBuild}");
             }
+
+            bool anyUnlistedLeftToSetter = false;
+            bool anyRoutedPastSetter = false;
 
             for (int i = 0; i < creator.Parameters.Length; i++)
             {
@@ -512,23 +620,55 @@ namespace Dahomey.Cbor.Generator
                     }
                 }
 
-                if (match is null)
+                if (match is null && byName && !hasListedKeys)
                 {
-                    // The reflection path throws when the mapping is built for a listed name or index
-                    // that matches nothing, and leaves an unlisted parameter at its default. Refusing
-                    // here rather than emitting a creator that silently drops it.
-                    Refuse(hasListedKeys
-                        ? $"a [CborConstructor] member {(byName ? "name" : "index")} '{(byName ? listed : listedIndex?.ToString(CultureInfo.InvariantCulture))}' that matches no serialized member"
-                        : $"a constructor parameter '{parameter.Name}' that matches no serialized member");
-                    return supplied;
+                    WalkedMember? sameCSharpName = walked
+                        .Where(w => string.Equals(w.Name, parameter.Name, StringComparison.OrdinalIgnoreCase))
+                        .Select(w => (WalkedMember?)w)
+                        .FirstOrDefault();
+
+                    if (sameCSharpName is { } renamed)
+                    {
+                        if (renamed.CanWrite)
+                        {
+                            // Left at its default, as the reflection path leaves it; the setter
+                            // supplies the member. The runtime's own name matching does exactly that.
+                            anyUnlistedLeftToSetter = true;
+                            model.CreatorParameters.Add((FullNameOf(parameter.Type), string.Empty, null, parameter.Name));
+                            continue;
+                        }
+
+                        if (renamed.InitOnly)
+                        {
+                            if (!_isIdentical(renamed.Type, parameter.Type))
+                            {
+                                return Refuse(DescribeTypeMismatch(parameter, renamed));
+                            }
+
+                            anyRoutedPastSetter = true;
+                            supplied.Add(renamed.Name);
+                            model.CreatorParameters.Add((FullNameOf(parameter.Type), renamed.CborName, renamed.Index, parameter.Name));
+                            continue;
+                        }
+
+                        return Refuse($"parameter '{parameter.Name}' shares its name with '{renamed.Name}', which is serialized as "
+                            + $"'{renamed.CborName}' and has no setter, so the reflection path leaves the parameter at its default "
+                            + "and never sets the member. Name the parameter after the serialized key, give the member a setter, "
+                            + "or list the members in [CborConstructor]");
+                    }
                 }
 
-                if (!SymbolEqualityComparer.Default.Equals(match.Value.Type, parameter.Type))
+                if (match is null)
                 {
-                    // CreatorMapping compares the two types exactly and throws on a difference.
-                    Refuse($"a constructor parameter '{parameter.Name}' of type {parameter.Type.ToDisplayString()}"
-                        + $" filled from a member of type {match.Value.Type.ToDisplayString()}");
-                    return supplied;
+                    return Refuse(hasListedKeys
+                        ? $"[CborConstructor] lists member {(byName ? "name" : "index")} '{(byName ? listed : listedIndex?.ToString(CultureInfo.InvariantCulture))}', which matches no serialized member; {RefusedAtBuild}"
+                        : $"parameter '{parameter.Name}' matches no serialized member, so the reflection path would leave it at its default value; "
+                            + "name it after a member, or list the members in [CborConstructor]");
+                }
+
+                if (!_isIdentical(match.Value.Type, parameter.Type))
+                {
+                    return Refuse(DescribeTypeMismatch(parameter, match.Value));
                 }
 
                 supplied.Add(match.Value.Name);
@@ -538,10 +678,46 @@ namespace Dahomey.Cbor.Generator
                 model.CreatorParameters.Add((
                     FullNameOf(parameter.Type),
                     listed ?? match.Value.CborName,
-                    listedIndex ?? match.Value.Index));
+                    listedIndex ?? match.Value.Index,
+                    parameter.Name));
             }
 
-            return supplied;
+            if (anyUnlistedLeftToSetter && anyRoutedPastSetter)
+            {
+                return Refuse("some parameters are left to their member's setter and others, for an init-only member, "
+                    + "are passed the value; the two cannot be expressed together. Name the parameters after the "
+                    + "serialized keys, or list the members in [CborConstructor]");
+            }
+
+            if (anyUnlistedLeftToSetter)
+            {
+                // No names at all: the runtime matches each parameter the way the reflection path does.
+                model.CreatorMatchesByName = true;
+            }
+
+            return new CreatorResolution(supplied, failed: false);
+        }
+
+        private static string DescribeTypeMismatch(IParameterSymbol parameter, WalkedMember member)
+        {
+            return $"parameter '{parameter.Name}' is a {parameter.Type.ToDisplayString()} but is filled from member "
+                + $"'{member.Name}', a {member.Type.ToDisplayString()}; "
+                + "the reflection path refuses this mapping with a CborException when it is built";
+        }
+
+        private bool HasSeveralUnmarkedConstructors(ITypeSymbol type)
+        {
+            if (type is not INamedTypeSymbol named)
+            {
+                return false;
+            }
+
+            List<IMethodSymbol> constructors = named.InstanceConstructors
+                .Where(c => !c.IsStatic && !c.IsImplicitlyDeclared)
+                .ToList();
+
+            return constructors.Count > 1
+                && !constructors.Any(c => c.Parameters.Length == 0 || HasAttribute(c, "CborConstructorAttribute"));
         }
 
         private static (string[]? Names, int[]? Indexes) ReadCreatorArguments(IMethodSymbol creator)
@@ -1213,9 +1389,11 @@ namespace Dahomey.Cbor.Generator
         /// Deliberately narrower than the reflection path in one case. Where several constructors are
         /// declared, none marked and none parameterless, that path takes <c>constructorInfos[0]</c>;
         /// nothing guarantees Roslyn orders them as reflection does, so picking one here could silently
-        /// build a type through a different constructor than the reflection path uses. That case keeps
-        /// CBOR1010, whose remedy — add a parameterless constructor, or mark one with
-        /// <c>[CborConstructor]</c> — resolves the ambiguity for both paths at once.
+        /// build a type through a different constructor than the reflection path uses. For a class that
+        /// case keeps CBOR1010, whose remedy — add a parameterless constructor, or mark one with
+        /// <c>[CborConstructor]</c> — resolves the ambiguity for both paths at once. A struct always
+        /// has <c>new T()</c>, so it is reported the same way only where reading it that way would lose
+        /// a member (one with no setter); otherwise default-plus-setters is a complete read.
         /// </para>
         /// </remarks>
         private IMethodSymbol? FindCreatorConstructor(ITypeSymbol type)

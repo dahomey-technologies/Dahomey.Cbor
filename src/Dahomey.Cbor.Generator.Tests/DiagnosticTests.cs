@@ -507,7 +507,7 @@ public partial class Context : CborSerializerContext { }
         [Fact]
         public void ACreatorParameterMatchingNoMemberIsReported()
         {
-            AssertReports("CBOR1007", @"
+            AssertReports("CBOR1016", @"
 public class Holder
 {
     [CborConstructor]
@@ -878,7 +878,7 @@ public partial class Context : CborSerializerContext {{ }}
         [InlineData("Array", "[CborConstructor(0, 7)]")]
         public void ListedConstructorArgumentsTheReflectionPathRefusesAreReported(string format, string attribute)
         {
-            AssertReports("CBOR1007", Listed(format, attribute, "int a, int b"));
+            AssertReports("CBOR1016", Listed(format, attribute, "int a, int b"));
         }
 
         /// <summary>
@@ -902,7 +902,7 @@ public partial class Context : CborSerializerContext {{ }}
         [Fact]
         public void AParameterOfAnotherTypeThanItsMemberIsReported()
         {
-            AssertReports("CBOR1007", @"
+            AssertReports("CBOR1016", @"
 public class Holder
 {
     [CborConstructor]
@@ -939,6 +939,232 @@ public class Holder {{ public {memberType} Value {{ get; set; }} }}
 [CborSerializable(typeof(Holder))]
 public partial class Context : CborSerializerContext {{ }}
 ");
+        }
+
+        private static string MessageOf(string id, string body)
+        {
+            return Run(body).First(d => d.Id == id).GetMessage();
+        }
+
+        private static IReadOnlyList<Diagnostic> CompileErrorsOf(string body)
+        {
+            return GeneratorHarness.CompileGeneratedOutput(Preamble + body);
+        }
+
+        private const string SnakeContext = @"
+[CborSerializable(typeof(Holder))]
+[CborSourceGenerationOptions(NamingConvention = typeof(Dahomey.Cbor.Serialization.Conventions.SnakeCaseNamingConvention))]
+public partial class Context : CborSerializerContext { }
+";
+
+        /// <summary>
+        /// A naming convention (or <c>[CborProperty("x")]</c>) renames the member, so the unlisted
+        /// parameter no longer matches its CBOR name. The reflection path leaves such a parameter at
+        /// its default and lets the member's setter supply the value, and that is not an error.
+        /// </summary>
+        [Theory]
+        [InlineData("public record Holder(int FirstName, int Age);", SnakeContext)]
+        [InlineData("public record Holder([property: CborProperty(\"fn\")] int FirstName, int Age);", "[CborSerializable(typeof(Holder))] public partial class Context : CborSerializerContext { }")]
+        [InlineData("public class Holder { public int FirstName { get; set; } public int Age { get; set; } public Holder(int firstName, int age) { } }", SnakeContext)]
+        public void AParameterWhoseMemberWasRenamedIsNotReported(string declaration, string context)
+        {
+            string body = declaration + "\n" + context;
+
+            Assert.Empty(Run(body));
+            Assert.Empty(CompileErrorsOf(body));
+        }
+
+        /// <summary>
+        /// The same rename on a member with no setter: reflection leaves the parameter at its default
+        /// and nothing ever sets the member, so its value is lost -- which is reported.
+        /// </summary>
+        [Fact]
+        public void AParameterWhoseRenamedMemberHasNoSetterIsReported()
+        {
+            AssertReports("CBOR1016", @"
+public class Holder { public int FirstName { get; } public Holder(int firstName) { FirstName = firstName; } }
+" + SnakeContext);
+        }
+
+        /// <summary>A refused creator also says why, so "add a setter" on what it fills is noise.</summary>
+        [Fact]
+        public void ARefusedCreatorDoesNotAlsoAskForSetters()
+        {
+            IReadOnlyList<Diagnostic> diagnostics = Run(@"
+public class Holder
+{
+    [CborConstructor]
+    public Holder(string absent, int id) { Id = id; }
+
+    public int Id { get; }
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Contains(diagnostics, d => d.Id == "CBOR1016");
+            // Id is what the refused creator would have filled.
+            Assert.DoesNotContain(diagnostics, d => d.Id == "CBOR1006");
+        }
+
+        /// <summary>
+        /// The runtime compares <c>System.Type</c>s, and tuple element names and <c>dynamic</c> are
+        /// erased before it does -- symbol equality is not.
+        /// </summary>
+        [Theory]
+        [InlineData("(int X, int Y)", "(int, int)")]
+        [InlineData("(int, int)", "(int A, int B)")]
+        [InlineData("string", "string?")]
+        public void ParameterAndMemberTypesTheRuntimeSeesAsOneAreNotReported(string memberType, string parameterType)
+        {
+            string body = $@"
+public class Holder
+{{
+    public Holder({parameterType} p) {{ P = p; }}
+
+    public {memberType} P {{ get; }}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+";
+            Assert.Empty(Run(body));
+            Assert.Empty(CompileErrorsOf(body));
+        }
+
+        [Theory]
+        [InlineData("int?", "int")]
+        [InlineData("long", "int")]
+        [InlineData("List<int>", "IList<int>")]
+        public void ParameterAndMemberTypesTheRuntimeSeesApartAreReported(string memberType, string parameterType)
+        {
+            AssertReports("CBOR1016", $@"
+public class Holder
+{{
+    public Holder({parameterType} p) {{ }}
+
+    public {memberType} P {{ get; set; }}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+");
+        }
+
+        /// <summary>
+        /// The message states what actually happens in each case. Most of these shapes make the
+        /// reflection path throw when the mapping is built; only an unlisted, unmatched parameter is
+        /// silently left at its default there.
+        /// </summary>
+        [Fact]
+        public void TheMessageSaysWhatTheReflectionPathDoesInEachCase()
+        {
+            string refused = "the reflection path refuses this mapping with a CborException when it is built";
+
+            Assert.Contains(refused, MessageOf("CBOR1016", Listed("IntKeyMap", "[CborConstructor(0)]", "int a, int b")));
+            Assert.Contains(refused, MessageOf("CBOR1016", Listed("IntKeyMap", "[CborConstructor(0, 7)]", "int a, int b")));
+            Assert.Contains(refused, MessageOf("CBOR1016", @"
+public class Holder { public Holder(long p) { } public int P { get; set; } }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+"));
+
+            string unmatched = MessageOf("CBOR1016", @"
+public class Holder { [CborConstructor] public Holder(int id, string absent) { } public int Id { get; set; } }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Contains("leave it at its default value", unmatched);
+            Assert.DoesNotContain("refuses", unmatched);
+            Assert.DoesNotContain("silently produce different bytes", unmatched);
+        }
+
+        /// <summary>
+        /// Two explicit constructors, none marked, in a struct: the reflection path takes the first
+        /// declared, and <c>new T()</c> plus setters reads nothing into a member that has no setter.
+        /// </summary>
+        [Fact]
+        public void AStructWithSeveralConstructorsAndAMemberNoSetterReachesIsReported()
+        {
+            AssertReports("CBOR1010", @"
+public struct Money
+{
+    public Money(string currency, decimal amount) { Currency = currency; Amount = amount; }
+    public Money(decimal amount) { Currency = ""USD""; Amount = amount; }
+
+    public string Currency { get; }
+    public decimal Amount { get; }
+}
+
+[CborSerializable(typeof(Money))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>The same struct with every member settable is still read completely.</summary>
+        [Fact]
+        public void AStructWithSeveralConstructorsAndOnlySettableMembersIsNotReported()
+        {
+            AssertClean(@"
+public struct Pair
+{
+    public Pair(int x) { X = x; Y = 0; }
+    public Pair(int x, int y) { X = x; Y = y; }
+
+    public int X { get; set; }
+    public int Y { get; set; }
+}
+
+[CborSerializable(typeof(Pair))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// A struct whose only constructor leaves a member unsupplied was read as default-plus-setters
+        /// before creators existed; building it through that constructor instead would hand the other
+        /// member to a setter a struct cannot take.
+        /// </summary>
+        [Fact]
+        public void AStructWhoseSoleConstructorLeavesAMemberUnsuppliedIsNotBuiltThroughIt()
+        {
+            string body = @"
+public struct Pt
+{
+    public int X;
+    public int Y;
+
+    public Pt(int x) { X = x; Y = 0; }
+}
+
+[CborSerializable(typeof(Pt))]
+public partial class Context : CborSerializerContext { }
+";
+            AssertClean(body);
+            Assert.DoesNotContain("MapCreator", GeneratorHarness.GeneratedSource(Preamble + body));
+        }
+
+        [Fact]
+        public void AStructWhoseConstructorSuppliesEveryMemberIsBuiltThroughIt()
+        {
+            string body = @"
+public struct Pt
+{
+    public Pt(int x, int y) { X = x; Y = y; }
+
+    public int X { get; }
+    public int Y { get; }
+}
+
+[CborSerializable(typeof(Pt))]
+public partial class Context : CborSerializerContext { }
+";
+            AssertClean(body);
+            Assert.Contains("MapCreator", GeneratorHarness.GeneratedSource(Preamble + body));
         }
 
         /// <summary>

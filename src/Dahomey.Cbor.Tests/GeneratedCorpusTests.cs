@@ -253,6 +253,56 @@ namespace Dahomey.Cbor.Tests
                 return new GeneratedSealedRecord(7);
             }
 
+            if (type == typeof(GeneratedSnakeRecord))
+            {
+                return new GeneratedSnakeRecord(1, 2);
+            }
+
+            if (type == typeof(GeneratedKebabRecord))
+            {
+                return new GeneratedKebabRecord(1, 2);
+            }
+
+            if (type == typeof(GeneratedRenamedRecord))
+            {
+                return new GeneratedRenamedRecord(1, 2);
+            }
+
+            if (type == typeof(GeneratedSnakeClass))
+            {
+                return new GeneratedSnakeClass(1, 2);
+            }
+
+            if (type == typeof(GeneratedSnakeTransform))
+            {
+                return new GeneratedSnakeTransform(1, 2);
+            }
+
+            if (type == typeof(GeneratedTupleCreator))
+            {
+                return new GeneratedTupleCreator((1, 2));
+            }
+
+            if (type == typeof(GeneratedCaseLower))
+            {
+                return new GeneratedCaseLower(1, 2);
+            }
+
+            if (type == typeof(GeneratedCaseUpper))
+            {
+                return new GeneratedCaseUpper(1, 2);
+            }
+
+            if (type == typeof(GeneratedPartialStruct))
+            {
+                return new GeneratedPartialStruct { X = 1, Y = 2 };
+            }
+
+            if (type == typeof(GeneratedCompleteStruct))
+            {
+                return new GeneratedCompleteStruct(1, 2);
+            }
+
             if (type == typeof(GeneratedDiscriminatedRecord))
             {
                 return new GeneratedDiscriminatedRecord(7, "seven");
@@ -695,6 +745,13 @@ namespace Dahomey.Cbor.Tests
             typeof(Cddl.CddlEventLog),
             typeof(Cddl.CddlOutbox),
             typeof(Cddl.CddlEscapedHolder),
+
+            // Deliberately do not round-trip: the first transforms its arguments, and the other two
+            // list names that differ in case from the document's keys -- the behaviour the creator
+            // tests pin, against the reflection path, one by one.
+            typeof(GeneratedSnakeTransform),
+            typeof(GeneratedCaseLower),
+            typeof(GeneratedCaseUpper),
         };
 
         public static IEnumerable<object[]> RoundTrippableTypes()

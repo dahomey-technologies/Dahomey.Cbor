@@ -201,5 +201,19 @@ namespace Dahomey.Cbor.Generator
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
+
+        /// <summary>
+        /// The creator the reflection path builds the type through cannot be reproduced. Separate from
+        /// <see cref="UnsupportedFeature"/> because the reason differs by case, and the message states
+        /// it: most of these shapes make the reflection path itself throw when the mapping is built,
+        /// and only a parameter matching no member is silently left at its default there.
+        /// </summary>
+        public static readonly DiagnosticDescriptor CreatorNotReproducible = new(
+            id: "CBOR1016",
+            title: "Constructor mapping cannot be reproduced",
+            messageFormat: "'{0}' is built through a constructor that cannot be mapped: {1}",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
     }
 }
