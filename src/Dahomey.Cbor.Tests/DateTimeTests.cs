@@ -54,5 +54,53 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(new DateTime(2023, 05, 16, 08, 30, 00, DateTimeKind.Utc), dateTime);
             Assert.Equal(DateTimeKind.Utc, dateTime.Kind);
         }
+
+        [Theory]
+        [InlineData("C1F97E00")]              // NaN, half
+        [InlineData("C1FA7FC00000")]          // NaN, single
+        [InlineData("C1FB7FF8000000000000")]  // NaN, double
+        [InlineData("C1FB7FF0000000000000")]  // +Infinity, double
+        [InlineData("C1FBFFF0000000000000")]  // -Infinity, double
+        public void ANonFiniteTimeStampIsRefused(string hexBuffer)
+        {
+            Assert.Throws<CborException>(() => Helper.Read<DateTime>(hexBuffer));
+        }
+
+        /// <summary>
+        /// The double written for a millisecond is only the nearest one to it, a tick or two either
+        /// side, so reading it back must land on that millisecond rather than truncate.
+        /// </summary>
+        [Fact]
+        public void UnixMillisecondsRoundTripsEveryMillisecond()
+        {
+            CborOptions options = new CborOptions { DateTimeFormat = DateTimeFormat.UnixMilliseconds };
+
+            foreach (DateTime start in new[]
+            {
+                new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+                new DateTime(2262, 4, 11, 23, 47, 16, DateTimeKind.Utc),
+                new DateTime(1969, 12, 31, 23, 59, 59, DateTimeKind.Utc),
+                new DateTime(1601, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            })
+            {
+                for (int i = 0; i < 2000; i++)
+                {
+                    DateTime value = start.AddMilliseconds(i);
+                    Assert.Equal(value, Helper.Read<DateTime>(Helper.Write(value, options), options));
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData("C1FB41D2FEEBFE87DF3B", "2010-05-25T11:09:46.123Z")]
+        [InlineData("C1FB3FF8000000000000", "1970-01-01T00:00:01.5Z")]
+        // Not a whole millisecond, so read to the nearest tick: 1.00000012 s is 10000001.2 ticks.
+        [InlineData("C1FB3FF0000020365653", "1970-01-01T00:00:01.0000001Z")]
+        public void ReadFractionalUnixTime(string hexBuffer, string expectedISO8601)
+        {
+            DateTime expected = DateTime.Parse(expectedISO8601, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+
+            Assert.Equal(expected, Helper.Read<DateTime>(hexBuffer));
+        }
     }
 }

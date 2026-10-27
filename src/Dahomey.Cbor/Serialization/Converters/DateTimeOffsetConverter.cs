@@ -62,9 +62,8 @@ namespace Dahomey.Cbor.Serialization.Converters
                 case CborDataItemType.Single:
                     double fractionalSeconds = reader.ReadDouble();
 
-                    // NaN compares false against every bound, so AddSeconds would not refuse it: it
-                    // converts to a zero tick count and reads as the epoch. Neither it nor an infinity
-                    // names an instant, so both are refused here.
+                    // Neither NaN nor an infinity names an instant, so both are refused here rather
+                    // than reported as out of range.
                     if (double.IsNaN(fractionalSeconds) || double.IsInfinity(fractionalSeconds))
                     {
                         throw reader.BuildException(
@@ -73,7 +72,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                     try
                     {
-                        return DateTimeOffset.FromUnixTimeSeconds(0).AddSeconds(fractionalSeconds);
+                        return DateTimeOffset.FromUnixTimeSeconds(0).AddTicks(UnixTime.SecondsToTicks(fractionalSeconds));
                     }
                     catch (ArgumentOutOfRangeException)
                     {
