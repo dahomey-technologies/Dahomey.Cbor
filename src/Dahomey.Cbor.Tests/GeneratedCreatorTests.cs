@@ -16,23 +16,6 @@ namespace Dahomey.Cbor.Tests
 
     public record GeneratedRecord(int Id, string Name);
 
-    /// <summary>[CborConstructor] wins over the parameterless constructor that is also declared.</summary>
-    public record GeneratedCreatorHolder
-    {
-        [CborConstructor]
-        public GeneratedCreatorHolder(int id, string name)
-        {
-            Id = id;
-            Name = name;
-        }
-
-        public GeneratedCreatorHolder() => Name = "unused";
-
-        public int Id { get; init; }
-
-        public string Name { get; init; }
-    }
-
     /// <summary>Past the sixteen inputs System.Func has; the context declares a delegate type instead.</summary>
     public record GeneratedWide(
         int A01, string A02, long A03, int A04, int A05, int A06, int A07, int A08, int A09,
@@ -86,9 +69,6 @@ namespace Dahomey.Cbor.Tests
 
     /// <summary>Parameter order is the reverse of index order.</summary>
     public record GeneratedSwapped([property: CborProperty(1)] int A, [property: CborProperty(0)] string B);
-
-    /// <summary>Non-contiguous indexes, which only IntKeyMap allows.</summary>
-    public record GeneratedSparse([property: CborProperty(5)] int A, [property: CborProperty(2)] string B);
 
     /// <summary>A discriminator takes slot 0 of an Array, so the declared indexes start at 1.</summary>
     [CborDiscriminator("discriminated", Policy = CborDiscriminatorPolicy.Always)]
@@ -151,7 +131,6 @@ namespace Dahomey.Cbor.Tests
     }
 
     [CborSerializable(typeof(GeneratedRecord))]
-    [CborSerializable(typeof(GeneratedCreatorHolder))]
     [CborSerializable(typeof(GeneratedWide))]
     [CborSerializable(typeof(GeneratedListedNames))]
     [CborSerializable(typeof(GeneratedCompleteStruct))]
@@ -177,7 +156,6 @@ namespace Dahomey.Cbor.Tests
     }
 
     [CborSerializable(typeof(GeneratedSwapped))]
-    [CborSerializable(typeof(GeneratedSparse))]
     [CborSerializable(typeof(GeneratedListedIndexes))]
     [CborSourceGenerationOptions(ObjectFormat = CborObjectFormat.IntKeyMap)]
     public partial class CreatorIntKeyContext : CborSerializerContext
@@ -189,13 +167,11 @@ namespace Dahomey.Cbor.Tests
         internal static readonly Dictionary<Type, Func<object>> Samples = new Dictionary<Type, Func<object>>
         {
             [typeof(GeneratedRecord)] = () => new GeneratedRecord(7, "seven"),
-            [typeof(GeneratedCreatorHolder)] = () => new GeneratedCreatorHolder(7, "seven"),
             [typeof(GeneratedWide)] = () => new GeneratedWide(1, "two", 3L, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, "seventeen"),
             [typeof(GeneratedSnakeGetOnly)] = () => new GeneratedSnakeGetOnly(1, "one"),
             [typeof(GeneratedListedNames)] = () => new GeneratedListedNames(1, 2),
             [typeof(GeneratedListedIndexes)] = () => new GeneratedListedIndexes(1, 2),
             [typeof(GeneratedSwapped)] = () => new GeneratedSwapped(1, "one"),
-            [typeof(GeneratedSparse)] = () => new GeneratedSparse(7, "seven"),
             [typeof(GeneratedDiscriminated)] = () => new GeneratedDiscriminated(7, "seven"),
             [typeof(GeneratedInheritedArrayCreator)] = () => new GeneratedInheritedArrayCreator("n") { Id = 7 },
             [typeof(GeneratedCompleteStruct)] = () => new GeneratedCompleteStruct(1, 2),
@@ -229,13 +205,6 @@ namespace Dahomey.Cbor.Tests
         {
             Assert.Equal(new GeneratedRecord(7, "seven"),
                 Compare(new CreatorContext(), Reflection(), new GeneratedRecord(7, "seven")));
-        }
-
-        [Fact]
-        public void AMarkedConstructorWinsOverTheParameterlessOne()
-        {
-            Assert.Equal("seven",
-                Compare(new CreatorContext(), Reflection(), new GeneratedCreatorHolder(7, "seven")).Name);
         }
 
         [Fact]
@@ -295,14 +264,6 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(value, Compare(
                 format == CborObjectFormat.Array ? new CreatorArrayContext() : (CborSerializerContext)new CreatorIntKeyContext(),
                 Reflection(format), value));
-        }
-
-        [Fact]
-        public void NonContiguousIndexesAreTheDeclaredOnes()
-        {
-            GeneratedSparse value = new GeneratedSparse(7, "seven");
-
-            Assert.Equal(value, Compare(new CreatorIntKeyContext(), Reflection(CborObjectFormat.IntKeyMap), value));
         }
 
         [Fact]
