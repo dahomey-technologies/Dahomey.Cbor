@@ -29,7 +29,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         public struct Context
         {
             internal Dictionary<string, long> Members;
-            internal HashSet<string> Seen;
+            internal HashSet<string>? Seen;
         }
 
         /// <summary>
@@ -49,7 +49,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         void ICborMapReader<Context>.ReadBeginMap(int size, ref Context context)
         {
             context.Members = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-            context.Seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Only tracked when a repeat is going to be refused; under LastWins the dictionary's
+            // indexer overwrites and nothing needs remembering.
+            context.Seen = _reject ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
         }
 
         void ICborMapReader<Context>.ReadMapItem(ref CborReader reader, ref Context context)
@@ -63,7 +65,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
             string key = reader.ReadString() ?? string.Empty;
 
-            if (!context.Seen.Add(key) && _reject)
+            if (_reject && !context.Seen!.Add(key))
             {
                 throw reader.BuildException(MapKeyErrors.Duplicate(key));
             }

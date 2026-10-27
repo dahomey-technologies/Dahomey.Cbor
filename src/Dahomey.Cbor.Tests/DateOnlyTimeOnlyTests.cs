@@ -229,6 +229,23 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(new TimeOnly(1, 2, 25), Helper.Read<TimeOnly>(LegacyTimeWithRepeatedTicks, options));
         }
 
+        [Fact]
+        public void ARepeatedKeyDiffersOnlyInCaseIsStillARepeat()
+        {
+            // {"Year": 2026, "year": 1999, "Month": 8, "Day": 17} and {"Ticks": 1, "ticks": 37450000000}:
+            // keys match without regard to case, so these are the same member twice.
+            const string date = "A464596561721907EA64796561721907CF654D6F6E7468086344617911";
+            const string time = "A2655469636B7301657469636B731B00000008B831A680";
+
+            Assert.Throws<CborException>(() => Helper.Read<DateOnly>(date));
+            Assert.Throws<CborException>(() => Helper.Read<TimeOnly>(time));
+
+            var options = new CborOptions { DuplicateKeyMode = DuplicateKeyMode.LastWins };
+
+            Assert.Equal(new DateOnly(1999, 8, 17), Helper.Read<DateOnly>(date, options));
+            Assert.Equal(new TimeOnly(1, 2, 25), Helper.Read<TimeOnly>(time, options));
+        }
+
         public class DateAndTimeThenMore
         {
             public DateOnly Date { get; set; }
