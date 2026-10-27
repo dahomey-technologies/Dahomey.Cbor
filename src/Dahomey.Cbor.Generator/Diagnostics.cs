@@ -57,7 +57,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor MissingMemberIndex = new(
             id: "CBOR1005",
             title: "Member needs an explicit index",
-            messageFormat: "'{0}.{1}' needs [CborProperty(index)] because '{0}' uses the {2} object format",
+            messageFormat: "'{0}.{1}' needs [CborProperty(index)] because '{0}' uses the {2} object format{3}",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);

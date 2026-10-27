@@ -220,6 +220,55 @@ namespace Dahomey.Cbor.Tests
         public int Y { get; }
     }
 
+    /// <summary>
+    /// A type deriving from a base that declares the format: the object format is inherited, and
+    /// the creator has to be told indexes, not names, for it. The base member is set by its setter.
+    /// </summary>
+    public class GeneratedInheritedArrayRecord : InheritedArrayBase
+    {
+        public GeneratedInheritedArrayRecord(string name)
+        {
+            Name = name;
+        }
+
+        [CborProperty(1)]
+        public string Name { get; }
+
+        public override bool Equals(object obj) =>
+            obj is GeneratedInheritedArrayRecord other && other.Name == Name && other.Id == Id;
+
+        public override int GetHashCode() => Id;
+    }
+
+    [CborObjectFormat(CborObjectFormat.IntKeyMap)]
+    public class GeneratedIntKeyBase
+    {
+        [CborProperty(0)]
+        public int Id { get; set; }
+    }
+
+    public class GeneratedInheritedIntKeyRecord : GeneratedIntKeyBase
+    {
+        public GeneratedInheritedIntKeyRecord(string name)
+        {
+            Name = name;
+        }
+
+        [CborProperty(4)]
+        public string Name { get; }
+
+        public override bool Equals(object obj) =>
+            obj is GeneratedInheritedIntKeyRecord other && other.Name == Name && other.Id == Id;
+
+        public override int GetHashCode() => Id;
+    }
+
+    [CborSerializable(typeof(GeneratedInheritedArrayRecord))]
+    [CborSerializable(typeof(GeneratedInheritedIntKeyRecord))]
+    public partial class CreatorInheritedContext : CborSerializerContext
+    {
+    }
+
     [CborSerializable(typeof(GeneratedRecord))]
     [CborSerializable(typeof(GeneratedCreatorHolder))]
     [CborSerializable(typeof(GeneratedRenamedRecord))]
@@ -613,6 +662,41 @@ namespace Dahomey.Cbor.Tests
                 "A2" + "6158" + "01" + "6159" + "02");
 
             Assert.Equal(new GeneratedCompleteStruct(1, 2), read);
+        }
+
+        /// <summary>
+        /// The format comes from the base class, not from the context, so the creator must be keyed by
+        /// the format the type actually has -- an Array creator told names throws while the context
+        /// is built.
+        /// </summary>
+        [Fact]
+        public void ARecordDerivingFromAnArrayBaseIsCreatedByIndex()
+        {
+            GeneratedInheritedArrayRecord value = new GeneratedInheritedArrayRecord("n") { Id = 7 };
+
+            GeneratedInheritedArrayRecord read = AssertMatchesReflection(
+                new CreatorInheritedContext(),
+                new CborOptions(),
+                value,
+                Helper.Write(value));
+
+            Assert.Equal(value, read);
+            Assert.Equal(7, read.Id);
+        }
+
+        [Fact]
+        public void ARecordDerivingFromAnIntKeyMapBaseIsCreatedByIndex()
+        {
+            GeneratedInheritedIntKeyRecord value = new GeneratedInheritedIntKeyRecord("n") { Id = 7 };
+
+            GeneratedInheritedIntKeyRecord read = AssertMatchesReflection(
+                new CreatorInheritedContext(),
+                new CborOptions(),
+                value,
+                Helper.Write(value));
+
+            Assert.Equal(value, read);
+            Assert.Equal(7, read.Id);
         }
 
         internal static GeneratedRecord SampleRecord() => new GeneratedRecord(7, "seven");

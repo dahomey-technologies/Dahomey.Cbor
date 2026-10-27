@@ -259,11 +259,16 @@ namespace Dahomey.Cbor.Generator
                 case SpecialType.System_UInt32:
                     return "0..4294967295";
 
+                // Spelled out rather than as the prelude's `int` and `uint`. `int` is wider than a
+                // long (a CBOR integer reaches -2^64..2^64-1), while `uint` has exactly a ulong's
+                // range. Both are ranges anyway: it keeps them consistent with the narrower widths
+                // above, and tells a code generator reading the schema which integer width to
+                // declare -- given a bare `int` or `uint` it has to guess, and zcbor guesses 32 bits.
                 case SpecialType.System_Int64:
-                    return "int";
+                    return "-9223372036854775808..9223372036854775807";
 
                 case SpecialType.System_UInt64:
-                    return "uint";
+                    return "0..18446744073709551615";
 
                 // CborWriter.WriteSingle and WriteDouble both emit the shortest form that round-trips,
                 // unconditionally, so a double may arrive on the wire as float16, float32 or float64.
@@ -336,6 +341,16 @@ namespace Dahomey.Cbor.Generator
                 case "Dahomey.Cbor.CborBigFloat":
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
 
+                // The same three forms a DateTime takes, since it is the same pair of tags. Only tag 0
+                // carries the offset; tag 1 names an instant and drops it.
+                case "System.DateTimeOffset":
+                    return options.DateTimeFormat switch
+                    {
+                        "Unix" => "#6.1(int)",
+                        "UnixMilliseconds" => "#6.1(float)",
+                        _ => "#6.0(tstr)",
+                    };
+
                 // HalfConverter writes through CborWriter.WriteHalf, which emits binary16 and nothing
                 // wider -- unlike WriteSingle and WriteDouble, which pick the shortest form that round
                 // trips and so need the prelude's looser `float`. So `float16` is exact here rather
@@ -344,9 +359,9 @@ namespace Dahomey.Cbor.Generator
                     return "float16";
             }
 
-            // Guid and DateTimeOffset have no scalar converter. System.Decimal reaches here only in
-            // its default encoding, which is likewise indescribable. Each falls through to CBOR1011
-            // rather than asserting a row no converter backs.
+            // Guid has no scalar converter. System.Decimal reaches here only in its default encoding,
+            // which is likewise indescribable. Each falls through to CBOR1011 rather than asserting a
+            // row no converter backs.
             return null;
         }
 

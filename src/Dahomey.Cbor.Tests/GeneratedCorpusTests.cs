@@ -308,9 +308,69 @@ namespace Dahomey.Cbor.Tests
                 return new GeneratedDiscriminatedRecord(7, "seven");
             }
 
+            if (type == typeof(GeneratedInheritedArrayRecord))
+            {
+                return new GeneratedInheritedArrayRecord("n") { Id = 7 };
+            }
+
+            if (type == typeof(GeneratedInheritedIntKeyRecord))
+            {
+                return new GeneratedInheritedIntKeyRecord("n") { Id = 7 };
+            }
+
             if (type == typeof(GeneratedCreatorHolder))
             {
                 return GeneratedCreatorTests.SampleHolder();
+            }
+
+            if (type == typeof(GeneratedKeptMapFormat))
+            {
+                return new GeneratedKeptMapFormat { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedArrayDerived))
+            {
+                return new InheritedArrayDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedGenericDerived))
+            {
+                return new InheritedGenericDerived { Value = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedPolymorphicDerived))
+            {
+                return new InheritedPolymorphicDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedMapDerived))
+            {
+                return new InheritedMapDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedOverrideDerived))
+            {
+                return new InheritedOverrideDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedLeaf))
+            {
+                return new InheritedLeaf { Id = 7, Name = "n", Extra = 9 };
+            }
+
+            if (type == typeof(InheritedDiscriminatorDerived))
+            {
+                return new InheritedDiscriminatorDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedIntDiscriminatorDerived))
+            {
+                return new InheritedIntDiscriminatorDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(GeneratedTakesArrayFormat))
+            {
+                return new GeneratedTakesArrayFormat { Id = 7, Name = "n" };
             }
 
             if (type == typeof(Issues.Issue0240.HalfHolder))
@@ -548,6 +608,17 @@ namespace Dahomey.Cbor.Tests
                 return new Cddl.CddlDateTimeFormatHolder
                 {
                     Stamp = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+                };
+            }
+
+            // Two different offsets, so the comparison catches a generated context that resolved a
+            // converter dropping them: the instants would still be right and the bytes would not.
+            if (type == typeof(GeneratedOffsetHolder))
+            {
+                return new GeneratedOffsetHolder
+                {
+                    Stamp = new DateTimeOffset(2026, 8, 17, 1, 2, 3, TimeSpan.FromHours(2)),
+                    Optional = new DateTimeOffset(1996, 12, 19, 16, 39, 57, TimeSpan.FromHours(-8)),
                 };
             }
 

@@ -41,11 +41,50 @@ namespace Dahomey.Cbor.GeneratorTests
         }
 
         /// <summary>
-        /// Compiles <paramref name="librarySource"/> as its own assembly, then runs the generator over
-        /// <paramref name="source"/> referencing it. Returns the generator's diagnostics and the errors
-        /// from compiling its output -- what an <c>internal</c> member of another assembly looks like.
+        /// Compiles <paramref name="librarySource"/> into its own assembly and runs the generator over
+        /// <paramref name="consumerSource"/> referencing it, so every type from the library reaches the
+        /// generator as a metadata symbol rather than as source. Returns the generator's diagnostics
+        /// and what it generated.
         /// </summary>
-        public static (IReadOnlyList<Diagnostic> Reported, IReadOnlyList<Diagnostic> CompileErrors) RunAgainstLibrary(
+        public static (IReadOnlyList<Diagnostic> Diagnostics, string Generated) RunAgainstLibrary(
+            string librarySource, string consumerSource)
+        {
+            CSharpCompilation library = CSharpCompilation.Create(
+                "GeneratorTestLibrary",
+                new[] { CSharpSyntaxTree.ParseText(librarySource) },
+                ReferenceSet(),
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+
+            using System.IO.MemoryStream image = new System.IO.MemoryStream();
+            var emitted = library.Emit(image);
+            if (!emitted.Success)
+            {
+                throw new InvalidOperationException(
+                    "The library did not compile: " + string.Join(", ", emitted.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)));
+            }
+
+            MetadataReference libraryReference = MetadataReference.CreateFromImage(image.ToArray());
+
+            CSharpCompilation consumer = CSharpCompilation.Create(
+                "GeneratorTestConsumer",
+                new[] { CSharpSyntaxTree.ParseText(consumerSource) },
+                ReferenceSet().Append(libraryReference),
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+
+            CSharpGeneratorDriver.Create(new CborSourceGenerator())
+                .RunGeneratorsAndUpdateCompilation(consumer, out Compilation output, out ImmutableArray<Diagnostic> diagnostics);
+
+            return (
+                diagnostics.OrderBy(diagnostic => diagnostic.Id).ToList(),
+                string.Join(Environment.NewLine, output.SyntaxTrees.Skip(1).Select(tree => tree.ToString())));
+        }
+
+        /// <summary>
+        /// Like <see cref="RunAgainstLibrary"/>, but returns the errors from compiling the generator's
+        /// output instead of its text -- what an <c>internal</c> or <c>protected</c> member of another
+        /// assembly looks like to a generated context (CS0122).
+        /// </summary>
+        public static (IReadOnlyList<Diagnostic> Reported, IReadOnlyList<Diagnostic> CompileErrors) RunAgainstLibraryAndCompile(
             string librarySource, string source)
         {
             CSharpCompilation library = CSharpCompilation.Create(

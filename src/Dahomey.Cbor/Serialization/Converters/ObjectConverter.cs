@@ -46,9 +46,24 @@ namespace Dahomey.Cbor.Serialization.Converters
         T CreateInstance();
     }
 
+    /// <summary>
+    /// A converter that can be told a polymorphic read is about to run on it, so that it brings its
+    /// discriminator convention up to date first.
+    /// </summary>
+    /// <remarks>
+    /// A read through a base type dispatches to the derived type's converter and never makes that
+    /// converter the declared one, so nothing else would ask it. Internal, because
+    /// <see cref="IObjectConverter"/> is public and a member added to it would break implementers.
+    /// </remarks>
+    internal interface IDiscriminatorConventionHolder
+    {
+        void EnsureDiscriminatorConventionCurrent();
+    }
+
     public class ObjectConverter<T> :
         CborConverterBase<T>,
         IObjectConverter<T>,
+        IDiscriminatorConventionHolder,
         ICborMapReader<ObjectConverter<T>.ReaderContext>,
         ICborMapWriter<ObjectConverter<T>.WriterContext>,
         ICborArrayReader<ObjectConverter<T>.ReaderContext>,
@@ -137,7 +152,33 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// drift from what is actually on the wire.
         /// </remarks>
         private readonly int[] _memberIndexesByPosition;
-        private List<IMemberConverter>? _deterministicMemberConvertersForWrite;
+
+        /// <summary>
+        /// The write order of a deterministic document, stamped with the discriminator state it was
+        /// sorted under, or null before the first deterministic write.
+        /// </summary>
+        /// <remarks>
+        /// The discriminator is one of the keys being ordered, and its name is the convention's, which
+        /// <c>ClearConventions</c> and a later registration can replace. So a type that writes a
+        /// discriminator is stamped with the registry's version and sorted again when it moves; one
+        /// that does not is stamped with a constant and sorted once, as the member set is fixed at
+        /// construction. The list and its stamp are one object behind one reference, replaced whole,
+        /// for the reason <see cref="_resolvedDiscriminatorConvention"/> is: two threads building the
+        /// same order is harmless, and a stamp that outlives the list it describes is not possible.
+        /// </remarks>
+        private DeterministicOrder? _deterministicOrder;
+
+        private sealed class DeterministicOrder
+        {
+            public readonly int Version;
+            public readonly List<IMemberConverter> Members;
+
+            public DeterministicOrder(int version, List<IMemberConverter> members)
+            {
+                Version = version;
+                Members = members;
+            }
+        }
         private readonly CborOptions _options;
         private readonly SerializationRegistry _registry;
         private readonly IObjectMapping _objectMapping;
@@ -146,44 +187,51 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly bool _isStruct;
 
         /// <summary>
-        /// The convention resolving this type's discriminator, or null while no type in its hierarchy
-        /// carries one.
+        /// The convention resolving this type's discriminator, stamped with the registry version it was
+        /// resolved at. An answer of null means no type in the hierarchy carries one.
         /// </summary>
         /// <remarks>
-        /// Not readonly, and not final at construction. A converter is built once per type and cached
-        /// for the lifetime of the options, so resolving this only in the constructor froze the answer
-        /// at whatever was registered the first time the type was touched. For a type read as an
-        /// abstract base or an interface that answer is null by construction - the base carries no
-        /// discriminator of its own, only its subtypes do - so a <c>RegisterType</c> for the subtype
-        /// after the first read had no way to reach this field, and the read kept failing as though the
-        /// call had never been made.
+        /// Not final at construction. A converter is built once per type and cached for the lifetime of
+        /// the options, so resolving this only in the constructor froze the answer at whatever was
+        /// registered the first time the type was touched -- null for a type read as an abstract base
+        /// or an interface, whose subtypes alone carry a discriminator, and a stale convention after
+        /// <see cref="DiscriminatorConventionRegistry.ClearConventions"/>.
         /// <para>
-        /// Re-resolved only while null, and only when the registry reports a registration since the
-        /// last attempt, so the steady state is a field read and an int compare rather than a lookup.
-        /// See <see cref="_discriminatorConventionVersion"/> for why the unsynchronized write is safe.
+        /// The answer is re-resolved whenever the registry's <see cref="DiscriminatorConventionRegistry.Version"/>
+        /// has moved, so the steady state is a field read and an int compare rather than a lookup.
+        /// </para>
+        /// <para>
+        /// Answer and version are one immutable object behind one reference, replaced whole. Two fields
+        /// written separately could be interleaved by racing resolvers into an old convention beside a
+        /// new version, which would be taken for current and never re-asked now that a non-null answer
+        /// can go stale too. With one reference a racing write can only leave a stamp older than the
+        /// registry's, which the next read answers by resolving again. The reference is published with
+        /// <see cref="Volatile"/> so the object's fields are visible to a reader on weak memory models.
+        /// </para>
+        /// <para>
+        /// Nothing on the read side is keyed by the discriminator's name: the discriminator mapping
+        /// cannot be deserialized, so it has no entry in the member lookup tables, and the document's
+        /// discriminator is recognised through this convention's current name. The one exception is a
+        /// creator parameter that happens to share that name, whose entry is built once with the
+        /// constructor and keeps the name the convention had then.
         /// </para>
         /// </remarks>
-        private IDiscriminatorConvention? _discriminatorConvention = null;
+        private ResolvedDiscriminatorConvention _resolvedDiscriminatorConvention = ResolvedDiscriminatorConvention.Unresolved;
 
-        /// <summary>
-        /// The <see cref="DiscriminatorConventionRegistry.Version"/> at which
-        /// <see cref="_discriminatorConvention"/> was last resolved to null.
-        /// </summary>
-        /// <remarks>
-        /// The pair is written without a lock, and an interleaving costs nothing worse than resolving
-        /// again. Resolution is monotone - null becomes a convention and never the reverse - so the
-        /// stale value a race can leave behind is a null with an old version, which the next read
-        /// answers by asking the registry once more. Two threads resolving at once compute the same
-        /// answer, and once the field is non-null neither writes again.
-        /// <para>
-        /// The version is written last and read first, both with <see cref="Volatile"/>, which is what
-        /// rules out the one interleaving that would not heal: a reader seeing the new version next to
-        /// the convention it replaced would take the null for a current answer and stop asking. The
-        /// barrier orders the two, so a new version is never visible before the convention it accounts
-        /// for. This matters on the weak memory models - arm64 among them - and costs nothing on x64.
-        /// </para>
-        /// </remarks>
-        private int _discriminatorConventionVersion;
+        private sealed class ResolvedDiscriminatorConvention
+        {
+            // Never equal to a registry version, which starts at 0 and only grows.
+            public static readonly ResolvedDiscriminatorConvention Unresolved = new ResolvedDiscriminatorConvention(-1, null);
+
+            public readonly int Version;
+            public readonly IDiscriminatorConvention? Convention;
+
+            public ResolvedDiscriminatorConvention(int version, IDiscriminatorConvention? convention)
+            {
+                Version = version;
+                Convention = convention;
+            }
+        }
 
         /// <summary>
         /// Whether this type's own mapping carries a discriminator, as opposed to merely resolving a
@@ -227,19 +275,22 @@ namespace Dahomey.Cbor.Serialization.Converters
                     return _memberConvertersForWrite;
                 }
 
-                // The member set itself is fixed at construction, so its sorted permutation is too, and
-                // is computed once. Two threads racing here build identical lists; the reference
-                // assignment is atomic, so the loser's copy is simply dropped.
-                List<IMemberConverter>? sorted = _deterministicMemberConvertersForWrite;
+                // The member set itself is fixed at construction. What can move is the discriminator's
+                // name, so the order is stamped with the registry's version when this type writes one.
+                // Two threads racing here build identical lists, and the loser's is simply dropped.
+                // The version is sampled before sorting, so a change landing meanwhile is seen next time.
+                int version = _hasDiscriminatorMember ? _registry.DiscriminatorConventionRegistry.Version : 0;
+                DeterministicOrder? order = Volatile.Read(ref _deterministicOrder);
 
-                if (sorted == null)
+                if (order == null || order.Version != version)
                 {
-                    sorted = new List<IMemberConverter>(_memberConvertersForWrite);
+                    List<IMemberConverter> sorted = new List<IMemberConverter>(_memberConvertersForWrite);
                     sorted.Sort(CompareMembersForDeterministicOrder);
-                    _deterministicMemberConvertersForWrite = sorted;
+                    order = new DeterministicOrder(version, sorted);
+                    Volatile.Write(ref _deterministicOrder, order);
                 }
 
-                return sorted;
+                return order.Members;
             }
         }
         public ByteBufferDictionary<MemberReadEntry> MemberConvertersForRead => _memberConvertersForRead;
@@ -419,8 +470,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         /// <summary>
-        /// The convention for this type, asking the registry again if the last answer was null and
-        /// something has been registered since.
+        /// The convention for this type, asking the registry again whenever its version has moved
+        /// since the held answer was resolved - null or not, since clearing the conventions can
+        /// displace a convention as well as add one.
         /// </summary>
         /// <remarks>
         /// The version is sampled before the lookup, never after: a registration landing between the
@@ -428,18 +480,19 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// </remarks>
         private IDiscriminatorConvention? GetDiscriminatorConvention()
         {
-            // Read in the order the writes are published in: the version first, so a version that
-            // matches guarantees the convention beside it is the one that version accounts for.
-            int resolvedVersion = Volatile.Read(ref _discriminatorConventionVersion);
-            IDiscriminatorConvention? convention = _discriminatorConvention;
+            ResolvedDiscriminatorConvention resolved = Volatile.Read(ref _resolvedDiscriminatorConvention);
 
-            if (convention != null
-                || resolvedVersion == _registry.DiscriminatorConventionRegistry.Version)
+            if (resolved.Version == _registry.DiscriminatorConventionRegistry.Version)
             {
-                return convention;
+                return resolved.Convention;
             }
 
             return ResolveDiscriminatorConvention();
+        }
+
+        void IDiscriminatorConventionHolder.EnsureDiscriminatorConventionCurrent()
+        {
+            GetDiscriminatorConvention();
         }
 
         private IDiscriminatorConvention? ResolveDiscriminatorConvention()
@@ -448,8 +501,11 @@ namespace Dahomey.Cbor.Serialization.Converters
             IDiscriminatorConvention? convention =
                 _registry.DiscriminatorConventionRegistry.GetConvention(typeof(T));
 
-            _discriminatorConvention = convention;
-            Volatile.Write(ref _discriminatorConventionVersion, version);
+            // A convention that arrives after the mapping was validated brings a member name that
+            // validation never saw; see the method for what it refuses.
+            MemberMappingErrors.ThrowIfDiscriminatorNameCollides(_objectMapping, convention);
+
+            Volatile.Write(ref _resolvedDiscriminatorConvention, new ResolvedDiscriminatorConvention(version, convention));
 
             return convention;
         }
@@ -793,6 +849,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                                         }
 
                                         context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
+                                        (context.converter as IDiscriminatorConventionHolder)?.EnsureDiscriminatorConventionCurrent();
                                         ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
                                         context.creatorValues = creatorMapping != null ? new() : null;
                                         context.regularValues = creatorMapping != null ? new() : null;
@@ -820,6 +877,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                                         }
 
                                         context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
+                                        (context.converter as IDiscriminatorConventionHolder)?.EnsureDiscriminatorConventionCurrent();
                                         ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
                                         context.creatorValuesByIndex = creatorMapping != null ? new() : null;
                                         context.regularValuesByIndex = creatorMapping != null ? new() : null;
@@ -850,6 +908,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                                         }
 
                                         context.converter = (IObjectConverter<T>)_registry.ConverterRegistry.Lookup(actualType);
+                                        (context.converter as IDiscriminatorConventionHolder)?.EnsureDiscriminatorConventionCurrent();
                                         ICreatorMapping? creatorMapping = context.converter.ObjectMapping.CreatorMapping;
                                         context.creatorValuesByIndex = creatorMapping != null ? new() : null;
                                         context.regularValuesByIndex = creatorMapping != null ? new() : null;
@@ -1448,7 +1507,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// </remarks>
         private void HandleUnmappedName(ref CborReader reader, ref MemberReadState state, ReadOnlySpan<byte> memberName)
         {
-            if (_hasDiscriminatorMember && memberName.SequenceEqual(_discriminatorConvention!.MemberName))
+            if (_hasDiscriminatorMember
+                && GetDiscriminatorConvention() is IDiscriminatorConvention convention
+                && memberName.SequenceEqual(convention.MemberName))
             {
                 if (state.MarkDiscriminatorRead())
                 {
