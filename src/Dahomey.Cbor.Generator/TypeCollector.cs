@@ -497,9 +497,11 @@ namespace Dahomey.Cbor.Generator
         }
 
         /// <summary>
-        /// Members in the order the reflection path sees them: most-derived type first, then each base.
-        /// Matching that order matters because it determines the order members appear on the wire, and
-        /// the generated output is required to be byte-identical.
+        /// Members in the order the reflection path sees them: every property, then every field, each
+        /// most-derived type first, then each base (<c>DefaultObjectMappingConvention</c> maps the
+        /// result of <c>GetProperties</c>, then that of <c>GetFields</c>). Matching that order matters
+        /// because it determines the order members appear on the wire, and the generated output is
+        /// required to be byte-identical.
         /// </summary>
         /// <remarks>
         /// An overridden property is declared on both types and is one member, so the base declaration
@@ -517,6 +519,12 @@ namespace Dahomey.Cbor.Generator
         /// </remarks>
         private IEnumerable<ISymbol> EnumerateMembers(ITypeSymbol type)
         {
+            return EnumerateMembers<IPropertySymbol>(type).Concat(EnumerateMembers<IFieldSymbol>(type));
+        }
+
+        private IEnumerable<ISymbol> EnumerateMembers<TMember>(ITypeSymbol type)
+            where TMember : ISymbol
+        {
             HashSet<ISymbol> overriddenByADerivedMember =
                 new HashSet<ISymbol>(SymbolEqualityComparer.Default);
 
@@ -524,12 +532,8 @@ namespace Dahomey.Cbor.Generator
                  current is not null && current.SpecialType != SpecialType.System_Object;
                  current = current.BaseType)
             {
-                foreach (ISymbol member in current.GetMembers())
+                foreach (ISymbol member in current.GetMembers().OfType<TMember>())
                 {
-                    if (member is not (IPropertySymbol or IFieldSymbol))
-                    {
-                        continue;
-                    }
 
                     if (overriddenByADerivedMember.Contains(member))
                     {

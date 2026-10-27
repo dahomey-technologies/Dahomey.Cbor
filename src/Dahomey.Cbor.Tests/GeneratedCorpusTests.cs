@@ -367,6 +367,21 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedCollectionInterfaceTests.Sample();
             }
 
+            if (type == typeof(GeneratedFieldFirst))
+            {
+                return new GeneratedFieldFirst { F = 1, P = 2 };
+            }
+
+            if (type == typeof(GeneratedPropertiesDerivedAddsField))
+            {
+                return new GeneratedPropertiesDerivedAddsField { BP = 1, DF = 2 };
+            }
+
+            if (type == typeof(GeneratedMixedDerived))
+            {
+                return new GeneratedMixedDerived { BF = 1, BP = 2, DF = 3, DP = 4 };
+            }
+
             if (type == typeof(GeneratedOverrideHolder))
             {
                 return new GeneratedOverrideHolder { Id = 7, Name = "seven" };
