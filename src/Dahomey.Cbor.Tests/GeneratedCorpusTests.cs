@@ -620,6 +620,7 @@ namespace Dahomey.Cbor.Tests
                 EnumFormat = generated.EnumFormat,
                 DateTimeFormat = generated.DateTimeFormat,
                 DecimalFormat = generated.DecimalFormat,
+                UntaggedGuidFormat = generated.UntaggedGuidFormat,
             };
 
             string reflectionBytes = WriteAs(type, Sample(type), reflection);

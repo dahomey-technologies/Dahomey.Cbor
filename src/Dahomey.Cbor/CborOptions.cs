@@ -102,6 +102,30 @@ namespace Dahomey.Cbor
     }
 
     /// <summary>
+    /// What a <see cref="System.Guid"/> read does with a byte string that carries no tag.
+    /// </summary>
+    /// <remarks>
+    /// A <see cref="System.Guid"/> is written as RFC 9562's binary UUID: tag 37 over sixteen big-endian bytes.
+    /// Code that predates that wrote the CLR's own <see cref="System.Guid.ToByteArray()"/> layout - the first
+    /// three fields little-endian - with no tag. Both are sixteen bytes, so reading the old form with
+    /// the new rules yields a different, perfectly valid <see cref="System.Guid"/> and no error. The
+    /// presence of the tag is therefore what tells the two apart, and an untagged string is refused
+    /// unless the caller says which layout it holds.
+    /// </remarks>
+    public enum UntaggedGuidFormat
+    {
+        /// <summary>Throw a <see cref="CborException"/>. The default.</summary>
+        Refuse = 0,
+
+        /// <summary>
+        /// Read sixteen untagged bytes in the CLR's <see cref="System.Guid.ToByteArray()"/> order, which is
+        /// what a hand-written converter calling <c>new Guid(bytes)</c> and
+        /// <c>Guid.TryWriteBytes</c> produced. Tagged strings are unaffected.
+        /// </summary>
+        ClrByteOrder = 1,
+    }
+
+    /// <summary>
     /// Which of the two encodings a <see cref="decimal"/> is written as.
     /// </summary>
     /// <remarks>
@@ -273,6 +297,17 @@ namespace Dahomey.Cbor
         /// </para>
         /// </remarks>
         public DecimalFormat DecimalFormat { get; set; }
+
+        /// <summary>
+        /// How a <see cref="System.Guid"/> held in an untagged byte string is read. Default
+        /// <see cref="UntaggedGuidFormat.Refuse"/>.
+        /// </summary>
+        /// <remarks>
+        /// A read-side setting only: a <see cref="System.Guid"/> is always written as tag 37 over sixteen
+        /// big-endian bytes. Set <see cref="UntaggedGuidFormat.ClrByteOrder"/> to keep reading documents
+        /// written by a converter that stored <see cref="System.Guid.ToByteArray()"/> with no tag.
+        /// </remarks>
+        public UntaggedGuidFormat UntaggedGuidFormat { get; set; }
 
         /// <summary>
         /// Semantic Tag to check if the discriminator is present when ObjectFormat is Array

@@ -16,6 +16,12 @@ namespace Dahomey.Cbor.Tests
     {
     }
 
+    [CborSerializable(typeof(GeneratedGuidHolder))]
+    [CborSourceGenerationOptions(UntaggedGuidFormat = UntaggedGuidFormat.ClrByteOrder)]
+    public partial class LegacyGuidContext : CborSerializerContext
+    {
+    }
+
     public class GuidTests
     {
         private static readonly Guid Sample = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef");
@@ -65,14 +71,71 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(value, Helper.Read<Guid>(Helper.Write(value)));
         }
 
+        private const string UntaggedClrHex = "50" + "67452301AB89EFCD0123456789ABCDEF";
+
         /// <summary>
-        /// The tag is skipped like any other on the read path, so an untagged byte string of the right
-        /// length is still a UUID -- which is what a peer that omits the tag sends.
+        /// Sixteen untagged bytes cannot say which layout they are in, and the wrong guess is a valid,
+        /// different Guid. So the default refuses, naming the cause and the remedy.
         /// </summary>
         [Fact]
-        public void AnUntaggedByteStringIsRead()
+        public void AnUntaggedByteStringIsRefusedByDefault()
         {
-            Assert.Equal(Sample, Helper.Read<Guid>("50" + "0123456789ABCDEF0123456789ABCDEF"));
+            CborException exception = Assert.Throws<CborException>(() => Helper.Read<Guid>(UntaggedClrHex));
+
+            Assert.Contains("tag 37", exception.Message);
+            Assert.Contains("UntaggedGuidFormat.ClrByteOrder", exception.Message);
+        }
+
+        /// <summary>
+        /// The legacy bytes are built from <see cref="Guid.ToByteArray()"/> rather than typed out, and
+        /// the same bytes read under the RFC's order are shown to give a different Guid -- which is the
+        /// silent corruption the default exists to prevent.
+        /// </summary>
+        [Fact]
+        public void TheOptInReadsLegacyClrOrderBytes()
+        {
+            string legacy = "50" + BitConverter.ToString(Sample.ToByteArray()).Replace("-", "");
+            Assert.Equal(UntaggedClrHex, legacy);
+
+            Guid wrongOrder = new Guid(SwapForRfc(Sample.ToByteArray()));
+            Assert.NotEqual(Sample, wrongOrder);
+
+            CborOptions options = new CborOptions { UntaggedGuidFormat = UntaggedGuidFormat.ClrByteOrder };
+
+            Assert.Equal(Sample, Helper.Read<Guid>(legacy, options));
+        }
+
+        private static byte[] SwapForRfc(byte[] b)
+        {
+            (b[0], b[3]) = (b[3], b[0]);
+            (b[1], b[2]) = (b[2], b[1]);
+            (b[4], b[5]) = (b[5], b[4]);
+            (b[6], b[7]) = (b[7], b[6]);
+            return b;
+        }
+
+        /// <summary>The opt-in only concerns untagged strings: a tagged one is still big-endian.</summary>
+        [Fact]
+        public void TheOptInDoesNotChangeATaggedRead()
+        {
+            CborOptions options = new CborOptions { UntaggedGuidFormat = UntaggedGuidFormat.ClrByteOrder };
+
+            Assert.Equal(Sample, Helper.Read<Guid>(SampleHex, options));
+            Assert.Equal(SampleHex, Helper.Write(Sample, options));
+        }
+
+        [Fact]
+        public void TheOptInReachesTheGeneratedContext()
+        {
+            LegacyGuidContext legacy = CborSerializerContext.Default<LegacyGuidContext>();
+            GuidContext strict = CborSerializerContext.Default<GuidContext>();
+
+            Assert.Equal(UntaggedGuidFormat.ClrByteOrder, legacy.Options.UntaggedGuidFormat);
+            Assert.Equal(UntaggedGuidFormat.Refuse, strict.Options.UntaggedGuidFormat);
+
+            string hex = "A2" + "624964" + UntaggedClrHex + "68" + "4F7074696F6E616C" + "F6";
+            Assert.Equal(Sample, Helper.Read<GeneratedGuidHolder>(hex, legacy.Options).Id);
+            Assert.Throws<CborException>(() => Helper.Read<GeneratedGuidHolder>(hex, strict.Options));
         }
 
         /// <summary>
@@ -92,6 +155,11 @@ namespace Dahomey.Cbor.Tests
         [InlineData("5100" + "0123456789ABCDEF0123456789ABCDEF")]  // seventeen
         [InlineData("6C6E6F742D612D75756964")]                     // "not-a-uuid"
         [InlineData("01")]                                         // an integer
+        [InlineData("D82A50" + "0123456789ABCDEF0123456789ABCDEF")] // tag 42, not 37
+        [InlineData("D8254F" + "0123456789ABCDEF0123456789ABCD")]   // tag 37, fifteen bytes
+        [InlineData("D82551" + "00" + "0123456789ABCDEF0123456789ABCDEF")] // tag 37, seventeen
+        [InlineData("D825D82550" + "0123456789ABCDEF0123456789ABCDEF")] // two tags
+        [InlineData("D8257824" + "30313233343536372D383961622D636465662D303132332D343536373839616263646566")] // tag 37 over text
         public void MalformedInputIsRefused(string hexBuffer)
         {
             Assert.Throws<CborException>(() => Helper.Read<Guid>(hexBuffer));

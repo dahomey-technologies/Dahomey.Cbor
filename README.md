@@ -122,9 +122,26 @@ class CustomObject2
 ```
 
 The last two options are for a type you cannot decorate because you do not own it — `System.Guid` in
-the example above. A converter registered either way takes precedence over the built-in one, so the
-example still governs; `System.Guid` itself no longer needs it, since it is written as an RFC 9562
-binary UUID out of the box.
+the example above. A converter registered either way takes precedence over the built-in one.
+
+`System.Guid` has a built-in encoding, an RFC 9562 binary UUID: tag 37 over sixteen big-endian bytes.
+**It differs from the sample converter above**, which writes `Guid`'s sixteen bytes in the CLR's own
+order (the first three fields little-endian) with no tag. The two are the same length, so the wrong
+reading is a different, valid `Guid` and no error. To stop that happening silently, the built-in
+converter refuses a byte string without tag 37 with a `CborException`.
+
+Data written by the sample converter (or any converter storing `Guid.ToByteArray()` untagged) stays
+readable without keeping that converter:
+
+```csharp
+CborOptions options = new CborOptions { UntaggedGuidFormat = UntaggedGuidFormat.ClrByteOrder };
+```
+
+reads untagged sixteen-byte strings in the CLR order, and still reads tagged ones as RFC 9562. Writing
+always produces tag 37 in the RFC's order, so once old documents are rewritten the option can be
+dropped. A source-generated context sets the same thing with
+`[CborSourceGenerationOptions(UntaggedGuidFormat = UntaggedGuidFormat.ClrByteOrder)]`. Until data has
+been migrated, keep registering your own converter and the built-in one is not consulted.
 
 Converters are what the library uses internally for standard types and for classes discovered by
 reflection, so a converter of your own gets the same features and the same performance.

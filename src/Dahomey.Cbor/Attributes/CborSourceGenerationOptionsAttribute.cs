@@ -58,5 +58,11 @@ namespace Dahomey.Cbor.Attributes
         /// alone still reports CBOR1011 for such a member.
         /// </remarks>
         public DecimalFormat DecimalFormat { get; set; } = DecimalFormat.DecimalFloat;
+
+        /// <summary>
+        /// How a <see cref="System.Guid"/> in an untagged byte string is read. Mirrors
+        /// <see cref="CborOptions.UntaggedGuidFormat"/>.
+        /// </summary>
+        public UntaggedGuidFormat UntaggedGuidFormat { get; set; } = UntaggedGuidFormat.Refuse;
     }
 }

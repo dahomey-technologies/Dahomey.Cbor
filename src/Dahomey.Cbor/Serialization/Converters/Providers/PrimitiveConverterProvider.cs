@@ -68,7 +68,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
 
             if (type == typeof(Guid))
             {
-                return new GuidConverter();
+                return new GuidConverter(options);
             }
 
             if (type == typeof(CborDecimalFraction))
