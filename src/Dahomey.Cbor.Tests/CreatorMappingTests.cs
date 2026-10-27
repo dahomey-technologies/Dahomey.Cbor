@@ -348,6 +348,27 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(12, obj.Value);
         }
 
+        private class NonAsciiListedName
+        {
+            public string Prénom { get; }
+
+            [CborConstructor("prénom")]
+            public NonAsciiListedName(string p)
+            {
+                Prénom = p;
+            }
+        }
+
+        [Fact]
+        public void ConstructorListedNonAsciiNameWithOtherCase()
+        {
+            // {"Prénom": "a"}: the listed name is normalized to the member's name in UTF-8, the encoding
+            // the document's keys are compared in.
+            NonAsciiListedName obj = Helper.Read<NonAsciiListedName>("A1675072C3A96E6F6D6161");
+
+            Assert.Equal("a", obj.Prénom);
+        }
+
         [CborObjectFormat(CborObjectFormat.IntKeyMap)]
         private class IntKeyGetOnly
         {

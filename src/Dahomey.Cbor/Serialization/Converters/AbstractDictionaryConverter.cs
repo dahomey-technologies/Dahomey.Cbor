@@ -165,24 +165,6 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         /// <summary>
-        /// How to name the key in a path, when naming it is all that is left to do.
-        /// </summary>
-        /// <remarks>
-        /// <typeparamref name="TK"/> is the caller's type and its <c>ToString</c> is the caller's code,
-        /// running here while an exception is already in flight. Letting it throw would replace the
-        /// failure being reported with an unrelated one and lose the read error entirely.
-        /// <para>
-        /// Returning null hands the caller back to the entry's index, which says something true, rather
-        /// than to an empty name, which would be indistinguishable from a key that really is the empty
-        /// string.
-        /// </para>
-        /// <para>
-        /// Named through <see cref="MapKeyErrors.KeyText"/> so that the path agrees with the message
-        /// beside it. <typeparamref name="TK"/> may itself be a <c>CborValue</c>, which renders a text
-        /// key quoted; describing it here directly reported one key two ways in one exception.
-        /// </para>
-        /// </remarks>
-        /// <summary>
         /// Names the entry that failed - by its key where one was read, by its position otherwise, and by
         /// neither for a failure on the map header itself - and returns <c>false</c>, so it can be an
         /// exception filter. See <see cref="CborException.PrependPathMemberAndDecline(string)"/>.
@@ -204,6 +186,24 @@ namespace Dahomey.Cbor.Serialization.Converters
             return false;
         }
 
+        /// <summary>
+        /// How to name the key in a path, when naming it is all that is left to do.
+        /// </summary>
+        /// <remarks>
+        /// <typeparamref name="TK"/> is the caller's type and its <c>ToString</c> is the caller's code,
+        /// running here while an exception is already in flight. Letting it throw would replace the
+        /// failure being reported with an unrelated one and lose the read error entirely.
+        /// <para>
+        /// Returning null hands the caller back to the entry's index, which says something true, rather
+        /// than to an empty name, which would be indistinguishable from a key that really is the empty
+        /// string.
+        /// </para>
+        /// <para>
+        /// Named through <see cref="MapKeyErrors.KeyText"/> so that the path agrees with the message
+        /// beside it. <typeparamref name="TK"/> may itself be a <c>CborValue</c>, which renders a text
+        /// key quoted; describing it here directly reported one key two ways in one exception.
+        /// </para>
+        /// </remarks>
         private static string? DescribeKey(TK? key)
         {
             try
