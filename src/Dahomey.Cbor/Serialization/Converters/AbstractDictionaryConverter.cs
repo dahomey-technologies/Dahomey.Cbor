@@ -71,23 +71,9 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 reader.ReadMap(this, ref context);
             }
-            catch (CborException exception)
+            catch (CborException exception) when (PrependPathAndDecline(exception, in context))
             {
-                string? key = context.hasKey ? DescribeKey(context.key) : null;
-
-                if (key != null)
-                {
-                    exception.PrependPathMember(key);
-                }
-                else if (context.index >= 0)
-                {
-                    exception.PrependPathIndex(context.index);
-                }
-                else
-                {
-                    exception.MarkPathKnown();
-                }
-
+                // Not entered: the filter records the position and declines.
                 throw;
             }
 
@@ -196,6 +182,28 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// key quoted; describing it here directly reported one key two ways in one exception.
         /// </para>
         /// </remarks>
+        /// <summary>
+        /// Names the entry that failed - by its key where one was read, by its position otherwise, and by
+        /// neither for a failure on the map header itself - and returns <c>false</c>, so it can be an
+        /// exception filter. See <see cref="CborException.PrependPathMemberAndDecline(string)"/>.
+        /// </summary>
+        private static bool PrependPathAndDecline(CborException exception, in ReaderContext context)
+        {
+            string? key = context.hasKey ? DescribeKey(context.key) : null;
+
+            if (key != null)
+            {
+                exception.PrependPathMember(key);
+            }
+            else
+            {
+                // A negative index is the map header itself: marked as seen, no segment.
+                exception.PrependPathIndex(context.index);
+            }
+
+            return false;
+        }
+
         private static string? DescribeKey(TK? key)
         {
             try

@@ -65,11 +65,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                     {
                         return ReadTypedArray(ref reader, tag);
                     }
-                    catch (CborException exception)
+                    catch (CborException exception) when (exception.MarkPathKnownAndDecline())
                     {
-                        // Decoded whole rather than item by item, so a failure belongs to the array
-                        // itself. See AbstractCollectionConverter.Read.
-                        exception.MarkPathKnown();
+                        // Not entered. Decoded whole rather than item by item, so a failure belongs
+                        // to the array itself. See AbstractCollectionConverter.Read.
                         throw;
                     }
                 }
