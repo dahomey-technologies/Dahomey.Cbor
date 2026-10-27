@@ -20,6 +20,9 @@ namespace Dahomey.Cbor.Tests.Cddl
         public CborDecimalFraction Price { get; set; }
         public CborBigFloat Scale { get; set; }
 
+        /// <summary>Tag 0, the only one of the pair that can carry an offset.</summary>
+        public DateTimeOffset When { get; set; }
+
         /// <summary>
         /// The one member whose row is narrower than the float family's, so it also proves the two are
         /// rendered apart rather than by one shared branch.
@@ -49,6 +52,16 @@ namespace Dahomey.Cbor.Tests.Cddl
         /// character and writes it as a text string -- not as an integer code point, which is the
         /// mapping a reader of the type alone would expect.
         /// </summary>
+        /// <summary>
+        /// The same tag a DateTime takes under the default format, since the two share an encoding --
+        /// only the offset inside the string differs, which CDDL does not distinguish.
+        /// </summary>
+        [Fact]
+        public void DateTimeOffsetIsTagZeroOverAString()
+        {
+            Assert.Contains("\"When\": #6.0(tstr),", CddlScalarsContext.CddlSchema.Replace("\r\n", "\n"));
+        }
+
         [Fact]
         public void CharIsATextString()
         {

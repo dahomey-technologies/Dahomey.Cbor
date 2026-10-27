@@ -336,6 +336,16 @@ namespace Dahomey.Cbor.Generator
                 case "Dahomey.Cbor.CborBigFloat":
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
 
+                // The same three forms a DateTime takes, since it is the same pair of tags. Only tag 0
+                // carries the offset; tag 1 names an instant and drops it.
+                case "System.DateTimeOffset":
+                    return options.DateTimeFormat switch
+                    {
+                        "Unix" => "#6.1(int)",
+                        "UnixMilliseconds" => "#6.1(float)",
+                        _ => "#6.0(tstr)",
+                    };
+
                 // HalfConverter writes through CborWriter.WriteHalf, which emits binary16 and nothing
                 // wider -- unlike WriteSingle and WriteDouble, which pick the shortest form that round
                 // trips and so need the prelude's looser `float`. So `float16` is exact here rather
@@ -344,9 +354,9 @@ namespace Dahomey.Cbor.Generator
                     return "float16";
             }
 
-            // Guid and DateTimeOffset have no scalar converter. System.Decimal reaches here only in
-            // its default encoding, which is likewise indescribable. Each falls through to CBOR1011
-            // rather than asserting a row no converter backs.
+            // Guid has no scalar converter. System.Decimal reaches here only in its default encoding,
+            // which is likewise indescribable. Each falls through to CBOR1011 rather than asserting a
+            // row no converter backs.
             return null;
         }
 

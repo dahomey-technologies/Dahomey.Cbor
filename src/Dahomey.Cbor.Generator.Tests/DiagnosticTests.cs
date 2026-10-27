@@ -63,7 +63,6 @@ public partial class Context : CborSerializerContext { }
         [Theory]
         [InlineData("object")]
         [InlineData("System.Guid")]
-        [InlineData("System.DateTimeOffset")]
         public void TypesWithNoConcreteConverterAreReported(string memberType)
         {
             AssertReports("CBOR1002", $@"

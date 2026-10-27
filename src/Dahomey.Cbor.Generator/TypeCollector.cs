@@ -818,7 +818,7 @@ namespace Dahomey.Cbor.Generator
         private static bool HasNoConcreteConverter(ITypeSymbol type)
         {
             return type.SpecialType == SpecialType.System_Object
-                || type.ToDisplayString() is "System.Guid" or "System.DateTimeOffset";
+                || type.ToDisplayString() is "System.Guid";
         }
 
         private static bool IsPrimitive(ITypeSymbol type)
@@ -859,11 +859,12 @@ namespace Dahomey.Cbor.Generator
                 case "System.Numerics.BigInteger":
                 case "Dahomey.Cbor.CborDecimalFraction":
                 case "Dahomey.Cbor.CborBigFloat":
+                case "System.DateTimeOffset":
                 case "System.Half":
                     return true;
             }
 
-            // System.Guid, System.DateTimeOffset and System.Object are deliberately absent.
+            // System.Guid and System.Object are deliberately absent.
             // PrimitiveConverterProvider has no case for any of them, so at run time they fall through
             // to ObjectConverterProvider and reach MakeGenericType -- the exact failure a generated
             // context exists to prevent, and one the AOT analyzer cannot see either. Classifying them
