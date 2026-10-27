@@ -232,7 +232,10 @@ namespace Dahomey.Cbor.Generator
                         member.Locations.FirstOrDefault(),
                         type.Name,
                         member.Name,
-                        model.ObjectFormat));
+                        model.ObjectFormat,
+                        model.ObjectFormatInheritedFrom is null
+                            ? string.Empty
+                            : $" (inherited from '{model.ObjectFormatInheritedFrom}')"));
                     continue;
                 }
 
@@ -329,9 +332,24 @@ namespace Dahomey.Cbor.Generator
         {
             foreach ((string attribute, string description) in UnsupportedTypeFeatures)
             {
-                if (HasAttribute(type, attribute))
+                // [CborNamingConvention] and [CborLengthMode] are inherited, as reflection reads them
+                // (GetCustomAttribute): a base's governs its subtypes there, so a subtype of one is as
+                // unsupported as the base. [CborConstructor] targets a constructor, not a type. [CborConverter]
+                // is inheritable too, but a converter is written for one type, so what reflection does
+                // with a subtype of one is not something to reproduce; it is left as it was.
+                bool inheritable = attribute is "CborNamingConventionAttribute" or "CborLengthModeAttribute";
+                ITypeSymbol? declaredOn = type;
+
+                if (inheritable
+                    ? NearestAttribute(type, attribute, out declaredOn) is not null
+                    : HasAttribute(type, attribute))
                 {
-                    Report(type.Locations.FirstOrDefault(), type.ToDisplayString(), description);
+                    Report(
+                        type.Locations.FirstOrDefault(),
+                        type.ToDisplayString(),
+                        SymbolEqualityComparer.Default.Equals(declaredOn, type)
+                            ? description
+                            : $"{description} (inherited from {declaredOn!.ToDisplayString()})");
                 }
             }
 
@@ -512,47 +530,32 @@ namespace Dahomey.Cbor.Generator
             model.ObjectFormat = _options.ObjectFormat;
             model.DiscriminatorPolicy = _options.DiscriminatorPolicy;
 
-            // [CborObjectFormat] is read the way reflection reads it: GetCustomAttribute<T>() inherits,
-            // so a subtype of a decorated base takes the base's format and the nearest declaration
-            // wins. ISymbol.GetAttributes() returns only what the symbol itself declares, so the
-            // chain is walked by hand.
-            for (ITypeSymbol? current = type; current is not null; current = current.BaseType)
+            AttributeData? objectFormat = NearestAttribute(
+                type, "CborObjectFormatAttribute", out ITypeSymbol? formatDeclaredOn,
+                attribute => attribute.ConstructorArguments.Length == 1);
+
+            if (objectFormat is not null)
             {
-                AttributeData? declared = current.GetAttributes().FirstOrDefault(attribute =>
-                    attribute.AttributeClass?.Name == "CborObjectFormatAttribute"
-                    && attribute.ConstructorArguments.Length == 1);
-
-                if (declared is null)
-                {
-                    continue;
-                }
-
                 model.ObjectFormatDeclared = true;
-                model.ObjectFormat = declared.ConstructorArguments[0].Value switch
+                model.ObjectFormatInheritedFrom =
+                    SymbolEqualityComparer.Default.Equals(formatDeclaredOn, type)
+                        ? null
+                        : formatDeclaredOn!.ToDisplayString();
+                model.ObjectFormat = objectFormat.ConstructorArguments[0].Value switch
                 {
                     1 => "IntKeyMap",
                     2 => "Array",
                     _ => "StringKeyMap",
                 };
-                break;
             }
 
-            AttributeData? stringDiscriminator = null;
-            AttributeData? intDiscriminator = null;
-
-            foreach (AttributeData attribute in type.GetAttributes())
-            {
-                switch (attribute.AttributeClass?.Name)
-                {
-                    case "CborDiscriminatorAttribute":
-                        stringDiscriminator = attribute;
-                        break;
-
-                    case "CborIntDiscriminatorAttribute":
-                        intDiscriminator = attribute;
-                        break;
-                }
-            }
+            // Read the way reflection reads them: GetCustomAttribute<T>() inherits, so an undecorated
+            // subtype takes its base's discriminator, and a base with one kind and a subtype with the
+            // other is the both-attributes conflict reflection throws for.
+            AttributeData? stringDiscriminator =
+                NearestAttribute(type, "CborDiscriminatorAttribute", out _);
+            AttributeData? intDiscriminator =
+                NearestAttribute(type, "CborIntDiscriminatorAttribute", out _);
 
             if (stringDiscriminator is not null && intDiscriminator is not null)
             {
@@ -874,6 +877,39 @@ namespace Dahomey.Cbor.Generator
             }
 
             return "unrecognised shape";
+        }
+
+        /// <summary>
+        /// The attribute <c>type.GetCustomAttribute&lt;T&gt;()</c> would return: the nearest declaration
+        /// on the type or any base class.
+        /// </summary>
+        /// <remarks>
+        /// Every type-level Cbor attribute is inheritable (none sets <c>Inherited = false</c>) and the
+        /// reflection path reads them all with <c>GetCustomAttribute</c>, which inherits. But
+        /// <c>ISymbol.GetAttributes()</c> returns only what the symbol itself declares, so reading it
+        /// directly treats a subtype of a decorated base as undecorated -- a silent difference in the
+        /// bytes, or in what is refused. One helper for all of them keeps the rule in one place.
+        /// </remarks>
+        private static AttributeData? NearestAttribute(
+            ITypeSymbol type,
+            string attributeName,
+            out ITypeSymbol? declaredOn,
+            System.Func<AttributeData, bool>? accept = null)
+        {
+            for (ITypeSymbol? current = type; current is not null; current = current.BaseType)
+            {
+                foreach (AttributeData attribute in current.GetAttributes())
+                {
+                    if (attribute.AttributeClass?.Name == attributeName && (accept is null || accept(attribute)))
+                    {
+                        declaredOn = current;
+                        return attribute;
+                    }
+                }
+            }
+
+            declaredOn = null;
+            return null;
         }
 
         private static bool HasAttribute(ISymbol symbol, string attributeName)

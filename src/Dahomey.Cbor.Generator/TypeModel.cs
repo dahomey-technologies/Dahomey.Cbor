@@ -101,11 +101,17 @@ namespace Dahomey.Cbor.Generator
         public string ObjectFormat { get; set; } = "StringKeyMap";
 
         /// <summary>
-        /// Whether the type carries <c>[CborObjectFormat]</c>, declared or inherited from a base class. Only then is the format stated in
-        /// the generated registration: an undecorated type takes the options' format, as it does on the
-        /// reflection path.
+        /// Whether the type carries <c>[CborObjectFormat]</c>, declared or inherited from a base
+        /// class. Only then is the format stated in the generated registration: an undecorated type
+        /// takes the options' format, as it does on the reflection path.
         /// </summary>
         public bool ObjectFormatDeclared { get; set; }
+
+        /// <summary>
+        /// The base class that declares the format, when it is inherited rather than declared on the
+        /// type itself; null otherwise. Used to say so in a diagnostic.
+        /// </summary>
+        public string? ObjectFormatInheritedFrom { get; set; }
 
         /// <summary>
         /// A tuple's type arguments, when <see cref="Kind"/> is <see cref="TypeKind.Tuple"/>: one per

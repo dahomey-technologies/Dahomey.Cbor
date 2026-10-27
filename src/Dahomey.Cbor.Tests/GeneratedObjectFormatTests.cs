@@ -157,6 +157,53 @@ namespace Dahomey.Cbor.Tests
     {
     }
 
+    /// <summary>Three levels: only the grandparent declares the format.</summary>
+    public class InheritedMiddle : InheritedArrayBase
+    {
+        [CborProperty(1)]
+        public string Name { get; set; }
+    }
+
+    public class InheritedLeaf : InheritedMiddle
+    {
+        [CborProperty(2)]
+        public int Extra { get; set; }
+    }
+
+    [CborSerializable(typeof(InheritedLeaf))]
+    public partial class InheritedLeafContext : CborSerializerContext
+    {
+    }
+
+    [CborDiscriminator("disc", Policy = CborDiscriminatorPolicy.Always)]
+    public class InheritedDiscriminatorBase
+    {
+        public int Id { get; set; }
+    }
+
+    /// <summary>No attribute of its own: reflection gives it the base's discriminator.</summary>
+    public class InheritedDiscriminatorDerived : InheritedDiscriminatorBase
+    {
+        public string Name { get; set; }
+    }
+
+    [CborIntDiscriminator(5, Policy = CborDiscriminatorPolicy.Always)]
+    public class InheritedIntDiscriminatorBase
+    {
+        public int Id { get; set; }
+    }
+
+    public class InheritedIntDiscriminatorDerived : InheritedIntDiscriminatorBase
+    {
+        public string Name { get; set; }
+    }
+
+    [CborSerializable(typeof(InheritedDiscriminatorDerived))]
+    [CborSerializable(typeof(InheritedIntDiscriminatorDerived))]
+    public partial class InheritedDiscriminatorContext : CborSerializerContext
+    {
+    }
+
     public class GeneratedObjectFormatTests
     {
         /// <summary>
@@ -310,6 +357,87 @@ namespace Dahomey.Cbor.Tests
             // A2 00 07 01 61 6E -- an IntKeyMap, not the base's Array.
             Assert.Equal("A2000701616E", generated, ignoreCase: true);
             Assert.Equal(Helper.Write(value, new CborOptions()), generated, ignoreCase: true);
+        }
+
+        [Fact]
+        public void AGrandparentsFormatReachesTheLeaf()
+        {
+            InheritedLeafContext context = new InheritedLeafContext();
+            InheritedLeaf value = new InheritedLeaf { Id = 7, Name = "n", Extra = 9 };
+
+            string generated = Helper.Write(value, context.Options);
+
+            // 83 07 61 6E 09 -- an array of three, though neither the leaf nor its parent says so.
+            Assert.Equal("8307616E09", generated, ignoreCase: true);
+            Assert.Equal(Helper.Write(value, new CborOptions()), generated, ignoreCase: true);
+
+            InheritedLeaf read = Cbor.Deserialize<InheritedLeaf>(generated.HexToBytes(), context.Options);
+            Assert.Equal(9, read.Extra);
+        }
+
+        [Fact]
+        public void ASubtypeInheritsItsBaseClassesDiscriminators()
+        {
+            InheritedDiscriminatorContext context = new InheritedDiscriminatorContext();
+
+            InheritedDiscriminatorDerived text = new InheritedDiscriminatorDerived { Id = 7, Name = "n" };
+            string generatedText = Helper.Write(text, context.Options);
+            Assert.Contains("6464697363", generatedText, System.StringComparison.OrdinalIgnoreCase);   // "disc"
+            Assert.Equal(Helper.Write(text, new CborOptions()), generatedText, ignoreCase: true);
+
+            InheritedIntDiscriminatorDerived number = new InheritedIntDiscriminatorDerived { Id = 7, Name = "n" };
+            string generatedNumber = Helper.Write(number, context.Options);
+            Assert.Equal(Helper.Write(number, new CborOptions()), generatedNumber, ignoreCase: true);
+        }
+    }
+
+    [CborNamingConvention(typeof(Dahomey.Cbor.Serialization.Conventions.CamelCaseNamingConvention))]
+    public class InheritedNamingBase
+    {
+        public int SomeValue { get; set; }
+    }
+
+    public class InheritedNamingDerived : InheritedNamingBase
+    {
+        public int OtherValue { get; set; }
+    }
+
+    [CborLengthMode(LengthMode = LengthMode.IndefiniteLength)]
+    public class InheritedLengthModeBase
+    {
+        public int Id { get; set; }
+    }
+
+    public class InheritedLengthModeDerived : InheritedLengthModeBase
+    {
+    }
+
+    /// <summary>
+    /// The reflection-side facts the generator's inherited <c>CBOR1007</c> reports rest on: a base's
+    /// [CborNamingConvention] and [CborLengthMode] govern its subtypes, so a generated context that
+    /// ignored them would write different bytes. The generator refuses both; this pins that the
+    /// refusal is warranted.
+    /// </summary>
+    public class InheritedTypeAttributeReflectionTests
+    {
+        [Fact]
+        public void ABasesNamingConventionGovernsItsSubtype()
+        {
+            string hex = Helper.Write(new InheritedNamingDerived { SomeValue = 1, OtherValue = 2 }, new CborOptions());
+
+            // "otherValue" and "someValue", not "OtherValue"/"SomeValue".
+            Assert.Contains("6A6F746865725661" + "6C7565", hex, System.StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("4F74686572", hex, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void ABasesLengthModeGovernsItsSubtype()
+        {
+            string hex = Helper.Write(new InheritedLengthModeDerived { Id = 1 }, new CborOptions());
+
+            // BF 62 49 64 01 FF -- an indefinite-length map.
+            Assert.StartsWith("BF", hex, System.StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith("FF", hex, System.StringComparison.OrdinalIgnoreCase);
         }
     }
 }

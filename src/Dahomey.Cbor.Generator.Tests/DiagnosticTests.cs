@@ -44,6 +44,129 @@ using Dahomey.Cbor.Serialization;
                     + string.Join(", ", diagnostics.Select(d => d.Id + ": " + d.GetMessage())));
         }
 
+        private const string InheritedFormatPreamble = @"
+using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization;
+";
+
+        /// <summary>
+        /// A base that lives in another assembly reaches the generator as a metadata symbol, whose
+        /// attributes are read from the compiled image rather than from source. The inherited format
+        /// has to be found there too.
+        /// </summary>
+        [Fact]
+        public void AFormatInheritedFromAnotherAssemblyIsStated()
+        {
+            (IReadOnlyList<Diagnostic> diagnostics, string generated) = GeneratorHarness.RunAgainstLibrary(
+                InheritedFormatPreamble + @"
+namespace Lib { [CborObjectFormat(CborObjectFormat.Array)] public class ArrBase { [CborProperty(0)] public int Id { get; set; } } }",
+                InheritedFormatPreamble + @"
+public class ArrDerived : Lib.ArrBase { [CborProperty(1)] public string Name { get; set; } }
+
+[CborSerializable(typeof(ArrDerived))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Empty(diagnostics);
+            Assert.Contains("SetObjectFormat(CborObjectFormat.Array)", generated);
+        }
+
+        [Fact]
+        public void ABaseFromAnotherAssemblyWithNoFormatLeavesTheSubtypeUnstated()
+        {
+            (IReadOnlyList<Diagnostic> diagnostics, string generated) = GeneratorHarness.RunAgainstLibrary(
+                InheritedFormatPreamble + @"
+namespace Lib { public class Base { public int Id { get; set; } } }",
+                InheritedFormatPreamble + @"
+public class Derived : Lib.Base { public string Name { get; set; } }
+
+[CborSerializable(typeof(Derived))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Empty(diagnostics);
+            Assert.DoesNotContain("SetObjectFormat", generated);
+        }
+
+        /// <summary>
+        /// The mutation target for a walk that stops at the immediate base: only the grandparent
+        /// declares the format.
+        /// </summary>
+        [Fact]
+        public void AFormatDeclaredByAGrandparentIsStated()
+        {
+            string generated = GeneratorHarness.GeneratedSource(Preamble + @"
+[CborObjectFormat(CborObjectFormat.Array)]
+public class Grand { [CborProperty(0)] public int Id { get; set; } }
+public class Parent : Grand { [CborProperty(1)] public string Name { get; set; } }
+public class Leaf : Parent { [CborProperty(2)] public int Extra { get; set; } }
+
+[CborSerializable(typeof(Leaf))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Contains("SetObjectFormat(CborObjectFormat.Array)", generated);
+        }
+
+        [Fact]
+        public void TheIndexDiagnosticSaysWhereAnInheritedFormatCameFrom()
+        {
+            IReadOnlyList<Diagnostic> diagnostics = Run(@"
+[CborObjectFormat(CborObjectFormat.Array)]
+public class ArrBase { [CborProperty(0)] public int Id { get; set; } }
+public class ArrDerived : ArrBase { public string Name { get; set; } }
+
+[CborSerializable(typeof(ArrDerived))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Diagnostic missing = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "CBOR1005");
+            Assert.Contains("inherited from 'ArrBase'", missing.GetMessage());
+        }
+
+        /// <summary>
+        /// Reflection honours a base's [CborNamingConvention] and [CborLengthMode] on its subtypes
+        /// (see <c>InheritedTypeAttributeReflectionTests</c>), so a subtype of one is as unsupported as
+        /// the base is -- and was reported for the base only.
+        /// </summary>
+        [Theory]
+        [InlineData("[CborNamingConvention(typeof(Dahomey.Cbor.Serialization.Conventions.CamelCaseNamingConvention))]", "[CborNamingConvention] (inherited from Base)")]
+        [InlineData("[CborLengthMode(LengthMode = LengthMode.IndefiniteLength)]", "[CborLengthMode] (inherited from Base)")]
+        public void AnAttributeInheritedFromABaseIsReportedAsUnsupported(string attribute, string expected)
+        {
+            IReadOnlyList<Diagnostic> diagnostics = Run(@"
+" + attribute + @"
+public class Base { public int Id { get; set; } }
+public class Derived : Base { public string Name { get; set; } }
+
+[CborSerializable(typeof(Derived))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Contains(
+                diagnostics,
+                diagnostic => diagnostic.Id == "CBOR1007" && diagnostic.GetMessage().Contains(expected));
+        }
+
+        /// <summary>
+        /// A base with one discriminator kind and a subtype with the other is the both-attributes
+        /// conflict reflection throws for, because it reads the base's by inheritance.
+        /// </summary>
+        [Fact]
+        public void ASubtypeWithTheOtherDiscriminatorKindThanItsBaseConflicts()
+        {
+            AssertReports("CBOR1004", @"
+[CborDiscriminator(""a"")]
+public class Base { public int Id { get; set; } }
+[CborIntDiscriminator(1)]
+public class Derived : Base { public string Name { get; set; } }
+
+[CborSerializable(typeof(Base))]
+[CborSerializable(typeof(Derived))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
         /// <summary>
         /// [CborObjectFormat] is inherited on the reflection path, so a subtype of an Array base is an
         /// Array type and its members need indexes there too. CBOR1005 is what the reflection path's
