@@ -570,6 +570,66 @@ public partial class Context : CborSerializerContext { }
         }
 
         /// <summary>
+        /// <c>GetProperties</c> drops a base property that a nearer one hides with the same signature,
+        /// whatever the nearer one is -- so a skipped one still hides, and nothing is left to emit
+        /// <c>o.Name</c> for.
+        /// </summary>
+        [Theory]
+        [InlineData("private")]
+        [InlineData("protected")]
+        public void ABaseHiddenByAPropertyWithASkippedGetterIsNotCollected(string getter)
+        {
+            string source = $@"
+public class B {{ public string Name {{ get; set; }} }}
+public class Holder : B {{ public int Id {{ get; set; }} public new string Name {{ {getter} get; set; }} }}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+";
+
+            AssertClean(source);
+            Assert.DoesNotContain("o.Name", GeneratorHarness.GeneratedSource(Preamble + source));
+        }
+
+        /// <summary>
+        /// The same fold when the hider is collected itself: the reflection path maps it once and
+        /// writes normally, so there is no duplicate name to refuse.
+        /// </summary>
+        [Fact]
+        public void ABaseHiddenWithTheSameSignatureByACollectedPropertyIsNotReported()
+        {
+            AssertClean(@"
+public class B { public string Name { get; set; } }
+public class Holder : B { public int Id { get; set; } public new string Name { get; set; } }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// A hider of another type hides nothing: the reflection path maps the base property and skips
+        /// the nearer one. The accessor goes through the declaring type, or `o.Name` binds to the
+        /// skipped property and fails to compile.
+        /// </summary>
+        [Fact]
+        public void ABasePropertyHiddenByAnotherTypeIsReachedThroughItsDeclaringType()
+        {
+            string source = @"
+public class B { public string Name { get; set; } }
+public class Holder : B { public int Id { get; set; } public new int Name { private get; set; } }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+";
+
+            AssertClean(source);
+            string generated = GeneratorHarness.GeneratedSource(Preamble + source);
+            Assert.Contains("((global::B)o).Name", generated);
+            Assert.DoesNotContain("o.Name", generated.Replace("((global::B)o).Name", string.Empty));
+        }
+
+        /// <summary>
         /// A <c>ShouldSerialize</c> method the reflection path ignores — it takes a parameter, so it is
         /// not the convention — must not be picked up here either, or the two paths disagree about
         /// whether the member is written at all.
@@ -798,7 +858,7 @@ public partial class Context : CborSerializerContext { }
             AssertReports("CBOR1013", @"
 public class Shape { public int Id { get; set; } }
 
-public class Circle : Shape { public new int Id { get; set; } }
+public class Circle : Shape { public new string Id { get; set; } }
 
 [CborSerializable(typeof(Circle))]
 public partial class Context : CborSerializerContext { }

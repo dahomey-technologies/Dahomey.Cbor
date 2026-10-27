@@ -385,6 +385,7 @@ namespace Dahomey.Cbor.Generator
                 model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite)
                 {
                     RequirementPolicy = ReadRequirementPolicy(member),
+                    ShadowedOwner = ShadowedOwnerOf(type, member),
                     ShouldSerializeMethod = shouldSerialize?.Name,
                     ShouldSerializeOwner = shouldSerialize?.ContainingType
                         .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
@@ -534,10 +535,12 @@ namespace Dahomey.Cbor.Generator
         /// both put two mappings under one name, so the generated context wrote the key twice and, since
         /// the mapping validation added in #186, threw while being built.
         /// <para>
-        /// A member hiding a base member with <c>new</c> is deliberately not collapsed.
-        /// <c>GetProperties</c> returns both of those, so the reflection path sees two members under one
-        /// name and refuses the mapping; the generator reports <c>CBOR1013</c> for the same type, which
-        /// is the same answer given earlier.
+        /// A property hiding a base property with <c>new</c> is folded only as <c>GetProperties</c>
+        /// folds it: the base one is dropped when the signatures are identical, whatever the hiding
+        /// property's own accessibility, getter or attributes. One of a different type hides nothing,
+        /// both are returned, and the reflection path sees two members under one name and refuses the
+        /// mapping; the generator reports <c>CBOR1013</c> for the same type, which is the same answer
+        /// given earlier. Fields hide nothing at all.
         /// </para>
         /// </remarks>
         private IEnumerable<ISymbol> EnumerateMembers(ITypeSymbol type)
@@ -551,10 +554,15 @@ namespace Dahomey.Cbor.Generator
             HashSet<ISymbol> overriddenByADerivedMember =
                 new HashSet<ISymbol>(SymbolEqualityComparer.Default);
 
+            // Properties declared by the types walked so far, which hide a base property that matches.
+            List<IPropertySymbol> declaredNearer = new List<IPropertySymbol>();
+
             for (ITypeSymbol? current = type;
                  current is not null && current.SpecialType != SpecialType.System_Object;
                  current = current.BaseType)
             {
+                List<IPropertySymbol> declaredHere = new List<IPropertySymbol>();
+
                 foreach (ISymbol member in current.GetMembers().OfType<TMember>())
                 {
 
@@ -570,6 +578,18 @@ namespace Dahomey.Cbor.Generator
                              overridden = overridden.OverriddenProperty)
                         {
                             overriddenByADerivedMember.Add(overridden);
+                        }
+                    }
+
+                    // Whatever the nearer property is -- skipped for its getter, ignored, not even
+                    // readable -- it still hides: GetProperties decides on the signature alone.
+                    if (member is IPropertySymbol { IsIndexer: false } property)
+                    {
+                        declaredHere.Add(property);
+
+                        if (declaredNearer.Any(nearer => HidesByNameAndSignature(nearer, property)))
+                        {
+                            continue;
                         }
                     }
 
@@ -611,7 +631,43 @@ namespace Dahomey.Cbor.Generator
                             AccessibilityName(member.DeclaredAccessibility)));
                     }
                 }
+
+                declaredNearer.AddRange(declaredHere);
             }
+        }
+
+        /// <summary>
+        /// Whether <c>GetProperties</c> drops <paramref name="hidden"/> because <paramref name="nearer"/>
+        /// hides it: the same name and an identical signature as declared. A type that differs (a
+        /// <c>new int</c> over a <c>string</c>) hides nothing, and both are returned; so does a type
+        /// that is the same only once a base's type argument is substituted, because the comparison is
+        /// of the declarations (<c>GenericBase&lt;T&gt;.Value</c> is a <c>T</c>, not an <c>int</c>).
+        /// </summary>
+        private static bool HidesByNameAndSignature(IPropertySymbol nearer, IPropertySymbol hidden)
+        {
+            return nearer.Name == hidden.Name
+                && SymbolEqualityComparer.Default.Equals(
+                    nearer.OriginalDefinition.Type, hidden.OriginalDefinition.Type);
+        }
+
+        /// <summary>
+        /// The declaring type of <paramref name="member"/> when a type nearer to <paramref name="type"/>
+        /// declares a property or field of the same name, so that the generated accessor has to name the
+        /// declaring type; otherwise null.
+        /// </summary>
+        private static string? ShadowedOwnerOf(ITypeSymbol type, ISymbol member)
+        {
+            for (ITypeSymbol? current = type;
+                 current is not null && !SymbolEqualityComparer.Default.Equals(current, member.ContainingType);
+                 current = current.BaseType)
+            {
+                if (current.GetMembers(member.Name).Any(m => m is IPropertySymbol or IFieldSymbol))
+                {
+                    return Key(member.ContainingType);
+                }
+            }
+
+            return null;
         }
 
         /// <summary>

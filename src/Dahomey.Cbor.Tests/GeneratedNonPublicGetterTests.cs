@@ -65,6 +65,38 @@ namespace Dahomey.Cbor.Tests
         public override string Name { protected get => base.Name; set => base.Name = value; }
     }
 
+    public class HiddenBase { public string Name { get; set; } }
+
+    /// <summary>A skipped property still hides the base property of the same signature.</summary>
+    public class HiddenBySkippedProperty : HiddenBase
+    {
+        public int Id { get; set; }
+        public new string Name { private get; set; }
+    }
+
+    /// <summary>A hider of another type hides nothing, so the base property is mapped and this one is not.</summary>
+    public class HiddenByAnotherType : HiddenBase
+    {
+        public int Id { get; set; }
+        public new int Name { protected get; set; }
+    }
+
+    public class HiddenByCollectedProperty : HiddenBase
+    {
+        public int Id { get; set; }
+        public new string Name { get; set; }
+    }
+
+    public class HiddenByIgnoredProperty : HiddenBase
+    {
+        public int Id { get; set; }
+        [CborIgnore] public new string Name { get; set; }
+    }
+
+    [CborSerializable(typeof(HiddenBySkippedProperty))]
+    [CborSerializable(typeof(HiddenByAnotherType))]
+    [CborSerializable(typeof(HiddenByCollectedProperty))]
+    [CborSerializable(typeof(HiddenByIgnoredProperty))]
     [CborSerializable(typeof(NonPublicGetterPrivate))]
     [CborSerializable(typeof(NonPublicGetterProtected))]
     [CborSerializable(typeof(NonPublicGetterInternal))]
@@ -97,6 +129,23 @@ namespace Dahomey.Cbor.Tests
         [Fact] public void ASkippedPropertyBesideAStaticPredicateIsStillSkipped() => Agree(new NonPublicGetterBesideAStaticPredicate { Id = 1, Name = "n" }, IdOnly);
         [Fact] public void AnInheritedSkippedPropertyIsSkipped() => Agree(new NonPublicGetterInherited { Id = 1, Name = "n" }, IdOnly);
         [Fact] public void AnOverriddenSkippedPropertyIsSkipped() => Agree(new NonPublicGetterOverridden { Id = 1, Name = "n" }, IdOnly);
+
+        [Fact] public void ASkippedPropertyHidesTheBaseOne() => Agree(new HiddenBySkippedProperty { Id = 1, Name = "n" }, IdOnly);
+        [Fact] public void AnIgnoredPropertyHidesTheBaseOne() => Agree(new HiddenByIgnoredProperty { Id = 1, Name = "n" }, IdOnly);
+        [Fact] public void ACollectedPropertyHidesTheBaseOne() => Agree(new HiddenByCollectedProperty { Id = 1, Name = "n" }, BothWritten);
+
+        [Fact]
+        public void AHiderOfAnotherTypeLeavesTheBasePropertyMapped()
+        {
+            HiddenByAnotherType value = new HiddenByAnotherType { Id = 1 };
+            ((HiddenBase)value).Name = "n";
+
+            Agree(value, BothWritten);
+
+            NonPublicGetterContext context = new NonPublicGetterContext();
+            HiddenByAnotherType back = Cbor.Deserialize<HiddenByAnotherType>(BothWritten.HexToBytes(), context.Options);
+            Assert.Equal("n", ((HiddenBase)back).Name);
+        }
 
         [Fact]
         public void AMappedInternalGetterReadsBackOnTheGeneratedPath()

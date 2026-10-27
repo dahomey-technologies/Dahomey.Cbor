@@ -227,6 +227,26 @@ namespace Dahomey.Cbor.Tests
             // Tuples at three shapes: within seven, past seven so the converter carries a Rest, and
             // nested twice. The comparison is what catches a generated context that named a different
             // converter or the wrong type arguments -- both would still produce valid CBOR.
+            if (type == typeof(HiddenBySkippedProperty))
+            {
+                return new HiddenBySkippedProperty { Id = 1 };
+            }
+
+            if (type == typeof(HiddenByAnotherType))
+            {
+                return new HiddenByAnotherType { Id = 1 };
+            }
+
+            if (type == typeof(HiddenByCollectedProperty))
+            {
+                return new HiddenByCollectedProperty { Id = 1 };
+            }
+
+            if (type == typeof(HiddenByIgnoredProperty))
+            {
+                return new HiddenByIgnoredProperty { Id = 1 };
+            }
+
             if (type == typeof(NonPublicGetterPrivate))
             {
                 return new NonPublicGetterPrivate { Id = 1, Name = "n" };
