@@ -654,6 +654,269 @@ public partial class Context : CborSerializerContext { }
         }
 
         /// <summary>
+        /// <c>IsSymbolAccessibleWithin</c> alone says a protected constructor is reachable from a type
+        /// nested in a <em>derived</em> class, which it is only through a <c>base(...)</c> call --
+        /// <c>new Holder(...)</c> there is still CS0122. The check has to be made through the type.
+        /// </summary>
+        [Theory]
+        [InlineData("[CborConstructor] protected Holder(int id) { Id = id; }", "CBOR1015")]
+        [InlineData("protected Holder(int id) { Id = id; }", "CBOR1015")]
+        [InlineData("[CborConstructor] private protected Holder(int id) { Id = id; }", "CBOR1015")]
+        [InlineData("protected Holder() { }", "CBOR1010")]
+        [InlineData("private protected Holder() { }", "CBOR1010")]
+        public void AProtectedConstructorIsNotReachableFromAContextNestedInADerivedType(string constructor, string id)
+        {
+            AssertReportsAndEmitsNothingUncompilable(id, $@"
+public class Holder
+{{
+    {constructor}
+
+    public int Id {{ get; set; }}
+}}
+
+public partial class Derived : Holder
+{{
+    public Derived() : base(0) {{ }}
+
+    [CborSerializable(typeof(Holder))]
+    public partial class Context : CborSerializerContext {{ }}
+}}
+");
+        }
+
+        /// <summary>The other side of the same check: a context nested in the type itself may call it.</summary>
+        [Theory]
+        [InlineData("[CborConstructor] protected Holder(int id) { Id = id; }")]
+        [InlineData("[CborConstructor] private Holder(int id) { Id = id; }")]
+        [InlineData("protected Holder() { }")]
+        public void AContextNestedInTheTypeItselfMayCallItsConstructor(string constructor)
+        {
+            string body = $@"
+public partial class Holder
+{{
+    {constructor}
+
+    public int Id {{ get; set; }}
+
+    [CborSerializable(typeof(Holder))]
+    public partial class Context : CborSerializerContext {{ }}
+}}
+";
+            AssertClean(body);
+            Assert.Empty(GeneratorHarness.CompileGeneratedOutput(Preamble + body));
+        }
+
+        /// <summary>
+        /// The remedy for an unreachable creator is the constructor, not a setter, so the warning that
+        /// says otherwise on the members it would have supplied is suppressed.
+        /// </summary>
+        [Fact]
+        public void AnUnreachableCreatorDoesNotAlsoAskForSetters()
+        {
+            IReadOnlyList<Diagnostic> diagnostics = Run(@"
+public class Holder
+{
+    [CborConstructor]
+    protected Holder(int id) { Id = id; }
+
+    public int Id { get; }
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Contains(diagnostics, d => d.Id == "CBOR1015");
+            Assert.DoesNotContain(diagnostics, d => d.Id == "CBOR1006");
+        }
+
+        [Theory]
+        [InlineData("private", "a private constructor")]
+        [InlineData("protected", "a protected constructor")]
+        [InlineData("private protected", "a private protected constructor")]
+        public void TheAccessibilityIsNamedInTheMessage(string accessibility, string expected)
+        {
+            IReadOnlyList<Diagnostic> diagnostics = Run($@"
+public class Holder
+{{
+    [CborConstructor]
+    {accessibility} Holder(int id) {{ Id = id; }}
+
+    public int Id {{ get; set; }}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+");
+
+            Assert.Contains(expected, diagnostics.Single(d => d.Id == "CBOR1015").GetMessage());
+        }
+
+        [Fact]
+        public void TheMessageNamesAnInternalAndAProtectedInternalCreatorOfAnotherAssembly()
+        {
+            string Message(string accessibility) => GeneratorHarness.RunAgainstLibrary(
+                Preamble + $@"
+public class Holder
+{{
+    [CborConstructor]
+    {accessibility} Holder(int id) {{ Id = id; }}
+
+    public int Id {{ get; set; }}
+}}
+",
+                Preamble + @"
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+").Reported.Single(d => d.Id == "CBOR1015").GetMessage();
+
+            Assert.Contains("an internal constructor", Message("internal"));
+            Assert.Contains("a protected internal constructor", Message("protected internal"));
+        }
+
+        /// <summary>
+        /// The reflection path calls a private parameterless constructor, which a generated context
+        /// cannot -- the same type used to work by quietly reading through the other constructor,
+        /// which is not the one reflection runs. Reported, with the remedy that makes both agree.
+        /// </summary>
+        [Fact]
+        public void APrivateParameterlessConstructorBesideAPublicOneIsStillReported()
+        {
+            AssertReports("CBOR1010", @"
+public class Holder
+{
+    private Holder() { }
+    public Holder(int id) { Id = id; }
+
+    public int Id { get; set; }
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// A record's copy constructor is never the creator, whether the compiler wrote it or the
+        /// author did: the reflection path takes the primary one (declared first), and a sealed
+        /// record's explicit private copy constructor must not turn the record into "several".
+        /// </summary>
+        [Fact]
+        public void ASealedRecordWithAnExplicitPrivateCopyConstructorIsBuiltThroughItsPrimaryOne()
+        {
+            string body = @"
+public sealed record R(int Id)
+{
+    private R(R original) { Id = original.Id; }
+}
+
+[CborSerializable(typeof(R))]
+public partial class Context : CborSerializerContext { }
+";
+            AssertClean(body);
+            Assert.Empty(GeneratorHarness.CompileGeneratedOutput(Preamble + body));
+        }
+
+        /// <summary>
+        /// In a class the same shape is two ordinary constructors and which one the reflection path
+        /// takes is not something to guess at.
+        /// </summary>
+        [Fact]
+        public void AClassWithACopyShapedConstructorBesideAnotherIsStillAmbiguous()
+        {
+            AssertReports("CBOR1010", @"
+public class Holder
+{
+    public Holder(Holder other) { Id = other.Id; }
+    public Holder(int id) { Id = id; }
+
+    public int Id { get; set; }
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        private static string Listed(string format, string attribute, string parameters) => $@"
+{(format == "StringKeyMap" ? "" : $"[CborObjectFormat(CborObjectFormat.{format})]")}
+public class Holder
+{{
+    {attribute}
+    public Holder({parameters}) {{ A = a; B = b; }}
+
+    {(format == "StringKeyMap" ? "" : "[CborProperty(0)]")} public int A {{ get; }}
+    {(format == "StringKeyMap" ? "" : "[CborProperty(1)]")} public int B {{ get; }}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+";
+
+        /// <summary>
+        /// <c>[CborConstructor(...)]</c> arguments are positional and the reflection path honours them.
+        /// Matching by parameter name instead reads the two crossed-over members the other way round,
+        /// silently -- so they are carried into the emitted creator verbatim.
+        /// </summary>
+        [Theory]
+        [InlineData("StringKeyMap", "[CborConstructor(\"B\", \"A\")]", ".SetMemberNames(\"B\", \"A\")")]
+        [InlineData("IntKeyMap", "[CborConstructor(1, 0)]", ".SetMemberIndexes(1, 0)")]
+        [InlineData("Array", "[CborConstructor(1, 0)]", ".SetMemberIndexes(1, 0)")]
+        public void ListedConstructorArgumentsReachTheEmittedCreator(string format, string attribute, string expected)
+        {
+            string source = Preamble + Listed(format, attribute, "int a, int b");
+
+            Assert.Empty(Run(Listed(format, attribute, "int a, int b")));
+            Assert.Contains(expected, GeneratorHarness.GeneratedSource(source));
+        }
+
+        [Theory]
+        [InlineData("StringKeyMap", "[CborConstructor(\"A\")]")]
+        [InlineData("StringKeyMap", "[CborConstructor(\"A\", \"Missing\")]")]
+        [InlineData("IntKeyMap", "[CborConstructor(0)]")]
+        [InlineData("IntKeyMap", "[CborConstructor(0, 7)]")]
+        [InlineData("Array", "[CborConstructor(0, 7)]")]
+        public void ListedConstructorArgumentsTheReflectionPathRefusesAreReported(string format, string attribute)
+        {
+            AssertReports("CBOR1007", Listed(format, attribute, "int a, int b"));
+        }
+
+        /// <summary>
+        /// The other kind of argument is ignored by the reflection path, which falls back to matching
+        /// by parameter name -- so the generator must too, not read them as a refusal or as an order.
+        /// </summary>
+        [Theory]
+        [InlineData("StringKeyMap", "[CborConstructor(1, 0)]")]
+        [InlineData("IntKeyMap", "[CborConstructor(\"B\", \"A\")]")]
+        public void ArgumentsOfTheOtherKindFallBackToMatchingByName(string format, string attribute)
+        {
+            string source = Preamble + Listed(format, attribute, "int a, int b");
+
+            Assert.Empty(Run(Listed(format, attribute, "int a, int b")));
+
+            string generated = GeneratorHarness.GeneratedSource(source);
+            Assert.Contains(format == "StringKeyMap" ? ".SetMemberNames(\"A\", \"B\")" : ".SetMemberIndexes(0, 1)", generated);
+        }
+
+        /// <summary>CreatorMapping compares the two types exactly and throws when they differ.</summary>
+        [Fact]
+        public void AParameterOfAnotherTypeThanItsMemberIsReported()
+        {
+            AssertReports("CBOR1007", @"
+public class Holder
+{
+    [CborConstructor]
+    public Holder(long id) { Id = (int)id; }
+
+    public int Id { get; }
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
         /// An abstract base is never instantiated — its subtypes are — so it must not be reported.
         /// </summary>
         [Fact]

@@ -112,7 +112,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor NoParameterlessConstructor = new(
             id: "CBOR1010",
             title: "Type has no accessible parameterless constructor",
-            messageFormat: "'{0}' has no accessible parameterless constructor, so a generated context cannot create one when reading. Add one, or exclude the type.",
+            messageFormat: "'{0}' has no accessible parameterless constructor, so a generated context cannot create one when reading. Add one, mark the constructor to read through with [CborConstructor] (both paths then use it), or exclude the type.",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -197,7 +197,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor InaccessibleCreatorConstructor = new(
             id: "CBOR1015",
             title: "Creator constructor is not accessible to the generated context",
-            messageFormat: "'{0}' is built through a {1} constructor, which the generated context cannot call. Make it public or internal (in an assembly that is the context's own), or exclude the type.",
+            messageFormat: "'{0}' is built through {1} constructor, which the generated context cannot call. Make it public or internal (in an assembly that is the context's own), or exclude the type.",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);

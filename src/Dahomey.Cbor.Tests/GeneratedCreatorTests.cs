@@ -37,25 +37,86 @@ namespace Dahomey.Cbor.Tests
         [property: CborProperty(1)] string Name);
 
     /// <summary>The same shape under a discriminator, which takes slot 0 in the Array format.</summary>
-    [CborDiscriminator("indexed")]
+    [CborDiscriminator("indexed", Policy = CborDiscriminatorPolicy.Always)]
     public record GeneratedDiscriminatedRecord(
         [property: CborProperty(1)] int Id,
         [property: CborProperty(2)] string Name);
 
+    /// <summary>Parameter order is the reverse of index order, so neither can stand in for the other.</summary>
+    public record GeneratedSwappedRecord(
+        [property: CborProperty(1)] int A,
+        [property: CborProperty(0)] string B);
+
+    /// <summary>Non-contiguous indexes, which only IntKeyMap allows -- Array reads by position.</summary>
+    public record GeneratedSparseRecord(
+        [property: CborProperty(5)] int A,
+        [property: CborProperty(2)] string B);
+
+    /// <summary>
+    /// The arguments of <c>[CborConstructor]</c> decide which member fills which parameter, by
+    /// position. Parameter <c>b</c> is filled from index 0, which is <c>A</c>: the names cross over, so
+    /// matching by parameter name instead would give the opposite object. It still round-trips.
+    /// </summary>
+    public record GeneratedListedIndexes
+    {
+        [CborConstructor(0, 1)]
+        public GeneratedListedIndexes(int b, int a)
+        {
+            A = b;
+            B = a;
+        }
+
+        [CborProperty(0)]
+        public int A { get; }
+
+        [CborProperty(1)]
+        public int B { get; }
+    }
+
+    public record GeneratedListedNames
+    {
+        [CborConstructor("A", "B")]
+        public GeneratedListedNames(int b, int a)
+        {
+            A = b;
+            B = a;
+        }
+
+        public int A { get; }
+
+        public int B { get; }
+    }
+
+    /// <summary>A sealed record that declares its own copy constructor, privately.</summary>
+    public sealed record GeneratedSealedRecord(int Id)
+    {
+        private GeneratedSealedRecord(GeneratedSealedRecord original)
+        {
+            Id = original.Id;
+        }
+    }
+
     [CborSerializable(typeof(GeneratedRecord))]
     [CborSerializable(typeof(GeneratedCreatorHolder))]
+    [CborSerializable(typeof(GeneratedListedNames))]
+    [CborSerializable(typeof(GeneratedSealedRecord))]
     public partial class CreatorContext : CborSerializerContext
     {
     }
 
     [CborSerializable(typeof(GeneratedIndexedRecord))]
     [CborSerializable(typeof(GeneratedDiscriminatedRecord))]
+    [CborSerializable(typeof(GeneratedSwappedRecord))]
+    [CborSerializable(typeof(GeneratedListedIndexes))]
     [CborSourceGenerationOptions(ObjectFormat = CborObjectFormat.Array)]
     public partial class CreatorArrayContext : CborSerializerContext
     {
     }
 
     [CborSerializable(typeof(GeneratedIndexedRecord))]
+    [CborSerializable(typeof(GeneratedSwappedRecord))]
+    [CborSerializable(typeof(GeneratedSparseRecord))]
+    [CborSerializable(typeof(GeneratedListedIndexes))]
     [CborSourceGenerationOptions(ObjectFormat = CborObjectFormat.IntKeyMap)]
     public partial class CreatorIntKeyContext : CborSerializerContext
     {
@@ -138,8 +199,66 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// A discriminator takes slot 0 of an Array, so the declared indexes start at 1 -- the creator
-        /// is told those same indexes, not positions counted from the first parameter.
+        /// Writes <paramref name="value"/> through the context and through the reflection path under
+        /// the same format, requires identical bytes, then reads <paramref name="document"/> through
+        /// both and requires identical objects. Returns what the generated side read.
+        /// </summary>
+        private static T AssertMatchesReflection<T>(
+            CborSerializerContext context, CborObjectFormat format, T value, string document)
+        {
+            CborOptions reflection = new CborOptions { ObjectFormat = format };
+
+            Assert.Equal(
+                Helper.Write(value, reflection), Helper.Write(value, context.Options), ignoreCase: true);
+
+            T fromReflection = Cbor.Deserialize<T>(document.HexToBytes(), reflection);
+            T fromGenerated = Cbor.Deserialize<T>(document.HexToBytes(), context.Options);
+
+            Assert.Equal(fromReflection, fromGenerated);
+            return fromGenerated;
+        }
+
+        /// <summary>
+        /// Parameter order is not index order: <c>A</c> is the first parameter and index 1. A creator
+        /// told positions 0..n-1, or the parameters in index order, reads the two swapped.
+        /// </summary>
+        [Theory]
+        [InlineData(CborObjectFormat.Array, "82636F6E6501")]            // ["one", 1]
+        [InlineData(CborObjectFormat.IntKeyMap, "A2006374776F0102")]
+        public void ParameterOrderAndIndexOrderAreKeptApart(CborObjectFormat format, string document)
+        {
+            CborSerializerContext context = format == CborObjectFormat.Array
+                ? new CreatorArrayContext()
+                : new CreatorIntKeyContext();
+
+            GeneratedSwappedRecord read = AssertMatchesReflection(
+                context, format, new GeneratedSwappedRecord(1, "one"), document);
+
+            // Index 0 is B, index 1 is A -- in both documents.
+            Assert.Equal(format == CborObjectFormat.Array ? "one" : "two", read.B);
+            Assert.Equal(format == CborObjectFormat.Array ? 1 : 2, read.A);
+        }
+
+        /// <summary>
+        /// Declared indexes 5 and 2: positions would be 0 and 1. Only a creator given the declared
+        /// indexes finds either value.
+        /// </summary>
+        [Fact]
+        public void NonContiguousIntKeysAreTheDeclaredOnes()
+        {
+            GeneratedSparseRecord read = AssertMatchesReflection(
+                new CreatorIntKeyContext(),
+                CborObjectFormat.IntKeyMap,
+                new GeneratedSparseRecord(7, "seven"),
+                "A2" + "02" + "65736576656E" + "05" + "07");
+
+            Assert.Equal(new GeneratedSparseRecord(7, "seven"), read);
+        }
+
+        /// <summary>
+        /// A discriminator takes slot 0 of an Array, so the declared indexes start at 1. With
+        /// <c>Always</c> it is on the wire (<c>83 D827 67 ...</c>), which is the only way this test
+        /// sees the creator being told the declared indexes rather than counting from the first item.
         /// </summary>
         [Fact]
         public void ADiscriminatedRecordKeepsItsDeclaredIndexes()
@@ -149,7 +268,58 @@ namespace Dahomey.Cbor.Tests
 
             string generated = Helper.Write(value, context.Options);
 
-            Assert.Equal(value, Cbor.Deserialize<GeneratedDiscriminatedRecord>(generated.HexToBytes(), context.Options));
+            Assert.StartsWith("83D82767696E6465786564", generated, System.StringComparison.OrdinalIgnoreCase);
+
+            GeneratedDiscriminatedRecord read = AssertMatchesReflection(
+                context, CborObjectFormat.Array, value, generated);
+
+            Assert.Equal(value, read);
+        }
+
+        /// <summary>
+        /// <c>[CborConstructor(0, 1)]</c> says parameter <c>b</c> comes from index 0 and <c>a</c> from
+        /// index 1. Matching by parameter name instead gives the opposite object.
+        /// </summary>
+        [Theory]
+        [InlineData(CborObjectFormat.Array, "820201")]
+        [InlineData(CborObjectFormat.IntKeyMap, "A200020101")]
+        public void TheIndexesListedOnTheConstructorAreHonoured(CborObjectFormat format, string document)
+        {
+            CborSerializerContext context = format == CborObjectFormat.Array
+                ? new CreatorArrayContext()
+                : new CreatorIntKeyContext();
+
+            GeneratedListedIndexes read = AssertMatchesReflection(
+                context, format, new GeneratedListedIndexes(2, 1), document);
+
+            // b <- 2 (first listed key), a <- 1 -- by name it would be b <- 1, a <- 2.
+            Assert.Equal(2, read.A);
+            Assert.Equal(1, read.B);
+        }
+
+        [Fact]
+        public void TheNamesListedOnTheConstructorAreHonoured()
+        {
+            // {"A": 2, "B": 1}
+            GeneratedListedNames read = AssertMatchesReflection(
+                new CreatorContext(),
+                CborObjectFormat.StringKeyMap,
+                new GeneratedListedNames(2, 1),
+                "A2614102614201");
+
+            // b <- 2 (first listed key), a <- 1 -- by name it would be b <- 1, a <- 2.
+            Assert.Equal(2, read.A);
+            Assert.Equal(1, read.B);
+        }
+
+        [Fact]
+        public void ASealedRecordWithAPrivateCopyConstructorIsBuiltThroughItsPrimaryOne()
+        {
+            CreatorContext context = new CreatorContext();
+            GeneratedSealedRecord read = AssertMatchesReflection(
+                context, CborObjectFormat.StringKeyMap, new GeneratedSealedRecord(7), "A1624964" + "07");
+
+            Assert.Equal(7, read.Id);
         }
 
         internal static GeneratedRecord SampleRecord() => new GeneratedRecord(7, "seven");

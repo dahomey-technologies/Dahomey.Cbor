@@ -210,7 +210,7 @@ namespace Dahomey.Cbor.Generator
             TypeCollector collector = new TypeCollector(
                 options,
                 diagnostics,
-                symbol => compilation.IsSymbolAccessibleWithin(symbol, contextSymbol));
+                symbol => compilation.IsSymbolAccessibleWithin(symbol, contextSymbol, symbol.ContainingType));
 
             foreach (ITypeSymbol root in roots)
             {

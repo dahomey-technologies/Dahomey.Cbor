@@ -151,9 +151,6 @@ namespace Dahomey.Cbor.Generator
         public List<(string Type, string CborName, int? Index)> CreatorParameters { get; } =
             new List<(string Type, string CborName, int? Index)>();
 
-        /// <summary>C# member name to CBOR name and index, for the members a creator supplies.</summary>
-        public Dictionary<string, (string CborName, int? Index)> CreatorMembers { get; } =
-            new Dictionary<string, (string CborName, int? Index)>();
 
         /// <summary>
         /// True when <see cref="Kind"/> is <see cref="TypeKind.Array"/> and the element type is one of

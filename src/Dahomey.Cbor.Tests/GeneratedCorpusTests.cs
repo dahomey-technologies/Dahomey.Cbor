@@ -228,6 +228,31 @@ namespace Dahomey.Cbor.Tests
                 return new GeneratedIndexedRecord(7, "seven");
             }
 
+            if (type == typeof(GeneratedSwappedRecord))
+            {
+                return new GeneratedSwappedRecord(1, "one");
+            }
+
+            if (type == typeof(GeneratedSparseRecord))
+            {
+                return new GeneratedSparseRecord(7, "seven");
+            }
+
+            if (type == typeof(GeneratedListedIndexes))
+            {
+                return new GeneratedListedIndexes(2, 1);
+            }
+
+            if (type == typeof(GeneratedListedNames))
+            {
+                return new GeneratedListedNames(2, 1);
+            }
+
+            if (type == typeof(GeneratedSealedRecord))
+            {
+                return new GeneratedSealedRecord(7);
+            }
+
             if (type == typeof(GeneratedDiscriminatedRecord))
             {
                 return new GeneratedDiscriminatedRecord(7, "seven");
