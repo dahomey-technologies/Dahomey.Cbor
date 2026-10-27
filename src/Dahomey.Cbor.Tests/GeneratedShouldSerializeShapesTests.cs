@@ -88,6 +88,26 @@ namespace Dahomey.Cbor.Tests
         internal bool ShouldSerializeName() => false;
     }
 
+    public class ShouldSerializeStaticBaseA
+    {
+        public bool ShouldSerializeName() => false;
+    }
+
+    public class ShouldSerializeStaticBaseB : ShouldSerializeStaticBaseA
+    {
+        public new static bool ShouldSerializeName() => true;
+    }
+
+    /// <summary>
+    /// A static predicate inherited from a base is invisible to the reflection lookup, which goes on
+    /// to the instance one above it.
+    /// </summary>
+    public class ShouldSerializeInheritedStatic : ShouldSerializeStaticBaseB
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+    }
+
     public struct ShouldSerializeStruct
     {
         public int Id { get; set; }
@@ -104,6 +124,7 @@ namespace Dahomey.Cbor.Tests
     [CborSerializable(typeof(ShouldSerializeWithParameter))]
     [CborSerializable(typeof(ShouldSerializeNonPublic))]
     [CborSerializable(typeof(ShouldSerializeStruct))]
+    [CborSerializable(typeof(ShouldSerializeInheritedStatic))]
     public partial class ShouldSerializeShapesContext : CborSerializerContext
     {
     }
@@ -124,6 +145,7 @@ namespace Dahomey.Cbor.Tests
         [Fact] public void NotReturningBool() => Agree(new ShouldSerializeNotBool { Id = 1, Name = "n" });
         [Fact] public void WithAParameter() => Agree(new ShouldSerializeWithParameter { Id = 1, Name = "n" });
         [Fact] public void NonPublic() => Agree(new ShouldSerializeNonPublic { Id = 1, Name = "n" });
+        [Fact] public void AStaticPredicateInheritedFromABase() => Agree(new ShouldSerializeInheritedStatic { Id = 1, Name = "n" });
         [Fact] public void OnAStruct() => Agree(new ShouldSerializeStruct { Id = 1, Name = "n" });
     }
 }

@@ -27,7 +27,20 @@ namespace Dahomey.Cbor.Tests
         public bool ShouldSerializeName() => !string.IsNullOrEmpty(Name);
     }
 
+    /// <summary>
+    /// Both a constructor argument and a named one: the property is applied after the constructor, so
+    /// the named <c>DisallowNull</c> is the policy, not the <c>AllowNull</c> written first.
+    /// </summary>
+    public class RequiredNamedPolicyHolder
+    {
+        public int Id { get; set; }
+
+        [CborRequired(RequirementPolicy.AllowNull, Policy = RequirementPolicy.DisallowNull)]
+        public string Name { get; set; }
+    }
+
     [CborSerializable(typeof(GeneratedRequiredHolder))]
+    [CborSerializable(typeof(RequiredNamedPolicyHolder))]
     [CborSerializable(typeof(GeneratedShouldSerializeHolder))]
     public partial class MemberFeatureContext : CborSerializerContext
     {
@@ -107,6 +120,31 @@ namespace Dahomey.Cbor.Tests
 
             Assert.StartsWith("A2", generated, System.StringComparison.OrdinalIgnoreCase);
             Assert.Equal(Helper.Write(kept), generated, ignoreCase: true);
+        }
+
+        /// <summary>
+        /// DisallowNull does not require the member, so a document without it reads; one carrying an
+        /// explicit null refuses, and so does writing a null. AllowNull would do the opposite on the
+        /// last two, which is how a generator that ignored the named argument shows.
+        /// </summary>
+        [Fact]
+        public void ANamedPolicyOverridesTheConstructorArgument()
+        {
+            MemberFeatureContext context = new MemberFeatureContext();
+
+            // {"Id": 1} -- Name absent: not required under DisallowNull
+            const string absent = "A1624964" + "01";
+            Assert.Equal(1, Cbor.Deserialize<RequiredNamedPolicyHolder>(absent.HexToBytes()).Id);
+            Assert.Equal(1, Cbor.Deserialize<RequiredNamedPolicyHolder>(absent.HexToBytes(), context.Options).Id);
+
+            // {"Name": null} -- present but null: refused under DisallowNull
+            const string nullName = "A1644E616D65F6";
+            Assert.Throws<CborException>(() => Cbor.Deserialize<RequiredNamedPolicyHolder>(nullName.HexToBytes()));
+            Assert.Throws<CborException>(() => Cbor.Deserialize<RequiredNamedPolicyHolder>(nullName.HexToBytes(), context.Options));
+
+            RequiredNamedPolicyHolder withNull = new RequiredNamedPolicyHolder { Id = 1, Name = null };
+            Assert.Throws<CborException>(() => Helper.Write(withNull));
+            Assert.Throws<CborException>(() => Helper.Write(withNull, context.Options));
         }
     }
 }

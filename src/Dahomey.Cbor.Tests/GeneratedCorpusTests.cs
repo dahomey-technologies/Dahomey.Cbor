@@ -258,6 +258,16 @@ namespace Dahomey.Cbor.Tests
                 return new ShouldSerializeNonPublic { Id = 1, Name = "n" };
             }
 
+            if (type == typeof(ShouldSerializeInheritedStatic))
+            {
+                return new ShouldSerializeInheritedStatic { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(RequiredNamedPolicyHolder))
+            {
+                return new RequiredNamedPolicyHolder { Id = 1, Name = "n" };
+            }
+
             if (type == typeof(ShouldSerializeStruct))
             {
                 return new ShouldSerializeStruct { Id = 1, Name = "n" };

@@ -289,11 +289,15 @@ namespace Dahomey.Cbor.Generator
                     }
                 }
 
+                // Found once, so the name and the type it is cast to cannot come from different methods.
+                IMethodSymbol? shouldSerialize = FindShouldSerializeMethod(type, member);
+
                 model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite)
                 {
                     RequirementPolicy = ReadRequirementPolicy(member),
-                    ShouldSerializeOwner = FindShouldSerializeOwner(type, member),
-                    ShouldSerializeMethod = ShouldSerializeNameFor(type, member),
+                    ShouldSerializeMethod = shouldSerialize?.Name,
+                    ShouldSerializeOwner = shouldSerialize?.ContainingType
+                        .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 });
 
                 Collect(memberType);
@@ -919,21 +923,26 @@ namespace Dahomey.Cbor.Generator
                         continue;
                     }
 
+                    // The constructor argument first, or its default; then the named Policy, because
+                    // reflection applies the property after the constructor has run, so a named value
+                    // wins when both are written.
+                    string policy = DefaultRequirementPolicy;
+
                     foreach (TypedConstant argument in attribute.ConstructorArguments)
                     {
-                        return RenderEnumConstant(argument) ?? DefaultRequirementPolicy;
+                        policy = RenderEnumConstant(argument) ?? DefaultRequirementPolicy;
+                        break;
                     }
 
                     foreach (KeyValuePair<string, TypedConstant> named in attribute.NamedArguments)
                     {
                         if (named.Key == "Policy")
                         {
-                            return RenderEnumConstant(named.Value) ?? DefaultRequirementPolicy;
+                            policy = RenderEnumConstant(named.Value) ?? policy;
                         }
                     }
 
-                    // The attribute's own constructor default.
-                    return DefaultRequirementPolicy;
+                    return policy;
                 }
             }
 
@@ -982,7 +991,9 @@ namespace Dahomey.Cbor.Generator
         /// it. Only public methods are visible to that lookup, so a non-public one is skipped rather
         /// than ending the search; the first public one found is the answer, and it is used only if it
         /// returns <c>bool</c> and is an instance method -- the reflection path ignores the first and
-        /// throws for the second, and the generated one ignores both. A struct's member converter never
+        /// throws for the second, and the generated one ignores both. The exception is a static method
+        /// inherited from a base: the lookup is not <c>FlattenHierarchy</c>, so it does not see one and
+        /// the search goes on past it. A struct's member converter never
         /// consults a predicate at all, so none is emitted for one.
         /// </remarks>
         private static IMethodSymbol? FindShouldSerializeMethod(ITypeSymbol type, ISymbol member)
@@ -1007,6 +1018,14 @@ namespace Dahomey.Cbor.Generator
                             TypeParameters.Length: 0,
                         } method)
                     {
+                        // GetMethod(name, no parameters) is not FlattenHierarchy, so it skips a static
+                        // method inherited from a base and keeps looking. One on the declaring type
+                        // itself is found, and the reflection path then throws building the mapping.
+                        if (method.IsStatic && !SymbolEqualityComparer.Default.Equals(current, member.ContainingType))
+                        {
+                            continue;
+                        }
+
                         return !method.IsStatic && method.ReturnType.SpecialType == SpecialType.System_Boolean
                             ? method
                             : null;
@@ -1016,18 +1035,6 @@ namespace Dahomey.Cbor.Generator
 
             return null;
         }
-
-        private static string? ShouldSerializeNameFor(ITypeSymbol type, ISymbol member)
-            => FindShouldSerializeMethod(type, member)?.Name;
-
-        /// <summary>
-        /// The type the emitted call is cast to: the one that declares the method found, so that C#
-        /// binds the same method the reflection lookup did instead of re-running its own lookup from
-        /// the generated type, which could pick a different (derived or non-public) one.
-        /// </summary>
-        private static string? FindShouldSerializeOwner(ITypeSymbol type, ISymbol member)
-            => FindShouldSerializeMethod(type, member)?.ContainingType
-                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         private static bool HasInheritedAttribute(ISymbol member, string attributeName)
         {
