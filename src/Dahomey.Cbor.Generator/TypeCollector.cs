@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Linq;
+using Member = (string Name, string CborName, int? Index, Microsoft.CodeAnalysis.ITypeSymbol Type);
 
 namespace Dahomey.Cbor.Generator
 {
@@ -25,13 +26,29 @@ namespace Dahomey.Cbor.Generator
         private readonly Dictionary<string, TypeModel> _models =
             new Dictionary<string, TypeModel>();
 
+        private readonly Func<ISymbol, bool> _isAccessible;
+        private readonly Func<ITypeSymbol, ITypeSymbol, bool> _isIdentical;
+
+        /// <param name="isAccessible">
+        /// Whether the generated context can name a symbol -- asked of the compilation, because it is a
+        /// property of the call site: <c>internal</c> means this assembly, and <c>protected</c> reaches
+        /// a context nested in the type but not one nested in a subtype.
+        /// </param>
+        /// <param name="isIdentical">
+        /// Whether two types are one type to the runtime, which is what <c>CreatorMapping</c> compares:
+        /// tuple element names and nullable annotations are erased, symbol equality counts the former.
+        /// </param>
         public TypeCollector(
             GenerationOptions options,
             List<DiagnosticInfo> diagnostics,
+            Func<ISymbol, bool> isAccessible,
+            Func<ITypeSymbol, ITypeSymbol, bool> isIdentical,
             IAssemblySymbol? accessingAssembly = null)
         {
             _options = options;
             _diagnostics = diagnostics;
+            _isAccessible = isAccessible;
+            _isIdentical = isIdentical;
             _accessingAssembly = accessingAssembly;
         }
 
@@ -241,8 +258,53 @@ namespace Dahomey.Cbor.Generator
             // An abstract base is never instantiated -- its subtypes are -- so only a concrete type
             // without a constructor is a problem. The reflection path can reach a non-public
             // constructor or a [CborConstructor] creator mapping; a generated factory is `new T()`.
+            IMethodSymbol? declaredCreator = FindCreatorConstructor(type);
+            IMethodSymbol? creator = declaredCreator;
+            bool creatorUnreachable = false;
+
+            // A creator the context cannot call would be emitted as a call that does not compile
+            // (CS0122); it is reported and dropped instead.
+            if (creator is not null && !_isAccessible(creator))
+            {
+                _diagnostics.Add(DiagnosticInfo.Create(
+                    Diagnostics.InaccessibleCreatorConstructor,
+                    creator.Locations.FirstOrDefault(),
+                    type.ToDisplayString(),
+                    DescribeAccessibility(creator.DeclaredAccessibility)));
+                creator = null;
+                creatorUnreachable = true;
+            }
+
+            // A required member has to be set by an object initializer or by a constructor marked
+            // [SetsRequiredMembers]; the generated creator and factory are plain calls (CS9035).
+            string? requiredMember = type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class or Microsoft.CodeAnalysis.TypeKind.Struct }
+                ? FirstRequiredMember(type)
+                : null;
+
+            if (requiredMember is not null)
+            {
+                if (creator is not null && !HasAttribute(creator, "SetsRequiredMembersAttribute"))
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.CreatorNotReproducible,
+                        creator.Locations.FirstOrDefault(),
+                        type.ToDisplayString(),
+                        RequiredMemberReason(requiredMember, "this constructor")));
+                    // A parameterless creator is the very constructor the factory calls.
+                    if (creator.Parameters.Length == 0)
+                    {
+                        model.CanInstantiate = false;
+                    }
+
+                    creator = null;
+                    creatorUnreachable = true;
+                }
+            }
+
             if (!model.CanInstantiate
-                && type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class })
+                && !creatorUnreachable
+                && type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class }
+                && creator is null)
             {
                 _diagnostics.Add(DiagnosticInfo.Create(
                     Diagnostics.NoParameterlessConstructor,
@@ -255,6 +317,8 @@ namespace Dahomey.Cbor.Generator
 
             Dictionary<string, string> membersByCborName = new Dictionary<string, string>(StringComparer.Ordinal);
             Dictionary<int, string> membersByCborIndex = new Dictionary<int, string>();
+            List<Member> walked = new List<Member>();
+            List<ISymbol> readOnlyMembers = new List<ISymbol>();
 
             foreach (ISymbol member in EnumerateMembers(type))
             {
@@ -314,13 +378,10 @@ namespace Dahomey.Cbor.Generator
                     continue;
                 }
 
+                // Reported once the creator is resolved: a member it supplies needs no setter.
                 if (!canWrite)
                 {
-                    _diagnostics.Add(DiagnosticInfo.Create(
-                        Diagnostics.MemberNotDeserializable,
-                        member.Locations.FirstOrDefault(),
-                        type.Name,
-                        member.Name));
+                    readOnlyMembers.Add(member);
                 }
 
                 // The wire key, which is the name for StringKeyMap and the index for the other two
@@ -391,6 +452,8 @@ namespace Dahomey.Cbor.Generator
                         .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 });
 
+                walked.Add((member.Name, cborName, cborIndex, memberType));
+
                 Collect(memberType);
 
                 // A member's converter must exist before this object's converter is constructed —
@@ -400,6 +463,243 @@ namespace Dahomey.Cbor.Generator
                     model.Dependencies.Add(memberType);
                 }
             }
+
+            bool isStruct = type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct;
+            bool marked = creator is not null && HasAttribute(creator, "CborConstructorAttribute");
+            HashSet<string> supplied = new HashSet<string>(StringComparer.Ordinal);
+            bool resolved = creator is null || ResolveCreator(type, model, creator, walked, quiet: isStruct && !marked, supplied);
+            bool creatorReported = creatorUnreachable || (!resolved && (!isStruct || marked));
+
+            // A struct whose only constructor does not fill every writable member is read as it always
+            // was: `new T()` and the setters. Built through the constructor, its unsupplied members would
+            // be left to a setter lambda, which a struct member cannot take. The reflection path refuses
+            // such a struct (NotSupportedException); the generated path stays lenient unless the
+            // constructor is marked [CborConstructor], which asks for it and is reported. A member with
+            // no setter (a computed property) is never read, on either path, so it does not count.
+            if (creator is not null && isStruct
+                && (!resolved || model.Members.Any(m => m.CanWrite && !supplied.Contains(m.Name))))
+            {
+                if (resolved && marked)
+                {
+                    creatorReported = true;
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.CreatorNotReproducible,
+                        creator.Locations.FirstOrDefault(),
+                        type.ToDisplayString(),
+                        "it does not supply every member, and a struct member cannot be set after construction; "
+                            + "the reflection path throws NotSupportedException when it reads one"));
+                }
+
+                model.CreatorParameters.Clear();
+                supplied.Clear();
+            }
+
+            // The `new T()` factory is emitted only for a type without a creator, so it can only fail to
+            // compile for one that ends up without. Judged here because a struct's creator may just
+            // have been dropped; a marked parameterless creator was judged with the creators above.
+            if (requiredMember is not null
+                && model.CanInstantiate
+                && model.CreatorParameters.Count == 0
+                && declaredCreator is not { Parameters.Length: 0 })
+            {
+                IMethodSymbol? parameterless = (type as INamedTypeSymbol)?.InstanceConstructors
+                    .FirstOrDefault(c => !c.IsStatic && c.Parameters.Length == 0);
+
+                if (parameterless is null || !HasAttribute(parameterless, "SetsRequiredMembersAttribute"))
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.CreatorNotReproducible,
+                        parameterless?.Locations.FirstOrDefault() ?? type.Locations.FirstOrDefault(),
+                        type.ToDisplayString(),
+                        RequiredMemberReason(requiredMember, "`new T()`")));
+                    model.CanInstantiate = false;
+                }
+            }
+
+            foreach (ISymbol member in readOnlyMembers)
+            {
+                if (!creatorReported && !supplied.Contains(member.Name))
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.MemberNotDeserializable,
+                        member.Locations.FirstOrDefault(),
+                        type.Name,
+                        member.Name));
+                }
+            }
+        }
+
+        private static string RequiredMemberReason(string member, string call)
+        {
+            return $"member '{member}' is required, which only an object initializer or a constructor marked "
+                + $"[SetsRequiredMembers] can satisfy, and a generated context calls {call} without one";
+        }
+
+        /// <summary>
+        /// Maps each creator parameter to the member it is filled from, as <c>CreatorMapping</c> does,
+        /// collecting the C# names of the members that supply one. False when it cannot be reproduced.
+        /// </summary>
+        /// <remarks>
+        /// <c>[CborConstructor(...)]</c> lists names under <c>StringKeyMap</c> and indexes under the
+        /// other two, positionally; the other kind is ignored. Unlisted, a parameter is matched on the
+        /// member's C# name (exact case, then ignoring it), then under <c>StringKeyMap</c> on its CBOR
+        /// name. What the reflection path refuses when it builds the mapping -- a wrong count, a listed
+        /// key matching nothing, a type mismatch -- is reported here, and so is a parameter matching
+        /// nothing, which that path leaves at its default.
+        /// </remarks>
+        private bool ResolveCreator(
+            ITypeSymbol type, TypeModel model, IMethodSymbol creator, List<Member> walked, bool quiet,
+            HashSet<string> supplied)
+        {
+            bool byName = model.ObjectFormat == "StringKeyMap";
+            (string[]? names, int[]? indexes) = ReadCreatorArguments(creator);
+            bool listed = byName ? names is not null : indexes is not null;
+            int listedCount = byName ? names?.Length ?? 0 : indexes?.Length ?? 0;
+            const string RefusedAtBuild = "the reflection path refuses this mapping with a CborException when it is built";
+
+            bool Refuse(string what)
+            {
+                if (!quiet)
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.CreatorNotReproducible, creator.Locations.FirstOrDefault(), type.ToDisplayString(), what));
+                }
+
+                model.CreatorParameters.Clear();
+                return false;
+            }
+
+            if (listed && listedCount != creator.Parameters.Length)
+            {
+                return Refuse($"[CborConstructor] lists {listedCount} member " + (byName ? "names" : "indexes")
+                    + $" for {creator.Parameters.Length} constructor parameters; {RefusedAtBuild}");
+            }
+
+            for (int i = 0; i < creator.Parameters.Length; i++)
+            {
+                IParameterSymbol parameter = creator.Parameters[i];
+
+                if (parameter.RefKind != RefKind.None)
+                {
+                    // The call would omit the modifier (CS1620), and the reflection path refuses the
+                    // mapping for any by-reference parameter -- `in` included, which compiles here.
+                    return Refuse($"parameter '{parameter.Name}' is passed by reference ({parameter.RefKind.ToString().ToLowerInvariant()}); "
+                        + RefusedAtBuild);
+                }
+
+                Member match = listed
+                    ? byName
+                        ? Find(walked, w => w.CborName, names![i])
+                        : walked.FirstOrDefault(w => w.Index == indexes![i])
+                    : Find(walked, w => w.Name, parameter.Name);
+
+                if (match.Name is null && !listed && byName)
+                {
+                    match = Find(walked, w => w.CborName, parameter.Name);
+                }
+
+                if (match.Name is null)
+                {
+                    return Refuse(listed
+                        ? $"[CborConstructor] lists member {(byName ? "name" : "index")} '{(byName ? names![i] : indexes![i].ToString(CultureInfo.InvariantCulture))}', which matches no serialized member; {RefusedAtBuild}"
+                        : $"parameter '{parameter.Name}' matches no serialized member, so the reflection path would leave it at its default value; "
+                            + "name it after a member, or list the members in [CborConstructor]");
+                }
+
+                if (!_isIdentical(match.Type, parameter.Type))
+                {
+                    // CreatorMapping compares the two types exactly and throws on a difference.
+                    return Refuse($"parameter '{parameter.Name}' is a {parameter.Type.ToDisplayString()} but is filled from member "
+                        + $"'{match.Name}', a {match.Type.ToDisplayString()}; {RefusedAtBuild}");
+                }
+
+                supplied.Add(match.Name);
+                model.CreatorParameters.Add((FullNameOf(parameter.Type), match.CborName, match.Index));
+            }
+
+            return true;
+        }
+
+        /// <summary>The first match on the exact name, else on the name ignoring case, as <c>CreatorMapping</c> does.</summary>
+        private static Member Find(List<Member> walked, Func<Member, string> key, string name)
+        {
+            foreach (StringComparison comparison in new[] { StringComparison.Ordinal, StringComparison.OrdinalIgnoreCase })
+            {
+                foreach (Member candidate in walked)
+                {
+                    if (string.Equals(key(candidate), name, comparison))
+                    {
+                        return candidate;
+                    }
+                }
+            }
+
+            return default;
+        }
+
+        private static string? FirstRequiredMember(ITypeSymbol type)
+        {
+            for (ITypeSymbol? current = type;
+                 current is not null && current.SpecialType != SpecialType.System_Object;
+                 current = current.BaseType)
+            {
+                foreach (ISymbol member in current.GetMembers())
+                {
+                    if (member is IPropertySymbol { IsRequired: true } or IFieldSymbol { IsRequired: true })
+                    {
+                        return member.Name;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static (string[]? Names, int[]? Indexes) ReadCreatorArguments(IMethodSymbol creator)
+        {
+            AttributeData? attribute = creator.GetAttributes()
+                .FirstOrDefault(a => a.AttributeClass?.Name == "CborConstructorAttribute");
+
+            if (attribute is null
+                || attribute.ConstructorArguments.Length != 1
+                || attribute.ConstructorArguments[0].Kind != TypedConstantKind.Array
+                || attribute.ConstructorArguments[0].IsNull)
+            {
+                return (null, null);
+            }
+
+            TypedConstant argument = attribute.ConstructorArguments[0];
+            ITypeSymbol? element = (argument.Type as IArrayTypeSymbol)?.ElementType;
+
+            if (element?.SpecialType == SpecialType.System_String)
+            {
+                return (argument.Values.Select(v => (string)v.Value!).ToArray(), null);
+            }
+
+            if (element?.SpecialType == SpecialType.System_Int32)
+            {
+                return (null, argument.Values.Select(v => (int)v.Value!).ToArray());
+            }
+
+            return (null, null);
+        }
+
+        private static string DescribeAccessibility(Accessibility accessibility)
+        {
+            return accessibility switch
+            {
+                Accessibility.Private => "a private",
+                Accessibility.Protected => "a protected",
+                Accessibility.Internal => "an internal",
+                Accessibility.ProtectedOrInternal => "a protected internal",
+                Accessibility.ProtectedAndInternal => "a private protected",
+                _ => "an inaccessible",
+            };
+        }
+
+        private static string FullNameOf(ITypeSymbol type)
+        {
+            return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         }
 
         /// <summary>
@@ -445,20 +745,6 @@ namespace Dahomey.Cbor.Generator
                         SymbolEqualityComparer.Default.Equals(declaredOn, type)
                             ? description
                             : $"{description} (inherited from {declaredOn!.ToDisplayString()})");
-                }
-            }
-
-            // [CborConstructor] targets a constructor, not the type. Reflection maps it as the creator of
-            // a concrete type, from that type's own constructors; a generated factory is `new T()` plus
-            // the setters, so it would build the value without the constructor ever running.
-            if (type is INamedTypeSymbol { IsAbstract: false } namedType)
-            {
-                foreach (IMethodSymbol constructor in namedType.InstanceConstructors)
-                {
-                    if (HasAttribute(constructor, "CborConstructorAttribute"))
-                    {
-                        Report(constructor.Locations.FirstOrDefault(), type.ToDisplayString(), "[CborConstructor]");
-                    }
                 }
             }
 
@@ -1083,7 +1369,7 @@ namespace Dahomey.Cbor.Generator
             return element.ToDisplayString() == "System.Half";
         }
 
-        private static bool HasAccessibleParameterlessConstructor(ITypeSymbol type)
+        private bool HasAccessibleParameterlessConstructor(ITypeSymbol type)
         {
             if (type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct)
             {
@@ -1092,7 +1378,7 @@ namespace Dahomey.Cbor.Generator
 
             return type is INamedTypeSymbol named
                 && named.InstanceConstructors.Any(c =>
-                    c.Parameters.Length == 0 && c.DeclaredAccessibility != Accessibility.Private);
+                    !c.IsStatic && c.Parameters.Length == 0 && _isAccessible(c));
         }
 
         private static string DescribeWhyUnsupported(ITypeSymbol type)
@@ -1188,6 +1474,53 @@ namespace Dahomey.Cbor.Generator
             {
                 yield return overridden;
             }
+        }
+
+        /// <summary>
+        /// The constructor a read builds this type through, or null where <c>new T()</c> will do:
+        /// a <c>[CborConstructor]</c>, else the only constructor of a type with no parameterless one --
+        /// a positional record's. Where several are declared, none marked and none parameterless, the
+        /// reflection path takes the first in metadata order, which nothing guarantees Roslyn matches,
+        /// so that case is left to CBOR1010, whose remedy settles it for both paths.
+        /// </summary>
+        private IMethodSymbol? FindCreatorConstructor(ITypeSymbol type)
+        {
+            if (type is not INamedTypeSymbol named || named.IsAbstract)
+            {
+                return null;
+            }
+
+            // Every accessibility, as the reflection path binds NonPublic, so that one the context
+            // cannot call is reported by the caller. Implicit ones are excluded (a record's copy
+            // constructor); the primary constructor is not implicit.
+            List<IMethodSymbol> constructors = named.InstanceConstructors
+                .Where(c => !c.IsStatic && !c.IsImplicitlyDeclared)
+                .ToList();
+
+            IMethodSymbol? marked = constructors.FirstOrDefault(
+                c => HasAttribute(c, "CborConstructorAttribute"));
+
+            if (marked is not null)
+            {
+                return marked;
+            }
+
+            if (constructors.Any(c => c.Parameters.Length == 0))
+            {
+                return null;
+            }
+
+            // A record may declare its copy constructor itself (`private R(R original)`). It is never
+            // the primary one, which the reflection path takes. In a class it is an ordinary constructor.
+            if (named.IsRecord)
+            {
+                constructors = constructors
+                    .Where(c => !(c.Parameters.Length == 1
+                        && SymbolEqualityComparer.Default.Equals(c.Parameters[0].Type, named)))
+                    .ToList();
+            }
+
+            return constructors.Count == 1 ? constructors[0] : null;
         }
 
         /// <summary>

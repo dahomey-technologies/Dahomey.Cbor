@@ -75,6 +75,11 @@ namespace Dahomey.Cbor.Tests
     {
         private static object Sample(Type type)
         {
+            if (GeneratedCreatorTests.Samples.TryGetValue(type, out Func<object> creatorSample))
+            {
+                return creatorSample();
+            }
+
             if (type == typeof(CorpusBytes))
             {
                 return new CorpusBytes { Blob = new byte[] { 1, 2, 3 }, Name = "blob" };

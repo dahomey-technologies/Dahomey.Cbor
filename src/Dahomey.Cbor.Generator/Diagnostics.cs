@@ -112,7 +112,7 @@ namespace Dahomey.Cbor.Generator
         public static readonly DiagnosticDescriptor NoParameterlessConstructor = new(
             id: "CBOR1010",
             title: "Type has no accessible parameterless constructor",
-            messageFormat: "'{0}' has no accessible parameterless constructor, so a generated context cannot create one when reading. Add one, or exclude the type.",
+            messageFormat: "'{0}' has no accessible parameterless constructor, so a generated context cannot create one when reading. Add one, mark the constructor to read through with [CborConstructor] (both paths then use it), or exclude the type.",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -185,6 +185,33 @@ namespace Dahomey.Cbor.Generator
             id: "CBOR1014",
             title: "Two members map to one CBOR index",
             messageFormat: "'{0}' maps both '{1}' and '{2}' to CBOR index {3}; a document can only carry one of them, so give one a different [CborProperty] index",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// The constructor a read builds the type through -- a <c>[CborConstructor]</c>, or the only one
+        /// it has -- cannot be called from the generated context. The reflection path reaches any
+        /// constructor; generated code is an ordinary call from the context's own class.
+        /// </summary>
+        public static readonly DiagnosticDescriptor InaccessibleCreatorConstructor = new(
+            id: "CBOR1015",
+            title: "Creator constructor is not accessible to the generated context",
+            messageFormat: "'{0}' is built through {1} constructor, which the generated context cannot call. Make it public or internal (in an assembly that is the context's own), or exclude the type.",
+            Category,
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// The creator the reflection path builds the type through cannot be reproduced. Separate from
+        /// <see cref="UnsupportedFeature"/> because the reason differs by case, and the message states
+        /// it: most of these shapes make the reflection path itself throw when the mapping is built,
+        /// and only a parameter matching no member is silently left at its default there.
+        /// </summary>
+        public static readonly DiagnosticDescriptor CreatorNotReproducible = new(
+            id: "CBOR1016",
+            title: "Constructor mapping cannot be reproduced",
+            messageFormat: "'{0}' is built through a constructor that cannot be mapped: {1}",
             Category,
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);

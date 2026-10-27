@@ -192,6 +192,27 @@ namespace Dahomey.Cbor.Generator
         public ITypeSymbol? ElementType { get; set; }
 
         /// <summary>
+        /// The constructor a read builds this type through, when it cannot be built with
+        /// <c>new T()</c> — a <c>[CborConstructor]</c>, or the single constructor of a type that has no
+        /// parameterless one, which is what a positional record is.
+        /// </summary>
+        /// <remarks>
+        /// Per parameter, in constructor order: its type, the CBOR name of the member it takes its value
+        /// from, and that member's <c>[CborProperty(n)]</c> index (null without one). <c>StringKeyMap</c>
+        /// reads by the name and the other two formats by the index.
+        /// </remarks>
+        public List<(string Type, string CborName, int? Index)> CreatorParameters { get; } =
+            new List<(string Type, string CborName, int? Index)>();
+
+        /// <summary>
+        /// Name of a delegate type the emitter declares for the creator, or null to use
+        /// <c>System.Func</c>. <c>Func</c> takes at most sixteen inputs; a constructor with more needs
+        /// a delegate type of its own, which is what the reflection path's expression tree builds too.
+        /// Assigned by the emitter, not the collector.
+        /// </summary>
+        public string? CreatorDelegateName { get; set; }
+
+        /// <summary>
         /// The concrete collection a <see cref="TypeKind.InterfaceCollection"/> is built into while it
         /// is read, before being handed back as the interface — <c>List&lt;T&gt;</c> for the ordered
         /// interfaces, <c>HashSet&lt;T&gt;</c> for <c>ISet&lt;T&gt;</c>.

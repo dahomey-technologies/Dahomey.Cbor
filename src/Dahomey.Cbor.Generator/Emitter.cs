@@ -33,12 +33,42 @@ namespace Dahomey.Cbor.Generator
             string indent = OpenContextDeclaration(builder, contextSymbol);
 
             EmitTypedAccessors(builder, indent, ordered, roots);
+            EmitCreatorDelegates(builder, indent, ordered);
             EmitConfigure(builder, indent, options, ordered);
             EmitRegisterHelper(builder, indent);
 
             CloseContextDeclaration(builder, contextSymbol, indent);
 
             return builder.ToString();
+        }
+
+        /// <summary>
+        /// <c>System.Func</c> has sixteen inputs at most. A creator beyond that gets a delegate type of
+        /// its own, private to the context and named by position, which <c>CreatorMapping</c> invokes
+        /// like any other delegate.
+        /// </summary>
+        private static void EmitCreatorDelegates(
+            StringBuilder builder, string indent, IReadOnlyList<TypeModel> ordered)
+        {
+            const int MaxFuncInputs = 16;
+            int next = 0;
+
+            foreach (TypeModel model in ordered)
+            {
+                if (model.Kind != TypeKind.Object || model.CreatorParameters.Count <= MaxFuncInputs)
+                {
+                    continue;
+                }
+
+                model.CreatorDelegateName = "CreatorFactory" + next++.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+                string parameters = string.Join(
+                    ", ", model.CreatorParameters.Select((p, i) => $"{p.Type} a{i}"));
+
+                builder.AppendLine(
+                    $"{indent}    private delegate {FullName(model.Symbol)} {model.CreatorDelegateName}({parameters});");
+                builder.AppendLine();
+            }
         }
 
         /// <summary>
@@ -458,6 +488,28 @@ namespace Dahomey.Cbor.Generator
                 builder.AppendLine($"{indent}            }});");
             }
 
+            // A creator for a type `new T()` cannot build: a [CborConstructor], or the only constructor
+            // of a type with no parameterless one, which is what a positional record is. The key each
+            // parameter is read under is given explicitly -- the name for StringKeyMap, the index for
+            // the other two -- because a generated member carries no MemberInfo for CreatorMapping to
+            // match the parameter's C# name against, and a CBOR name need not be a legal identifier.
+            if (model.CreatorParameters.Count > 0)
+            {
+                string parameters = string.Join(", ", model.CreatorParameters.Select((p, i) => $"a{i}"));
+                string signature = string.Join(
+                    ", ", model.CreatorParameters.Select(p => p.Type).Concat(new[] { fullName }));
+                string keys = model.ObjectFormat == "StringKeyMap"
+                    ? ".SetMemberNames(" + string.Join(", ", model.CreatorParameters.Select(
+                        p => Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(p.CborName, quote: true))) + ")"
+                    : ".SetMemberIndexes(" + string.Join(", ", model.CreatorParameters.Select(
+                        p => p.Index!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))) + ")";
+
+                builder.AppendLine(
+                    $"{indent}            objectMapping.MapCreator("
+                    + $"new {model.CreatorDelegateName ?? $"System.Func<{signature}>"}(({parameters}) => new {fullName}({parameters})))");
+                builder.AppendLine($"{indent}                {keys};");
+            }
+
             // SetDiscriminator inserts the discriminator entry at index 0 of the member list, so it
             // must run after SetMemberMappings, which replaces that list wholesale.
             if (model.Discriminator is not null)
@@ -473,7 +525,11 @@ namespace Dahomey.Cbor.Generator
             builder.AppendLine($"{indent}        }});");
             builder.AppendLine();
 
-            string factory = model.CanInstantiate ? $", () => new {fullName}()" : string.Empty;
+            // A type with a creator is read through it; the factory would never be called, and for a type
+            // with a [SetsRequiredMembers] creator it would not compile.
+            string factory = model.CanInstantiate && model.CreatorParameters.Count == 0
+                ? $", () => new {fullName}()"
+                : string.Empty;
             builder.AppendLine($"{indent}        RegisterGeneratedConverter(");
             builder.AppendLine($"{indent}            converters, typeof({fullName}), new ObjectConverter<{fullName}>(options{factory}));");
             builder.AppendLine();

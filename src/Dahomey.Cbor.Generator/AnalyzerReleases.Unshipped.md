@@ -6,4 +6,6 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|------------------------------------------------------------------
+CBOR1015 | Dahomey.Cbor.Generator | Error | Creator constructor is not accessible to the generated context
+CBOR1016 | Dahomey.Cbor.Generator | Error | Constructor mapping cannot be reproduced
 CBOR1017 | Dahomey.Cbor.Generator | Error | ShouldSerialize method cannot be used

@@ -266,24 +266,6 @@ public partial class Context : CborSerializerContext {{ }}
 ");
         }
 
-        /// <summary>
-        /// The attribute targets a constructor, so looking for it on the type never matched: a struct,
-        /// or a class that also has a parameterless constructor, was built with <c>new T()</c> and the
-        /// setters, without a word, where reflection calls the creator or refuses it (#260).
-        /// </summary>
-        [Theory]
-        [InlineData("public struct Holder { public int Id { get; set; } [CborConstructor] public Holder(int id) { Id = id + 1000; } }")]
-        [InlineData("public struct Holder { public int Id { get; set; } [CborConstructor] public Holder(in int id) { Id = id; } }")]
-        [InlineData("public class Holder { public int Id { get; set; } public Holder() { } [CborConstructor] public Holder(int id) { Id = id; } }")]
-        public void ACborConstructorIsReported(string holder)
-        {
-            AssertReports("CBOR1007", holder + @"
-
-[CborSerializable(typeof(Holder))]
-public partial class Context : CborSerializerContext { }
-");
-        }
-
         [Theory]
         [InlineData("[CborIgnoreIfDefault]")]
         [InlineData("[DefaultValue(3)]")]
@@ -730,6 +712,7 @@ public partial class Context : CborSerializerContext { }
 public class Holder
 {
     public Holder(int value) { Value = value; }
+    public Holder(int value, int other) { Value = value; }
 
     public int Value { get; set; }
 }
