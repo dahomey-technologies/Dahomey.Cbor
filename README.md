@@ -85,6 +85,11 @@ CborOptions options = new CborOptions { Deterministic = true };
 await Cbor.SerializeAsync(customObject, stream, options);
 ```
 
+`Deserialize` and `DeserializeAsync` read one data item and ignore any bytes after it; from a stream,
+the whole stream is consumed. To read a CBOR sequence ([RFC 8742](https://www.rfc-editor.org/rfc/rfc8742)),
+several items one after another, use `DeserializeMultiple` or `DeserializeMultipleAsync`, which read
+every item and fail on a truncated one.
+
 A read that fails throws a `CborException` naming both the offending byte offset and the position in
 the model it was reached from — see [error paths](docs/error-paths.md):
 
