@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Dahomey.Cbor.Attributes;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -138,6 +139,15 @@ namespace Dahomey.Cbor.Serialization.Conventions
                 // setup discriminator for all base types
                 for (Type? currentType = type.BaseType; currentType != null && currentType != typeof(object); currentType = currentType.BaseType)
                 {
+                    // A base with a discriminator of its own is registered too. Propagate makes the
+                    // base resolve from the cache, so it would never reach TryRegisterType: writing it
+                    // failed with "Unknown discriminator", and a subtype repeating its value was not
+                    // seen to clash with it.
+                    if (DeclaresDiscriminator(currentType))
+                    {
+                        convention.TryRegisterType(currentType);
+                    }
+
                     Propagate(currentType, convention);
                 }
 
@@ -151,6 +161,12 @@ namespace Dahomey.Cbor.Serialization.Conventions
             }
 
             return convention;
+        }
+
+        internal static bool DeclaresDiscriminator(Type type)
+        {
+            return type.IsDefined(typeof(CborDiscriminatorAttribute), inherit: false)
+                || type.IsDefined(typeof(CborIntDiscriminatorAttribute), inherit: false);
         }
 
         /// <summary>
