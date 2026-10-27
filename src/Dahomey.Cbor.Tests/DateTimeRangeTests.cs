@@ -75,6 +75,9 @@ namespace Dahomey.Cbor.Tests
             new object[] { "C1F97C00" },                   // half-float +Infinity
             new object[] { "C1F9FC00" },                   // half-float -Infinity
             new object[] { "C1FA7F800000" },               // single +Infinity
+            new object[] { "C1F97E00" },                   // half-float NaN
+            new object[] { "C1FA7FC00000" },               // single NaN
+            new object[] { "C1FB7FF8000000000000" },       // double NaN
         };
 
         [Theory]
@@ -124,6 +127,24 @@ namespace Dahomey.Cbor.Tests
 
             Assert.NotNull(exception);
             Assert.Equal("$.When", exception.Path);
+        }
+
+        /// <summary>
+        /// NaN compares false against every bound, so without an explicit check AddSeconds reads it as
+        /// the epoch on .NET 10 and reports it as out of range on .NET 8. It names no instant, exactly
+        /// as an infinity does, and is refused with the same message.
+        /// </summary>
+        [Theory]
+        [InlineData("C1F97E00")]              // half-float NaN
+        [InlineData("C1FA7FC00000")]          // single NaN
+        [InlineData("C1FB7FF8000000000000")]  // double NaN
+        [InlineData("C1F97C00")]              // half-float +Infinity, which was already refused so
+        public void ANonFiniteTimeStampIsNotAFiniteNumber(string hex)
+        {
+            CborException exception = Refusal<DateTime>(Hex(hex));
+
+            Assert.NotNull(exception);
+            Assert.Contains("Invalid date format: a time stamp must be a finite number", exception.Message);
         }
 
         /// <summary>

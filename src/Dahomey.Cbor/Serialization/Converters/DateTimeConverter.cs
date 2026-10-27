@@ -46,9 +46,10 @@ namespace Dahomey.Cbor.Serialization.Converters
                 case CborDataItemType.Single:
                     double unixTimeDouble = reader.ReadDouble();
 
-                    // An infinity names no instant, so it is refused as DateTimeOffsetConverter
-                    // refuses it rather than reported as out of range.
-                    if (double.IsInfinity(unixTimeDouble))
+                    // NaN compares false against every bound, so AddSeconds would not refuse it: it
+                    // reads as the epoch on .NET 10 and as out of range on .NET 8. Neither it nor an
+                    // infinity names an instant, so both are refused as DateTimeOffsetConverter does.
+                    if (double.IsNaN(unixTimeDouble) || double.IsInfinity(unixTimeDouble))
                     {
                         throw reader.BuildException(
                             "Invalid date format: a time stamp must be a finite number");
