@@ -28,14 +28,15 @@ namespace Dahomey.Cbor.Serialization.Conventions
         private readonly ConcurrentDictionary<Type, IDiscriminatorConvention> _conventionsByType = new ConcurrentDictionary<Type, IDiscriminatorConvention>();
 
         /// <summary>
-        /// Incremented whenever a registration makes a type resolve to a convention it did not resolve
-        /// to before. Lets a holder of a resolved convention tell "still the same answer" from "worth
-        /// asking again" without asking.
+        /// Incremented whenever a registration, or <see cref="ClearConventions"/>, may change what a
+        /// type resolves to. Lets a holder of a resolved convention tell "still the same answer" from
+        /// "worth asking again" without asking.
         /// </summary>
         /// <remarks>
-        /// Only ever needed by a holder whose answer was <c>null</c>: resolution is monotone - a type
-        /// that resolves to a convention keeps it, since nothing unregisters a type - so a non-null
-        /// answer can be held forever, and a null one is the only one that can go stale.
+        /// Every holder - the object converters, the discriminator mapping and its member converter -
+        /// compares it against the version its answer was stamped with, null answers and non-null ones
+        /// alike. A non-null answer used to be kept forever on the grounds that nothing unregisters a
+        /// type, which <see cref="ClearConventions"/> contradicts.
         /// </remarks>
         private int _version;
 
@@ -81,14 +82,26 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
             _conventions.Push(convention);
 
-            // A convention that was not there before can only add resolutions, never remove one, so
-            // anything holding a null answer should ask again.
+            // A new convention changes what a type resolves to - it is consulted first - so anything
+            // holding an answer, null or not, should ask again.
             Interlocked.Increment(ref _version);
         }
 
         public void ClearConventions()
         {
             _conventions.Clear();
+
+            // The per-type cache has to go with them. It holds resolutions made by the conventions
+            // being cleared, and GetConvention answers from it without asking anything -- so leaving it
+            // would keep a cleared convention governing every type already resolved, and make a
+            // convention registered afterwards inert for exactly those types. The window that closed in
+            // was narrow and invisible: a previous RegisterType, an earlier read, or constructing a
+            // CborSerializerContext, whose generated Configure builds every declared converter before
+            // the caller can reach its Options.
+            _conventionsByType.Clear();
+
+            // Anything holding an answer of its own asks again, the same way RegisterConvention says so.
+            Interlocked.Increment(ref _version);
         }
 
         public IDiscriminatorConvention? GetConvention(Type type)

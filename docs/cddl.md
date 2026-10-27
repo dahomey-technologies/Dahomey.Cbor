@@ -65,8 +65,11 @@ CddlPerson = {
   `Dictionary<TKey,TValue>` throws on a null key anyway. That is why the example above needs
   `#nullable enable` (or `enable annotations`) to render `Name` as a bare `tstr`: in a file with no
   nullable context, the same member renders `tstr / nil`. `byte`, `short`, `int` and their unsigned
-  counterparts get their exact range rather than the prelude's unbounded `int`/`uint`; `long` and
-  `ulong` get `int` and `uint`, which is already exact for them.
+  counterparts get their exact range rather than the prelude's `int`/`uint`, and so do `long`
+  (`-9223372036854775808..9223372036854775807`) and `ulong` (`0..18446744073709551615`). The prelude's
+  `int` is wider than `long`, because a CBOR integer reaches -2^64..2^64-1; `uint` has exactly
+  `ulong`'s range. A bare `int` or `uint` still leaves a code generator free to pick a width, and zcbor
+  picks 32 bits, so both are rendered as explicit ranges.
 * **Collection, array and dictionary roots get a rule of their own.**
   `[CborSerializable(typeof(List<Person>))]` emits `ListOfPerson = [* Person]` alongside `Person`, so
   the schema describes the document actually written and not only its element type.
