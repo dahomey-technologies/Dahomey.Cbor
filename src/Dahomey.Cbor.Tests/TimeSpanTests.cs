@@ -99,6 +99,24 @@ namespace Dahomey.Cbor.Tests
                 Helper.Read<TimeSpan>("D903EAA201190E8B2105", Duration()));
         }
 
+        /// <summary>
+        /// RFC 9581 section 3: an implementation MUST ignore the negative-key pairs it does not
+        /// understand, which includes an elective timescale of an unknown value or type.
+        /// </summary>
+        [Theory]
+        [InlineData("D903EAA201052002")]                    // {1: 5, -1: 2}
+        [InlineData("D903EAA201052C02")]                    // {1: 5, -13: 2}
+        [InlineData("D903EAA201052063555443")]   // {1: 5, -1: "UTC"}
+        [InlineData("D903EAA20105208201A10102")]  // {1: 5, -1: [1, {1: 2}]}
+        [InlineData("D903EAA201052000")]                    // {1: 5, -1: 0}
+        [InlineData("D903EAA201052C01")]                    // {1: 5, -13: 1}
+        [InlineData("D903EAA201050D00")]                    // {1: 5, 13: 0}, the critical key
+        [InlineData("D903EAA201050D01")]                    // {1: 5, 13: 1}
+        public void AnElectiveTimescaleIsSkippedWhenNotUnderstood(string hexBuffer)
+        {
+            Assert.Equal(TimeSpan.FromSeconds(5), Helper.Read<TimeSpan>(hexBuffer, Duration()));
+        }
+
         /// <summary>The same -1.5s through both signs of base: the sum is what counts, and only the floored form is written.</summary>
         [Fact]
         public void NegativeFractionalDurationsFollowTheRfc()
@@ -140,8 +158,11 @@ namespace Dahomey.Cbor.Tests
         [InlineData("D903EAA2011B000000D6BF94D5E5281A23C34600")]
         // missing base
         [InlineData("D903EAA1281A1DCD6500")]
-        // unsupported timescale 2
-        [InlineData("D903EAA201012002")]
+        // the critical timescale key 13 with an unsupported value, 2 and "UTC"
+        [InlineData("D903EAA201050D02")]
+        [InlineData("D903EAA201050D63555443")]
+        // two timescale keys: -1 and -13
+        [InlineData("D903EAA3010520002C00")]
         // unknown critical key 7
         [InlineData("D903EAA201000700")]
         // float base together with a fraction

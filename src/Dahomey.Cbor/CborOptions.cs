@@ -194,8 +194,8 @@ namespace Dahomey.Cbor
         /// is an exact number of ticks; a negative fraction, a second fraction key, a base under key 4
         /// or 5, an unknown critical (unsigned) key, another timescale, and a value outside the range of
         /// <see cref="TimeSpan"/> are each a <see cref="CborException"/>. Unknown elective keys (text
-        /// strings and unrecognised negative integers) are skipped, except that an elective timescale
-        /// (-1 or -13) with a value other than 0 or 1 is refused rather than skipped.
+        /// strings and unrecognised negative integers) are skipped, as is an elective timescale (-1 or
+        /// -13) whose value is not 0 or 1; only the critical timescale key 13 with such a value is refused.
         /// </para>
         /// </remarks>
         Duration = 1,

@@ -121,9 +121,11 @@ namespace Dahomey.Cbor.Serialization.Converters
                     case TimescaleElectiveKey:
                     case TimescaleElectiveAlternateKey:
                     case TimescaleCriticalKey:
-                        // Section 3.4. A length in SI seconds is the same on UTC and TAI, so both are
-                        // accepted; any other timescale is one this cannot vouch for. Keys -1 and -13
-                        // are the *timescale* (not a floating-point fraction), at most one of the three.
+                        // Section 3.4. A length in SI seconds is the same on UTC (0) and TAI (1), so
+                        // both are accepted. Keys -1 and -13 are the *timescale* (not a floating-point
+                        // fraction), at most one of the three. A value this does not understand is
+                        // skipped under an elective key, which section 3 requires, and is an error
+                        // under the critical key 13, which it also requires.
                         if (hasTimescale)
                         {
                             throw new CborException("A duration holds more than one timescale key");
@@ -131,10 +133,21 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                         hasTimescale = true;
 
-                        if (reader.GetCurrentDataItemType() != CborDataItemType.Unsigned
-                            || reader.ReadUInt64() > 1)
+                        bool understood = false;
+
+                        if (reader.GetCurrentDataItemType() == CborDataItemType.Unsigned)
                         {
-                            throw new CborException("A duration in an unsupported timescale; only UTC (0) and TAI (1) are read");
+                            understood = reader.ReadUInt64() <= 1;
+                        }
+                        else
+                        {
+                            reader.SkipDataItem();
+                        }
+
+                        if (!understood && key == TimescaleCriticalKey)
+                        {
+                            throw new CborException(
+                                "A duration in an unsupported timescale; only UTC (0) and TAI (1) are read");
                         }
                         break;
 
