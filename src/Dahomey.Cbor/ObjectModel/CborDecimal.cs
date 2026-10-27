@@ -43,13 +43,30 @@ namespace Dahomey.Cbor.ObjectModel
 
         public static implicit operator CborDecimal(decimal value)
         {
-            int intValue = (int)value;
-            if (intValue == value && intValue >= MinPreCreatedValue && intValue <= MaxPreCreatedValue)
+            // The range is checked first: casting a decimal outside Int32 to int throws.
+            if (value >= MinPreCreatedValue && value <= MaxPreCreatedValue && IsPlainInteger(value))
             {
-                return _preCreatedValues[intValue - MinPreCreatedValue];
+                return _preCreatedValues[(int)value - MinPreCreatedValue];
             }
 
             return new CborDecimal(value);
+        }
+
+        /// <summary>
+        /// Whether a pre-created instance represents the value exactly: an integer with no scale
+        /// (1.0m keeps its trailing zero when written) and not negative zero.
+        /// </summary>
+        private static bool IsPlainInteger(decimal value)
+        {
+#if NETSTANDARD2_0
+            int flags = decimal.GetBits(value)[3];
+#else
+            Span<int> bits = stackalloc int[4];
+            decimal.GetBits(value, bits);
+            int flags = bits[3];
+#endif
+            // The flags hold the scale in bits 16 to 23 and the sign in bit 31.
+            return value != 0 ? (flags & 0x00FF0000) == 0 : flags == 0;
         }
 
         public override string ToString()

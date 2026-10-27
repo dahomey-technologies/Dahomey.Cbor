@@ -44,7 +44,9 @@ namespace Dahomey.Cbor.ObjectModel
         public static implicit operator CborDouble(double value)
         {
             int intValue = (int)value;
-            if (intValue == value && intValue >= MinPreCreatedValue && intValue <= MaxPreCreatedValue)
+            // -0.0 equals 0 but is written with its sign; the pre-created 0 is positive.
+            if (intValue == value && intValue >= MinPreCreatedValue && intValue <= MaxPreCreatedValue
+                && (intValue != 0 || BitConverter.DoubleToInt64Bits(value) == 0))
             {
                 return _preCreatedValues[intValue - MinPreCreatedValue];
             }
