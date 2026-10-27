@@ -1663,6 +1663,95 @@ public partial class Context : CborSerializerContext { }
         }
 
         /// <summary>
+        /// The reflection path hands a renamed init-only parameter its default and sets the value
+        /// through the init accessor afterwards. Passing it through the constructor is only the same
+        /// object if nothing in the record reads the parameter: an initializer or a base-constructor
+        /// argument that does (<c>_shadow = FirstValue * 2</c>) would see the value on the generated
+        /// path and zero on the reflection one.
+        /// </summary>
+        [Theory]
+        [InlineData("public record Holder(int FirstValue) { private readonly int _shadow = FirstValue * 2; public int Shadow() => _shadow; }")]
+        [InlineData("public record Holder(int FirstValue) { public int Doubled { get; } = FirstValue * 2; }")]
+        [InlineData("public record Base(int X) { public int X3 { get; } = X; } public record Holder(int FirstValue) : Base(FirstValue * 3);")]
+        [InlineData("public record Holder(int FirstValue) { public int Twice { get; init; } = FirstValue + FirstValue; }")]
+        public void ARecordParameterAnInitializerOrBaseArgumentReadsIsNotRouted(string declaration)
+        {
+            AssertReports("CBOR1016", declaration + "\n" + SnakeContext);
+        }
+
+        /// <summary>
+        /// Inside a method body or an expression-bodied member a record's positional name is the
+        /// property, not the parameter, so a "use" there does not read the parameter at all and the
+        /// object is unaffected.
+        /// </summary>
+        [Theory]
+        [InlineData("public record Holder(int FirstValue) { public int Twice() => FirstValue * 2; }")]
+        [InlineData("public record Holder(int FirstValue) { public int Twice() { var v = FirstValue; return v * 2; } }")]
+        [InlineData("public partial record Holder(int FirstValue); public partial record Holder { public int Twice() { return FirstValue + 1; } }")]
+        public void ARecordParameterOnlyMethodBodiesNameIsStillRouted(string declaration)
+        {
+            string body = declaration + "\n" + SnakeContext;
+
+            AssertClean(body);
+            Assert.Empty(CompileErrorsOf(body));
+        }
+
+        /// <summary>A parameter read in another part of a partial record is still a read.</summary>
+        [Fact]
+        public void AParameterReadInAnotherPartOfAPartialRecordIsNotRouted()
+        {
+            AssertReports("CBOR1016", @"
+public partial record Holder(int FirstValue);
+public partial record Holder { private readonly int _shadow = FirstValue * 2; }
+" + SnakeContext);
+        }
+
+        /// <summary>
+        /// A diagnostic is an error, but the build still compiles what was generated and reports its
+        /// errors too, in code the user never wrote. Whenever one of the creator diagnostics refuses
+        /// a shape, nothing uncompilable may be emitted for it.
+        /// </summary>
+        [Theory]
+        // CBOR1016: required members
+        [InlineData("CBOR1016", "public class Holder { [CborConstructor] public Holder() { Name = \"x\"; } public required string Name { get; set; } }")]
+        [InlineData("CBOR1016", "public class Holder { [CborConstructor] public Holder() { Name = \"x\"; } public Holder(int id) { Name = \"y\"; } public required string Name { get; set; } }")]
+        [InlineData("CBOR1016", "public class Holder { public Holder() { } public required string Name { get; set; } }")]
+        [InlineData("CBOR1016", "public class Holder { [CborConstructor] public Holder(string name) { Name = name; } public Holder() { } public required string Name { get; set; } }")]
+        [InlineData("CBOR1016", "public record Holder(int Id) { public required string Name { get; set; } }")]
+        [InlineData("CBOR1016", "public struct Holder { public required string Name { get; set; } }")]
+        [InlineData("CBOR1016", "public struct Holder { [CborConstructor] public Holder(int id) { Id = id; Name = null; } public int Id { get; set; } public required string Name { get; set; } }")]
+        // CBOR1016: by-reference, wrong count, no matching member, type mismatch
+        [InlineData("CBOR1016", "public class Holder { [CborConstructor] public Holder(ref int id) { } public Holder() { } public int Id { get; set; } }")]
+        [InlineData("CBOR1016", "public class Holder { [CborConstructor] public Holder(out int id) { id = 0; } public int Id { get; set; } }")]
+        [InlineData("CBOR1016", "public class Holder { [CborConstructor] public Holder(in int id) { } public Holder() { } public int Id { get; set; } }")]
+        [InlineData("CBOR1016", "public class Holder { [CborConstructor(\"a\", \"b\")] public Holder(int a) { } public Holder() { } public int Id { get; set; } }")]
+        [InlineData("CBOR1016", "public class Holder { [CborConstructor] public Holder(int id, string absent) { Id = id; } public Holder() { } public int Id { get; set; } }")]
+        [InlineData("CBOR1016", "public class Holder { [CborConstructor] public Holder(long id) { } public Holder() { } public int Id { get; set; } }")]
+        [InlineData("CBOR1016", "public class Holder { [CborProperty(\"fn\")] public int FirstName { get; } public Holder(int firstName) { FirstName = firstName; } }")]
+        [InlineData("CBOR1016", "public class Holder { [CborProperty(\"fn\")] public int FirstName { get; init; } public Holder(int firstName) { FirstName = firstName + 1; } }")]
+        // CBOR1015: unreachable creators
+        [InlineData("CBOR1015", "public class Holder { [CborConstructor] protected Holder(int id) { Id = id; } public Holder() { } public int Id { get; set; } }")]
+        [InlineData("CBOR1015", "public class Holder { [CborConstructor] private Holder(int id) { Id = id; } public int Id { get; } }")]
+        [InlineData("CBOR1015", "public class Holder { [CborConstructor] private Holder() { Id = 1; } public Holder(int x) { } public int Id { get; set; } }")]
+        [InlineData("CBOR1015", "public class Holder { [CborConstructor] protected Holder() { Id = 1; } public int Id { get; set; } }")]
+        // CBOR1010: nothing to build the type with
+        [InlineData("CBOR1010", "public class Holder { private Holder() { } public Holder(int id) { Id = id; } public int Id { get; set; } }")]
+        [InlineData("CBOR1010", "public class Holder { protected Holder() { } public int Id { get; set; } }")]
+        [InlineData("CBOR1010", "public class Holder { public Holder(Holder other) { } public Holder(int id) { Id = id; } public int Id { get; set; } }")]
+        [InlineData("CBOR1010", "public struct Holder { public Holder(string c, decimal a) { C = c; A = a; } public Holder(decimal a) { C = \"x\"; A = a; } public string C { get; } public decimal A { get; } }")]
+        public void EveryRefusalLeavesOutputThatCompiles(string id, string declaration)
+        {
+            string source = declaration + @"
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+";
+            AssertReports(id, source);
+
+            // The user's own declaration compiles, so any error here is in what was generated.
+            Assert.Empty(CompileErrorsOf(source));
+        }
+
+        /// <summary>
         /// An abstract base is never instantiated — its subtypes are — so it must not be reported.
         /// </summary>
         [Fact]

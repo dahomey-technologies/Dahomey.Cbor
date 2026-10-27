@@ -21,6 +21,7 @@ namespace Dahomey.Cbor.Generator
 
         private readonly Func<ISymbol, bool> _isAccessible;
         private readonly Func<ITypeSymbol, ITypeSymbol, bool> _isIdentical;
+        private readonly Func<SyntaxTree, SemanticModel> _semanticModelFor;
 
         /// <param name="isAccessible">
         /// Whether a symbol can be named from the generated context -- the one place generated code
@@ -35,12 +36,17 @@ namespace Dahomey.Cbor.Generator
         /// <c>dynamic</c> against <c>object</c>, nullable reference annotations. Symbol equality counts
         /// the first two, and an identity conversion does not.
         /// </param>
+        /// <param name="semanticModelFor">
+        /// The semantic model of a syntax tree, for finding where a constructor parameter is read.
+        /// </param>
         public TypeCollector(
             GenerationOptions options,
             List<DiagnosticInfo> diagnostics,
             Func<ISymbol, bool> isAccessible,
-            Func<ITypeSymbol, ITypeSymbol, bool> isIdentical)
+            Func<ITypeSymbol, ITypeSymbol, bool> isIdentical,
+            Func<SyntaxTree, SemanticModel> semanticModelFor)
         {
+            _semanticModelFor = semanticModelFor;
             _options = options;
             _diagnostics = diagnostics;
             _isAccessible = isAccessible;
@@ -289,6 +295,12 @@ namespace Dahomey.Cbor.Generator
                         type.ToDisplayString(),
                         $"member '{requiredMember}' is required, which only an object initializer or a constructor marked "
                             + "[SetsRequiredMembers] can satisfy, and a generated context calls this constructor without one"));
+                    // A parameterless creator is the very constructor the factory calls.
+                    if (creator.Parameters.Length == 0)
+                    {
+                        model.CanInstantiate = false;
+                    }
+
                     creator = null;
                     creatorUnreachable = true;
                 }
@@ -722,7 +734,7 @@ namespace Dahomey.Cbor.Generator
 
                         if (renamed.InitOnly)
                         {
-                            if (!IsVerbatimPositionalParameter(creator, renamed.Symbol))
+                            if (!IsVerbatimPositionalParameter(creator, parameter, renamed.Symbol))
                             {
                                 // Passing the value through the constructor is the same object only
                                 // if the parameter is assigned verbatim, which is what a record's
@@ -794,9 +806,11 @@ namespace Dahomey.Cbor.Generator
         }
 
         /// <summary>
-        /// Whether the compiler itself assigns this constructor parameter, unchanged, to this member:
-        /// the record's primary constructor and a property the compiler synthesised from its
-        /// parameter list, on that same record. A synthesised property is told apart from one the
+        /// Whether passing this constructor parameter's value through the constructor leaves the same
+        /// object as the reflection path (default argument, then the init accessor): the compiler
+        /// assigns it, unchanged, to this member -- the record's primary constructor and a property
+        /// the compiler synthesised from its parameter list, on that same record -- and nothing else
+        /// reads it. A synthesised property is told apart from one the
         /// record declares by its syntax: a parameter of the header, not a property declaration (the
         /// symbol does not report itself as implicitly declared).
         /// </summary>
@@ -806,16 +820,59 @@ namespace Dahomey.Cbor.Generator
         /// verbatim, and a derived record's parameter can name a property of its base, which the
         /// derived constructor passes to the base constructor and which is not synthesised again.
         /// The primary constructor is told apart from an explicit one by where it is declared: the
-        /// record's own header, not a constructor declaration.
+        /// record's own header, not a constructor declaration. And the parameter must not be read
+        /// anywhere else -- see <see cref="IsParameterRead"/>.
         /// </remarks>
-        private static bool IsVerbatimPositionalParameter(IMethodSymbol constructor, ISymbol member)
+        private bool IsVerbatimPositionalParameter(IMethodSymbol constructor, IParameterSymbol parameter, ISymbol member)
         {
             return constructor.ContainingType.IsRecord
                 && constructor.DeclaringSyntaxReferences.Any(
                     reference => reference.GetSyntax() is Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax)
                 && member.DeclaringSyntaxReferences.Any(
                     reference => reference.GetSyntax() is Microsoft.CodeAnalysis.CSharp.Syntax.ParameterSyntax)
-                && SymbolEqualityComparer.Default.Equals(member.ContainingType, constructor.ContainingType);
+                && SymbolEqualityComparer.Default.Equals(member.ContainingType, constructor.ContainingType)
+                && !IsParameterRead(constructor.ContainingType, parameter);
+        }
+
+        /// <summary>
+        /// Whether anything in the record's declarations reads this primary-constructor parameter.
+        /// </summary>
+        /// <remarks>
+        /// The reflection path hands the parameter its default, so any read of it -- a field or
+        /// property initializer, a base-constructor argument -- sees zero there and the value on a
+        /// generated path that passes it through. In a record the positional name inside an ordinary
+        /// member body is the <em>property</em>, not the parameter, so those are not reads of it and
+        /// do not count; the walk finds exactly the initializers and base arguments. Every part of a
+        /// partial record is searched.
+        /// </remarks>
+        private bool IsParameterRead(INamedTypeSymbol record, IParameterSymbol parameter)
+        {
+            foreach (SyntaxReference reference in record.DeclaringSyntaxReferences)
+            {
+                SyntaxNode declaration = reference.GetSyntax();
+                SemanticModel model = _semanticModelFor(declaration.SyntaxTree);
+
+                foreach (Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax name in declaration
+                    .DescendantNodes()
+                    .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax>())
+                {
+                    if (name.Identifier.ValueText != parameter.Name)
+                    {
+                        continue;
+                    }
+
+                    ISymbol? bound = model.GetSymbolInfo(name).Symbol;
+
+                    if (bound is IParameterSymbol read
+                        && read.Name == parameter.Name
+                        && SymbolEqualityComparer.Default.Equals(read.ContainingSymbol, parameter.ContainingSymbol))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static string DescribeTypeMismatch(IParameterSymbol parameter, WalkedMember member)

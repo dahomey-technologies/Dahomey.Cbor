@@ -272,6 +272,11 @@ namespace Dahomey.Cbor.Tests
                 return new GeneratedSnakeRecord(1, 2);
             }
 
+            if (type == typeof(GeneratedSnakeMethodUse))
+            {
+                return new GeneratedSnakeMethodUse(500);
+            }
+
             if (type == typeof(GeneratedKebabRecord))
             {
                 return new GeneratedKebabRecord(1, 2);

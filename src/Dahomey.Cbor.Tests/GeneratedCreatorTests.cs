@@ -106,6 +106,15 @@ namespace Dahomey.Cbor.Tests
 
     public record GeneratedKebabRecord(int FirstName, int Age);
 
+    /// <summary>
+    /// The positional name inside a member body is the property, not the parameter, so this reads
+    /// nothing from the constructor and is routed like any other renamed positional parameter.
+    /// </summary>
+    public record GeneratedSnakeMethodUse(int FirstValue)
+    {
+        public int Twice() => FirstValue * 2;
+    }
+
     /// <summary>The same rename by attribute, under default options.</summary>
     public record GeneratedRenamedRecord([property: CborProperty("fn")] int FirstName, int Age);
 
@@ -345,6 +354,7 @@ namespace Dahomey.Cbor.Tests
     }
 
     [CborSerializable(typeof(GeneratedSnakeRecord))]
+    [CborSerializable(typeof(GeneratedSnakeMethodUse))]
     [CborSerializable(typeof(GeneratedSnakeClass))]
     [CborSerializable(typeof(GeneratedSnakeTransform))]
     [CborSourceGenerationOptions(NamingConvention = typeof(SnakeCaseNamingConvention))]
@@ -831,6 +841,20 @@ namespace Dahomey.Cbor.Tests
                 WithoutId.HexToBytes(), context.Options));
             Assert.Throws<CborException>(() => Cbor.Deserialize<GeneratedCreatorMemberFeatures>(
                 WithoutId.HexToBytes(), new CborOptions()));
+        }
+
+        [Fact]
+        public void ARecordParameterOnlyAMethodBodyNamesIsReadBack()
+        {
+            // {"first_value": 500}
+            GeneratedSnakeMethodUse read = AssertMatchesReflection(
+                new CreatorSnakeContext(),
+                new CborOptions { DefaultNamingConvention = new SnakeCaseNamingConvention() },
+                new GeneratedSnakeMethodUse(500),
+                "A1" + "6B66697273745F76616C7565" + "1901F4");
+
+            Assert.Equal(new GeneratedSnakeMethodUse(500), read);
+            Assert.Equal(1000, read.Twice());
         }
 
         internal static GeneratedRecord SampleRecord() => new GeneratedRecord(7, "seven");
