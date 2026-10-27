@@ -269,8 +269,22 @@ namespace Dahomey.Cbor.Tests
     {
     }
 
+    /// <summary>
+    /// More parameters than <c>System.Func</c> has type arguments for (16 inputs and a result). The
+    /// reflection path builds a delegate type for the lambda; a generated one has to declare its own.
+    /// </summary>
+    public record GeneratedWide17(
+        int A01, string A02, long A03, int A04, int A05, int A06, int A07, int A08, int A09,
+        int A10, int A11, int A12, int A13, int A14, int A15, int A16, string A17);
+
+    public record GeneratedWide20(
+        int A01, string A02, long A03, int A04, int A05, int A06, int A07, int A08, int A09, int A10,
+        int A11, int A12, int A13, int A14, int A15, int A16, string A17, int A18, int A19, long A20);
+
     [CborSerializable(typeof(GeneratedRecord))]
     [CborSerializable(typeof(GeneratedCreatorHolder))]
+    [CborSerializable(typeof(GeneratedWide17))]
+    [CborSerializable(typeof(GeneratedWide20))]
     [CborSerializable(typeof(GeneratedRenamedRecord))]
     [CborSerializable(typeof(GeneratedTupleCreator))]
     [CborSerializable(typeof(GeneratedCaseLower))]
@@ -698,6 +712,30 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(value, read);
             Assert.Equal(7, read.Id);
         }
+
+        [Fact]
+        public void AConstructorOfSeventeenParametersIsCalled()
+        {
+            GeneratedWide17 value = SampleWide17();
+
+            Assert.Equal(value, AssertMatchesReflection(
+                new CreatorContext(), CborObjectFormat.StringKeyMap, value, Helper.Write(value)));
+        }
+
+        [Fact]
+        public void AConstructorOfTwentyParametersIsCalled()
+        {
+            GeneratedWide20 value = SampleWide20();
+
+            Assert.Equal(value, AssertMatchesReflection(
+                new CreatorContext(), CborObjectFormat.StringKeyMap, value, Helper.Write(value)));
+        }
+
+        internal static GeneratedWide17 SampleWide17() => new GeneratedWide17(
+            1, "two", 3L, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, "seventeen");
+
+        internal static GeneratedWide20 SampleWide20() => new GeneratedWide20(
+            1, "two", 3L, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, "seventeen", 18, 19, 20L);
 
         internal static GeneratedRecord SampleRecord() => new GeneratedRecord(7, "seven");
 

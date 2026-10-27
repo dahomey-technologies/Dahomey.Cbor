@@ -1320,6 +1320,145 @@ public partial class Context : CborSerializerContext { }
             Assert.Contains("MapCreator", GeneratorHarness.GeneratedSource(Preamble + body));
         }
 
+        private static string Wide(int count)
+        {
+            return string.Join(", ", Enumerable.Range(1, count).Select(i => $"int A{i:00}"));
+        }
+
+        /// <summary>
+        /// <c>System.Func</c> stops at sixteen inputs; the emitted creator declares a delegate type of
+        /// its own beyond that, as the reflection path's expression tree does.
+        /// </summary>
+        [Theory]
+        [InlineData(16)]
+        [InlineData(17)]
+        [InlineData(20)]
+        [InlineData(40)]
+        public void AWideConstructorIsCleanAndTheOutputCompiles(int count)
+        {
+            string body = $@"
+public record Wide({Wide(count)});
+
+[CborSerializable(typeof(Wide))]
+public partial class Context : CborSerializerContext {{ }}
+";
+            AssertClean(body);
+            Assert.Empty(CompileErrorsOf(body));
+        }
+
+        /// <summary>
+        /// The call would omit the modifier (CS1620), and the reflection path refuses a by-reference
+        /// parameter when it builds the mapping. <c>in</c> compiles and works today on the generated
+        /// path, but reflection throws for it too, so the two must not disagree.
+        /// </summary>
+        [Theory]
+        [InlineData("ref int id", "")]
+        [InlineData("out int id", "id = 0;")]
+        [InlineData("in int id", "")]
+        public void AByReferenceConstructorParameterIsReported(string parameter, string body)
+        {
+            string source = $@"
+public class Holder
+{{
+    [CborConstructor]
+    public Holder({parameter}) {{ {body} }}
+
+    public int Id {{ get; set; }}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+";
+            AssertReports("CBOR1016", source);
+            Assert.DoesNotContain(CompileErrorsOf(source), d => d.Id == "CS1620");
+        }
+
+        /// <summary>
+        /// A required member must be set by an object initializer or by a constructor marked
+        /// [SetsRequiredMembers]; a generated call is neither (CS9035).
+        /// </summary>
+        [Theory]
+        [InlineData("public record Holder(int Id) { public required string Name { get; set; } }")]
+        [InlineData("public class Holder { public Holder() { } public required string Name { get; set; } }")]
+        [InlineData("public class Holder { [CborConstructor] public Holder(string name) { Name = name; } public required string Name { get; set; } }")]
+        [InlineData("public class Holder { public Holder(string name) { Name = name; } public required string Name { get; set; } }")]
+        [InlineData("public struct Holder { public required string Name { get; set; } }")]
+        [InlineData("public class Base { public required string Name { get; set; } } public class Holder : Base { public Holder() { } }")]
+        [InlineData("public class Holder { public Holder() { } public Holder(int id) { } public required string Name { get; set; } }")]
+        public void ARequiredMemberTheConstructorCannotSatisfyIsReported(string declaration)
+        {
+            string source = declaration + @"
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+";
+            Assert.Contains(Run(source), d => d.Id == "CBOR1016" || d.Id == "CBOR1010");
+            Assert.DoesNotContain(CompileErrorsOf(source), d => d.Id == "CS9035");
+        }
+
+        [Theory]
+        [InlineData("public class Holder { [System.Diagnostics.CodeAnalysis.SetsRequiredMembers] public Holder() { } public required string Name { get; set; } }")]
+        [InlineData("public class Holder { [CborConstructor, System.Diagnostics.CodeAnalysis.SetsRequiredMembers] public Holder(string name) { Name = name; } public required string Name { get; set; } }")]
+        public void ARequiredMemberASetsRequiredMembersConstructorSatisfiesIsNotReported(string declaration)
+        {
+            string source = declaration + @"
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+";
+            AssertClean(source);
+            Assert.Empty(CompileErrorsOf(source));
+        }
+
+        /// <summary>
+        /// The reflection path leaves the parameter at its default and runs the init accessor, so a
+        /// constructor that transforms its argument sees the default there (reads 1001, not 2001).
+        /// Passing the value through the constructor instead is only the same object when the
+        /// parameter is assigned verbatim, which is true of a positional record's primary constructor
+        /// and of nothing the generator can see in a hand-written one.
+        /// </summary>
+        [Fact]
+        public void ARenamedInitOnlyMemberIsOnlyRoutedThroughARecordsPrimaryConstructor()
+        {
+            AssertReports("CBOR1016", @"
+public class Holder
+{
+    [CborProperty(""first_name"")]
+    public int FirstName { get; init; }
+
+    public int Age { get; }
+
+    public Holder(int firstName, int age) { FirstName = firstName + 1000; Age = age; }
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+
+            AssertClean(@"
+public record Holder([property: CborProperty(""first_name"")] int FirstName, int Age);
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>A record that declares its own constructor is not the positional one.</summary>
+        [Fact]
+        public void ARecordsExplicitConstructorIsNotARoutingSite()
+        {
+            AssertReports("CBOR1016", @"
+public record Holder
+{
+    [CborProperty(""first_name"")]
+    public int FirstName { get; init; }
+
+    public Holder(int firstName) { FirstName = firstName + 1000; }
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
         /// <summary>
         /// An abstract base is never instantiated — its subtypes are — so it must not be reported.
         /// </summary>

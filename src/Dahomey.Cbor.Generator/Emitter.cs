@@ -33,12 +33,42 @@ namespace Dahomey.Cbor.Generator
             string indent = OpenContextDeclaration(builder, contextSymbol);
 
             EmitTypedAccessors(builder, indent, ordered, roots);
+            EmitCreatorDelegates(builder, indent, ordered);
             EmitConfigure(builder, indent, options, ordered);
             EmitRegisterHelper(builder, indent);
 
             CloseContextDeclaration(builder, contextSymbol, indent);
 
             return builder.ToString();
+        }
+
+        /// <summary>
+        /// <c>System.Func</c> has sixteen inputs at most. A creator beyond that gets a delegate type of
+        /// its own, private to the context and named by position, which <c>CreatorMapping</c> invokes
+        /// like any other delegate.
+        /// </summary>
+        private static void EmitCreatorDelegates(
+            StringBuilder builder, string indent, IReadOnlyList<TypeModel> ordered)
+        {
+            const int MaxFuncInputs = 16;
+            int next = 0;
+
+            foreach (TypeModel model in ordered)
+            {
+                if (model.Kind != TypeKind.Object || model.CreatorParameters.Count <= MaxFuncInputs)
+                {
+                    continue;
+                }
+
+                model.CreatorDelegateName = "CreatorFactory" + next++.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+                string parameters = string.Join(
+                    ", ", model.CreatorParameters.Select((p, i) => $"{p.Type} a{i}"));
+
+                builder.AppendLine(
+                    $"{indent}    private delegate {FullName(model.Symbol)} {model.CreatorDelegateName}({parameters});");
+                builder.AppendLine();
+            }
         }
 
         /// <summary>
@@ -468,9 +498,10 @@ namespace Dahomey.Cbor.Generator
                     model.CreatorParameters.Select(
                         p => Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(p.CborName, quote: true)));
 
+                string delegateType = model.CreatorDelegateName ?? $"System.Func<{signature}>";
                 string mapCreator =
                     $"{indent}            objectMapping.MapCreator("
-                    + $"new System.Func<{signature}>(({parameters}) => new {fullName}({parameters})))";
+                    + $"new {delegateType}(({parameters}) => new {fullName}({parameters})))";
 
                 // CreatorMapping matches parameters to members itself when told nothing, but for
                 // IntKeyMap and Array it does so through MemberInfo, which a generated member has

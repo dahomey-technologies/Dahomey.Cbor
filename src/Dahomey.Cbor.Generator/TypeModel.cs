@@ -188,6 +188,14 @@ namespace Dahomey.Cbor.Generator
         public bool CreatorMatchesByName { get; set; }
 
         /// <summary>
+        /// Name of a delegate type the emitter declares for the creator, or null to use
+        /// <c>System.Func</c>. <c>Func</c> takes at most sixteen inputs; a constructor with more needs
+        /// a delegate type of its own, which is what the reflection path's expression tree builds too.
+        /// Assigned by the emitter, not the collector.
+        /// </summary>
+        public string? CreatorDelegateName { get; set; }
+
+        /// <summary>
         /// The concrete collection a <see cref="TypeKind.InterfaceCollection"/> is built into while it
         /// is read, before being handed back as the interface — <c>List&lt;T&gt;</c> for the ordered
         /// interfaces, <c>HashSet&lt;T&gt;</c> for <c>ISet&lt;T&gt;</c>.

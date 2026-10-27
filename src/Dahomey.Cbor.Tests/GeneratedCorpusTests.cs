@@ -318,6 +318,16 @@ namespace Dahomey.Cbor.Tests
                 return new GeneratedInheritedIntKeyRecord("n") { Id = 7 };
             }
 
+            if (type == typeof(GeneratedWide17))
+            {
+                return GeneratedCreatorTests.SampleWide17();
+            }
+
+            if (type == typeof(GeneratedWide20))
+            {
+                return GeneratedCreatorTests.SampleWide20();
+            }
+
             if (type == typeof(GeneratedCreatorHolder))
             {
                 return GeneratedCreatorTests.SampleHolder();

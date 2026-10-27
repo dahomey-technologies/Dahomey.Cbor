@@ -271,6 +271,45 @@ namespace Dahomey.Cbor.Generator
                 creatorUnreachable = true;
             }
 
+            // A required member has to be set by an object initializer or by a constructor marked
+            // [SetsRequiredMembers]; the generated factory and creator are plain calls (CS9035). The
+            // same members make the reflection path's construction fine, so refusing is the only way
+            // to keep the build from failing in generated code with no mention of the generator.
+            string? requiredMember = type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class or Microsoft.CodeAnalysis.TypeKind.Struct }
+                ? FirstRequiredMember(type)
+                : null;
+
+            if (requiredMember is not null)
+            {
+                if (creator is not null && !HasAttribute(creator, "SetsRequiredMembersAttribute"))
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.CreatorNotReproducible,
+                        creator.Locations.FirstOrDefault(),
+                        type.ToDisplayString(),
+                        $"member '{requiredMember}' is required, which only an object initializer or a constructor marked "
+                            + "[SetsRequiredMembers] can satisfy, and a generated context calls this constructor without one"));
+                    creator = null;
+                    creatorUnreachable = true;
+                }
+
+                IMethodSymbol? parameterless = (type as INamedTypeSymbol)?.InstanceConstructors
+                    .FirstOrDefault(c => !c.IsStatic && c.Parameters.Length == 0);
+
+                if (model.CanInstantiate
+                    && (parameterless is null || !HasAttribute(parameterless, "SetsRequiredMembersAttribute")))
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.CreatorNotReproducible,
+                        (parameterless?.Locations.FirstOrDefault() ?? type.Locations.FirstOrDefault()),
+                        type.ToDisplayString(),
+                        $"member '{requiredMember}' is required, which only an object initializer or a constructor marked "
+                            + "[SetsRequiredMembers] can satisfy, and a generated context calls `new T()` without one"));
+                    model.CanInstantiate = false;
+                    creatorUnreachable = true;
+                }
+            }
+
             if (!model.CanInstantiate
                 && !creatorUnreachable
                 && type is { IsAbstract: false, TypeKind: Microsoft.CodeAnalysis.TypeKind.Class }
@@ -601,6 +640,15 @@ namespace Dahomey.Cbor.Generator
             for (int i = 0; i < creator.Parameters.Length; i++)
             {
                 IParameterSymbol parameter = creator.Parameters[i];
+
+                if (parameter.RefKind != RefKind.None)
+                {
+                    // The call would omit the modifier (CS1620), and the reflection path refuses the
+                    // mapping for any by-reference parameter -- `in` included, which compiles here.
+                    return Refuse($"parameter '{parameter.Name}' is passed by reference ({parameter.RefKind.ToString().ToLowerInvariant()}); "
+                        + RefusedAtBuild);
+                }
+
                 string? listed = hasListedKeys && byName ? names![i] : null;
                 int? listedIndex = hasListedKeys && !byName ? indexes![i] : null;
 
@@ -643,6 +691,19 @@ namespace Dahomey.Cbor.Generator
 
                         if (renamed.InitOnly)
                         {
+                            if (!IsPositionalRecordConstructor(creator))
+                            {
+                                // Passing the value through the constructor is the same object only
+                                // if the parameter is assigned verbatim, which is what a record's
+                                // primary constructor does and a hand-written one may not: the
+                                // reflection path hands it the default and runs the init accessor
+                                // afterwards, so a constructor that transforms its argument differs.
+                                return Refuse($"parameter '{parameter.Name}' shares its name with '{renamed.Name}', an init-only member serialized as "
+                                    + $"'{renamed.CborName}'. The reflection path hands the parameter its default and runs the init accessor afterwards, "
+                                    + "which a generated context can only reproduce for a record's primary constructor. Name the parameter after the "
+                                    + "serialized key, give the member a setter, or list the members in [CborConstructor]");
+                            }
+
                             if (!_isIdentical(renamed.Type, parameter.Type))
                             {
                                 return Refuse(DescribeTypeMismatch(parameter, renamed));
@@ -701,11 +762,41 @@ namespace Dahomey.Cbor.Generator
             return new CreatorResolution(supplied, failed: false);
         }
 
+        /// <summary>
+        /// A record's primary constructor, whose parameters the compiler assigns verbatim to the
+        /// properties of the same name. Told apart from an explicit one by where it is declared: the
+        /// record's own header, not a constructor declaration.
+        /// </summary>
+        private static bool IsPositionalRecordConstructor(IMethodSymbol constructor)
+        {
+            return constructor.ContainingType.IsRecord
+                && constructor.DeclaringSyntaxReferences.Any(
+                    reference => reference.GetSyntax() is Microsoft.CodeAnalysis.CSharp.Syntax.RecordDeclarationSyntax);
+        }
+
         private static string DescribeTypeMismatch(IParameterSymbol parameter, WalkedMember member)
         {
             return $"parameter '{parameter.Name}' is a {parameter.Type.ToDisplayString()} but is filled from member "
                 + $"'{member.Name}', a {member.Type.ToDisplayString()}; "
                 + "the reflection path refuses this mapping with a CborException when it is built";
+        }
+
+        private static string? FirstRequiredMember(ITypeSymbol type)
+        {
+            for (ITypeSymbol? current = type;
+                 current is not null && current.SpecialType != SpecialType.System_Object;
+                 current = current.BaseType)
+            {
+                foreach (ISymbol member in current.GetMembers())
+                {
+                    if (member is IPropertySymbol { IsRequired: true } or IFieldSymbol { IsRequired: true })
+                    {
+                        return member.Name;
+                    }
+                }
+            }
+
+            return null;
         }
 
         private bool HasSeveralUnmarkedConstructors(ITypeSymbol type)
