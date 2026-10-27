@@ -56,18 +56,40 @@ public partial class Context : CborSerializerContext { }
         }
 
         /// <summary>
-        /// The four types classified as primitives that have no case in PrimitiveConverterProvider.
-        /// Each would fall through to ObjectConverterProvider and reach MakeGenericType at run time —
-        /// the exact failure a generated context exists to prevent, and invisible to the AOT analyzer.
+        /// The types with no case in PrimitiveConverterProvider. Each would fall through to
+        /// ObjectConverterProvider and reach MakeGenericType at run time — the exact failure a generated
+        /// context exists to prevent, and invisible to the AOT analyzer.
         /// </summary>
         [Theory]
         [InlineData("object")]
         [InlineData("System.Guid")]
         [InlineData("System.DateTimeOffset")]
-        [InlineData("System.Half")]
         public void TypesWithNoConcreteConverterAreReported(string memberType)
         {
             AssertReports("CBOR1002", $@"
+public class Holder {{ public {memberType} Value {{ get; set; }} }}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+");
+        }
+
+        /// <summary>
+        /// <c>HalfConverter</c> is a concrete converter, so a <c>Half</c> belongs on the other side of
+        /// that line — scalar and as an RFC 8746 typed-array element, which is the tenth element type.
+        /// </summary>
+        /// <remarks>
+        /// The absence of a diagnostic is only half of what this has to be right about: a type in
+        /// neither <c>TypeCollector.IsPrimitive</c> nor <c>HasNoConcreteConverter</c> is also clean here,
+        /// while being collected as an object and written as its internal members.
+        /// <c>PrimitiveConverterProviderParityTests</c> in the library suite is what pins the other half.
+        /// </remarks>
+        [Theory]
+        [InlineData("System.Half")]
+        [InlineData("System.Half[]")]
+        public void AHalfIsNotReported(string memberType)
+        {
+            AssertClean($@"
 public class Holder {{ public {memberType} Value {{ get; set; }} }}
 
 [CborSerializable(typeof(Holder))]
