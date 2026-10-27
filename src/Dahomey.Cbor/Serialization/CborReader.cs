@@ -1183,6 +1183,8 @@ namespace Dahomey.Cbor.Serialization
 
             int size = ReadSize();
 
+            ExpectItems(size);
+
             arrayReader.ReadBeginArray(size, ref context);
 
             while (size > 0 || size < 0 && !IsBreak())
@@ -1858,6 +1860,43 @@ namespace Dahomey.Cbor.Serialization
             {
                 ThrowCbor($"Unexpected end of buffer");
             }
+        }
+
+        /// <summary>
+        /// Refuses a definite array count that the bytes remaining cannot satisfy.
+        /// </summary>
+        /// <remarks>
+        /// The count is the sender's claim, and <see cref="ICborArrayReader{TC}.ReadBeginArray"/> is
+        /// handed it so that the reader can size what it builds: nine bytes can announce 2^63 items, and a
+        /// callback that allocated from that would be spending the sender's number rather than the
+        /// document's. Every data item is at least one byte, so a count beyond the bytes that remain
+        /// cannot be met by any document, and a callback is only ever given one that could be. The
+        /// indefinite-length marker is negative and always passes.
+        /// <para>
+        /// The check is against the whole of the buffer, not the enclosing array: the items of an array
+        /// in the middle of a document are followed by their siblings, and a count is no less honest for
+        /// being satisfied by them. A reader on a growing buffer - the speculative read behind
+        /// <c>ReadNextItemAsync</c> - sees only what has arrived, and a count the arrived bytes cannot
+        /// hold is the same "not enough yet" that running out of bytes mid-array has always been.
+        /// </para>
+        /// <para>
+        /// A map is not checked: nothing here sizes a map from its count, so there is no allocation to
+        /// guard, and a pair is two items or more, so the bound would be a different one.
+        /// </para>
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void ExpectItems(int count)
+        {
+            int remaining = _length - _currentPos;
+            if (count > remaining)
+            {
+                ThrowItemsBeyondBuffer(count, remaining);
+            }
+        }
+
+        private void ThrowItemsBeyondBuffer(int count, int remaining)
+        {
+            ThrowCbor($"Unexpected end of buffer: the array declares {count} items but {remaining} bytes remain");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
