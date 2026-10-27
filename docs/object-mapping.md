@@ -40,3 +40,19 @@ A mapping that puts two members under the same CBOR name is refused — see
 [duplicate map keys](duplicate-keys.md#ambiguous-mappings-are-refused-before-the-decode).
 ``ClearMemberMappings()`` followed by explicit ``MapMember`` calls decides the whole mapping by hand
 where the collision comes from a base type you do not own.
+
+## Omitting a default value
+
+``[CborIgnoreIfDefault]`` omits a member that holds its default, ``default(T)`` or the value given by
+``[DefaultValue]``, from `StringKeyMap` and `IntKeyMap` documents. An omitted member reads back as that
+default, so a value is omitted only when it is indistinguishable from it, not merely equal to it:
+`-0.0` against `0.0`, `0.00m` against `0m`, a `DateTime` of another `Kind` and a `DateTimeOffset` at
+another offset are equal by `Equals` and are written all the same. `double`, `float`, `Half`, `decimal`,
+`DateTime`, `DateTimeOffset` and their nullable forms are compared that way; any other type on its
+own `Equals`.
+
+## Null and structs
+
+A struct has no null, so `null` read into a struct member or a struct root is a `CborException`, as it
+is for `int` or `Guid`, rather than the struct's default. That covers a user struct, `KeyValuePair<,>`
+and a `TimeSpan` under `TimeSpanFormat.Members`. Declare the member as `T?` to accept `null`.
