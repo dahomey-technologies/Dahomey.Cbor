@@ -66,6 +66,11 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                 return new BigIntegerConverter();
             }
 
+            if (type == typeof(Guid))
+            {
+                return new GuidConverter(options);
+            }
+
 #if NET6_0_OR_GREATER
             if (type == typeof(DateOnly))
             {

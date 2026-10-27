@@ -845,8 +845,7 @@ namespace Dahomey.Cbor.Generator
         /// </summary>
         private static bool HasNoConcreteConverter(ITypeSymbol type)
         {
-            return type.SpecialType == SpecialType.System_Object
-                || type.ToDisplayString() is "System.Guid";
+            return type.SpecialType == SpecialType.System_Object;
         }
 
         private static bool IsPrimitive(ITypeSymbol type)
@@ -887,6 +886,7 @@ namespace Dahomey.Cbor.Generator
                 case "System.Numerics.BigInteger":
                 case "Dahomey.Cbor.CborDecimalFraction":
                 case "Dahomey.Cbor.CborBigFloat":
+                case "System.Guid":
                 // Reachable only from a target where these exist at all; on netstandard2.0 the
                 // library compiles no converter for them and the consumer has no type to name.
                 case "System.DateOnly":
@@ -896,10 +896,10 @@ namespace Dahomey.Cbor.Generator
                     return true;
             }
 
-            // System.Guid and System.Object are deliberately absent.
-            // PrimitiveConverterProvider has no case for any of them, so at run time they fall through
-            // to ObjectConverterProvider and reach MakeGenericType -- the exact failure a generated
-            // context exists to prevent, and one the AOT analyzer cannot see either. Classifying them
+            // System.Object is deliberately absent.
+            // PrimitiveConverterProvider has no case for it, so at run time it falls through to
+            // ObjectConverterProvider and reaches MakeGenericType -- the exact failure a generated
+            // context exists to prevent, and one the AOT analyzer cannot see either. Classifying it
             // as unsupported turns that into a build error. See UnsupportedReason.
             return false;
         }

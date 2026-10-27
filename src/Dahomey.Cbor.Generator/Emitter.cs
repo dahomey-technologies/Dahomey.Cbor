@@ -368,6 +368,12 @@ namespace Dahomey.Cbor.Generator
                 wrote = true;
             }
 
+            if (options.UntaggedGuidFormat is not null)
+            {
+                builder.AppendLine($"{indent}        options.UntaggedGuidFormat = UntaggedGuidFormat.{options.UntaggedGuidFormat};");
+                wrote = true;
+            }
+
             if (wrote)
             {
                 builder.AppendLine();

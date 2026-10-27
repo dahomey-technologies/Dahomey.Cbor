@@ -216,7 +216,6 @@ public partial class Context : CborSerializerContext { }
         /// </summary>
         [Theory]
         [InlineData("object")]
-        [InlineData("System.Guid")]
         public void TypesWithNoConcreteConverterAreReported(string memberType)
         {
             AssertReports("CBOR1002", $@"

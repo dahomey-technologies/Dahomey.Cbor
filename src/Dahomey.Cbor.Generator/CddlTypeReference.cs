@@ -371,11 +371,15 @@ namespace Dahomey.Cbor.Generator
                 // than merely permitted.
                 case "System.Half":
                     return "float16";
+
+                // RFC 9562's binary UUID. Always tagged and always sixteen bytes, so no option
+                // reaches it and the size is part of the schema.
+                case "System.Guid":
+                    return "#6.37(bstr .size 16)";
             }
 
-            // Guid has no scalar converter. System.Decimal reaches here only in its default encoding,
-            // which is likewise indescribable. Each falls through to CBOR1011 rather than asserting a
-            // row no converter backs.
+            // System.Decimal reaches here only in its default encoding, which is indescribable: it
+            // falls through to CBOR1011 rather than asserting a row no converter backs.
             return null;
         }
 

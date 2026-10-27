@@ -607,6 +607,17 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // Guid.Empty alongside a populated one: the all-zero value is the only shape where the
+            // big-endian swap is invisible, so a sample made of it alone would pass either way.
+            if (type == typeof(GeneratedGuidHolder))
+            {
+                return new GeneratedGuidHolder
+                {
+                    Id = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"),
+                    Optional = Guid.Empty,
+                };
+            }
+
             // Two different offsets, so the comparison catches a generated context that resolved a
             // converter dropping them: the instants would still be right and the bytes would not.
             if (type == typeof(GeneratedOffsetHolder))
@@ -776,6 +787,7 @@ namespace Dahomey.Cbor.Tests
                 EnumFormat = generated.EnumFormat,
                 DateTimeFormat = generated.DateTimeFormat,
                 DecimalFormat = generated.DecimalFormat,
+                UntaggedGuidFormat = generated.UntaggedGuidFormat,
             };
 
             string reflectionBytes = WriteAs(type, Sample(type), reflection);
