@@ -400,7 +400,6 @@ namespace Dahomey.Cbor.Generator
         private static readonly (string Attribute, string Description)[] UnsupportedTypeFeatures =
         {
             ("CborConverterAttribute", "[CborConverter]"),
-            ("CborConstructorAttribute", "[CborConstructor]"),
             ("CborNamingConventionAttribute", "[CborNamingConvention]"),
             ("CborLengthModeAttribute", "[CborLengthMode]"),
         };
@@ -419,9 +418,9 @@ namespace Dahomey.Cbor.Generator
             {
                 // [CborNamingConvention] and [CborLengthMode] are inherited, as reflection reads them
                 // (GetCustomAttribute): a base's governs its subtypes there, so a subtype of one is as
-                // unsupported as the base. [CborConstructor] targets a constructor, not a type. [CborConverter]
-                // is inheritable too, but a converter is written for one type, so what reflection does
-                // with a subtype of one is not something to reproduce; it is left as it was.
+                // unsupported as the base. [CborConverter] is inheritable too, but a converter is written
+                // for one type, so what reflection does with a subtype of one is not something to
+                // reproduce; it is left as it was.
                 bool inheritable = attribute is "CborNamingConventionAttribute" or "CborLengthModeAttribute";
                 ITypeSymbol? declaredOn = type;
 
@@ -435,6 +434,20 @@ namespace Dahomey.Cbor.Generator
                         SymbolEqualityComparer.Default.Equals(declaredOn, type)
                             ? description
                             : $"{description} (inherited from {declaredOn!.ToDisplayString()})");
+                }
+            }
+
+            // [CborConstructor] targets a constructor, not the type. Reflection maps it as the creator of
+            // a concrete type, from that type's own constructors; a generated factory is `new T()` plus
+            // the setters, so it would build the value without the constructor ever running.
+            if (type is INamedTypeSymbol { IsAbstract: false } namedType)
+            {
+                foreach (IMethodSymbol constructor in namedType.InstanceConstructors)
+                {
+                    if (HasAttribute(constructor, "CborConstructorAttribute"))
+                    {
+                        Report(constructor.Locations.FirstOrDefault(), type.ToDisplayString(), "[CborConstructor]");
+                    }
                 }
             }
 
