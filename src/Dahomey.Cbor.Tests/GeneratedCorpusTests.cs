@@ -196,6 +196,20 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // A date carrying no time and a time carrying no date. Both are non-generic structs whose
+            // public properties would serialize as a perfectly valid map, so only the comparison against
+            // the reflection path says whether the context resolved their concrete converters. The
+            // nullable member is here because Nullable<T> reaches the element type by a different route.
+            if (type == typeof(GeneratedDateHolder))
+            {
+                return new GeneratedDateHolder
+                {
+                    Date = new DateOnly(2026, 8, 17),
+                    Time = new TimeOnly(1, 2, 3, 841),
+                    OptionalDate = new DateOnly(1969, 7, 4),
+                };
+            }
+
             // Both encodings of tag 4 in one type. The corpus runs it under two contexts differing only
             // in DecimalFormat, so the decimal member moves between the FC form and tag 4 while the two
             // struct members stay put -- which is the cohabitation, checked against the reflection path
@@ -218,9 +232,139 @@ namespace Dahomey.Cbor.Tests
                 return GeneratedTupleTests.Sample();
             }
 
+            if (type == typeof(ShouldSerializeOnDerivedOnly))
+            {
+                return new ShouldSerializeOnDerivedOnly { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeInherited))
+            {
+                return new ShouldSerializeInherited { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeHidden))
+            {
+                return new ShouldSerializeHidden { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeOverridden))
+            {
+                return new ShouldSerializeOverridden { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeOverridingProperty))
+            {
+                return new ShouldSerializeOverridingProperty { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeNotBool))
+            {
+                return new ShouldSerializeNotBool { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeWithParameter))
+            {
+                return new ShouldSerializeWithParameter { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeNonPublic))
+            {
+                return new ShouldSerializeNonPublic { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeInheritedStatic))
+            {
+                return new ShouldSerializeInheritedStatic { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(RequiredNamedPolicyHolder))
+            {
+                return new RequiredNamedPolicyHolder { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(RequiredUndefinedConstructorPolicyHolder))
+            {
+                return new RequiredUndefinedConstructorPolicyHolder { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(RequiredNegativeNamedPolicyHolder))
+            {
+                return new RequiredNegativeNamedPolicyHolder { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(ShouldSerializeStruct))
+            {
+                return new ShouldSerializeStruct { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(GeneratedRequiredHolder))
+            {
+                return new GeneratedRequiredHolder { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(GeneratedShouldSerializeHolder))
+            {
+                return new GeneratedShouldSerializeHolder { Id = 1, Name = "n" };
+            }
+
+            if (type == typeof(GeneratedKeptMapFormat))
+            {
+                return new GeneratedKeptMapFormat { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedArrayDerived))
+            {
+                return new InheritedArrayDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedGenericDerived))
+            {
+                return new InheritedGenericDerived { Value = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedPolymorphicDerived))
+            {
+                return new InheritedPolymorphicDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedMapDerived))
+            {
+                return new InheritedMapDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedOverrideDerived))
+            {
+                return new InheritedOverrideDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedLeaf))
+            {
+                return new InheritedLeaf { Id = 7, Name = "n", Extra = 9 };
+            }
+
+            if (type == typeof(InheritedDiscriminatorDerived))
+            {
+                return new InheritedDiscriminatorDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(InheritedIntDiscriminatorDerived))
+            {
+                return new InheritedIntDiscriminatorDerived { Id = 7, Name = "n" };
+            }
+
+            if (type == typeof(GeneratedTakesArrayFormat))
+            {
+                return new GeneratedTakesArrayFormat { Id = 7, Name = "n" };
+            }
+
             if (type == typeof(Issues.Issue0240.HalfHolder))
             {
                 return new Issues.Issue0240.HalfHolder { Value = (System.Half)1.5f };
+            }
+
+            if (type == typeof(GeneratedInterfaceHolder))
+            {
+                return GeneratedCollectionInterfaceTests.Sample();
             }
 
             if (type == typeof(GeneratedOverrideHolder))
@@ -451,6 +595,18 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // Carried by three contexts differing only in DateTimeFormat, so the date stays a day count
+            // across both numeric settings while the time beside it is the same string under all
+            // three. The fractional second keeps the time's fraction in view.
+            if (type == typeof(Cddl.CddlDateHolder))
+            {
+                return new Cddl.CddlDateHolder
+                {
+                    Date = new DateOnly(2026, 8, 17),
+                    Time = new TimeOnly(1, 2, 3, 841),
+                };
+            }
+
             // Guid.Empty alongside a populated one: the all-zero value is the only shape where the
             // big-endian swap is invisible, so a sample made of it alone would pass either way.
             if (type == typeof(GeneratedGuidHolder))
@@ -459,6 +615,17 @@ namespace Dahomey.Cbor.Tests
                 {
                     Id = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"),
                     Optional = Guid.Empty,
+                };
+            }
+
+            // Two different offsets, so the comparison catches a generated context that resolved a
+            // converter dropping them: the instants would still be right and the bytes would not.
+            if (type == typeof(GeneratedOffsetHolder))
+            {
+                return new GeneratedOffsetHolder
+                {
+                    Stamp = new DateTimeOffset(2026, 8, 17, 1, 2, 3, TimeSpan.FromHours(2)),
+                    Optional = new DateTimeOffset(1996, 12, 19, 16, 39, 57, TimeSpan.FromHours(-8)),
                 };
             }
 

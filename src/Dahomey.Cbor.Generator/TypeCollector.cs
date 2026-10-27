@@ -34,13 +34,14 @@ namespace Dahomey.Cbor.Generator
                 return;
             }
 
-            TypeKind kind = Classify(type, out ITypeSymbol? element, out ITypeSymbol? value, out ITypeSymbol? underlying);
+            TypeKind kind = Classify(type, out ITypeSymbol? element, out ITypeSymbol? value, out ITypeSymbol? underlying, out string? backing);
 
             TypeModel model = new TypeModel(type, kind)
             {
                 ElementType = element,
                 ValueType = value,
                 UnderlyingType = underlying,
+                BackingType = backing,
                 IsTypedArray = kind == TypeKind.Array && IsTypedArrayElementType(element!),
             };
 
@@ -75,11 +76,13 @@ namespace Dahomey.Cbor.Generator
 
                 case TypeKind.Array:
                 case TypeKind.Collection:
+                case TypeKind.InterfaceCollection:
                     Collect(element!);
                     model.Dependencies.Add(element!);
                     break;
 
                 case TypeKind.Dictionary:
+                case TypeKind.InterfaceDictionary:
                     Collect(element!);
                     Collect(value!);
                     model.Dependencies.Add(element!);
@@ -130,6 +133,68 @@ namespace Dahomey.Cbor.Generator
             return type.MetadataName.StartsWith("ValueTuple`", System.StringComparison.Ordinal)
                 && type.ContainingNamespace is { Name: "System" }
                 && type.ContainingNamespace.ContainingNamespace is { IsGlobalNamespace: true };
+        }
+
+        /// <summary>
+        /// Which converter a collection interface resolves to, and the concrete type it is built into
+        /// while being read, mirroring <c>CollectionConverterProvider</c>'s choices exactly.
+        /// </summary>
+        /// <remarks>
+        /// The backing type is what makes these constructible at all: an interface cannot be
+        /// instantiated, so the read fills a concrete collection and hands it back as the interface.
+        /// <c>List&lt;T&gt;</c> for the ordered interfaces and <c>HashSet&lt;T&gt;</c> for
+        /// <c>ISet&lt;T&gt;</c> — the same pair the reflection path picks, because a document written
+        /// through one path has to read back through the other.
+        /// <para>
+        /// <c>IReadOnlyList&lt;T&gt;</c> and <c>IReadOnlyCollection&lt;T&gt;</c> are included even
+        /// though a caller cannot add to what they hand back: the converter builds a <c>List&lt;T&gt;</c>
+        /// and returns it as the read-only interface, which is what the reflection path does.
+        /// </para>
+        /// </remarks>
+        private static TypeKind ClassifyCollectionInterface(
+            INamedTypeSymbol named,
+            out ITypeSymbol? element,
+            out ITypeSymbol? value,
+            out string? backing)
+        {
+            element = null;
+            value = null;
+            backing = null;
+
+            string constructed = named.ConstructedFrom.ToDisplayString();
+
+            if (constructed == "System.Collections.Generic.IDictionary<TKey, TValue>"
+                && named.TypeArguments.Length == 2)
+            {
+                element = named.TypeArguments[0];
+                value = named.TypeArguments[1];
+                return TypeKind.InterfaceDictionary;
+            }
+
+            if (named.TypeArguments.Length != 1)
+            {
+                return TypeKind.Unsupported;
+            }
+
+            switch (constructed)
+            {
+                case "System.Collections.Generic.ISet<T>":
+                    element = named.TypeArguments[0];
+                    backing = "global::System.Collections.Generic.HashSet";
+                    return TypeKind.InterfaceCollection;
+
+                case "System.Collections.Generic.IList<T>":
+                case "System.Collections.Generic.ICollection<T>":
+                case "System.Collections.Generic.IEnumerable<T>":
+                case "System.Collections.Generic.IReadOnlyList<T>":
+                case "System.Collections.Generic.IReadOnlyCollection<T>":
+                    element = named.TypeArguments[0];
+                    backing = "global::System.Collections.Generic.List";
+                    return TypeKind.InterfaceCollection;
+
+                default:
+                    return TypeKind.Unsupported;
+            }
         }
 
         /// <summary>
@@ -232,7 +297,10 @@ namespace Dahomey.Cbor.Generator
                         member.Locations.FirstOrDefault(),
                         type.Name,
                         member.Name,
-                        model.ObjectFormat));
+                        model.ObjectFormat,
+                        model.ObjectFormatInheritedFrom is null
+                            ? string.Empty
+                            : $" (inherited from '{model.ObjectFormatInheritedFrom}')"));
                     continue;
                 }
 
@@ -289,7 +357,28 @@ namespace Dahomey.Cbor.Generator
                     }
                 }
 
-                model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite));
+                // Found once, so the name and the type it is cast to cannot come from different methods.
+                IMethodSymbol? shouldSerialize = FindShouldSerializeMethod(
+                    type, member, out IMethodSymbol? refused, out string? refusal);
+
+                if (refused is not null && refusal is not null)
+                {
+                    _diagnostics.Add(DiagnosticInfo.Create(
+                        Diagnostics.ShouldSerializeRefused,
+                        refused.Locations.FirstOrDefault() ?? member.Locations.FirstOrDefault(),
+                        type.Name,
+                        member.Name,
+                        refused.Name,
+                        refusal));
+                }
+
+                model.Members.Add(new MemberModel(member.Name, cborName, cborIndex, memberType, canRead, canWrite)
+                {
+                    RequirementPolicy = ReadRequirementPolicy(member),
+                    ShouldSerializeMethod = shouldSerialize?.Name,
+                    ShouldSerializeOwner = shouldSerialize?.ContainingType
+                        .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                });
 
                 Collect(memberType);
 
@@ -319,7 +408,6 @@ namespace Dahomey.Cbor.Generator
         private static readonly (string Attribute, string Description)[] UnsupportedMemberFeatures =
         {
             ("CborConverterAttribute", "[CborConverter]"),
-            ("CborRequiredAttribute", "[CborRequired]"),
             ("CborIgnoreIfDefaultAttribute", "[CborIgnoreIfDefault]"),
             ("CborLengthModeAttribute", "[CborLengthMode]"),
             ("DefaultValueAttribute", "[DefaultValue]"),
@@ -329,9 +417,24 @@ namespace Dahomey.Cbor.Generator
         {
             foreach ((string attribute, string description) in UnsupportedTypeFeatures)
             {
-                if (HasAttribute(type, attribute))
+                // [CborNamingConvention] and [CborLengthMode] are inherited, as reflection reads them
+                // (GetCustomAttribute): a base's governs its subtypes there, so a subtype of one is as
+                // unsupported as the base. [CborConstructor] targets a constructor, not a type. [CborConverter]
+                // is inheritable too, but a converter is written for one type, so what reflection does
+                // with a subtype of one is not something to reproduce; it is left as it was.
+                bool inheritable = attribute is "CborNamingConventionAttribute" or "CborLengthModeAttribute";
+                ITypeSymbol? declaredOn = type;
+
+                if (inheritable
+                    ? NearestAttribute(type, attribute, out declaredOn) is not null
+                    : HasAttribute(type, attribute))
                 {
-                    Report(type.Locations.FirstOrDefault(), type.ToDisplayString(), description);
+                    Report(
+                        type.Locations.FirstOrDefault(),
+                        type.ToDisplayString(),
+                        SymbolEqualityComparer.Default.Equals(declaredOn, type)
+                            ? description
+                            : $"{description} (inherited from {declaredOn!.ToDisplayString()})");
                 }
             }
 
@@ -349,14 +452,6 @@ namespace Dahomey.Cbor.Generator
                     if (HasAttribute(method, "OnDeserializedAttribute"))
                     {
                         Report(method.Locations.FirstOrDefault(), type.ToDisplayString(), "[OnDeserialized]");
-                    }
-
-                    if (method.Name.StartsWith("ShouldSerialize", System.StringComparison.Ordinal)
-                        && method.Name.Length > "ShouldSerialize".Length
-                        && method.Parameters.Length == 0
-                        && method.ReturnType.SpecialType == SpecialType.System_Boolean)
-                    {
-                        Report(method.Locations.FirstOrDefault(), type.ToDisplayString(), $"a {method.Name}() method");
                     }
 
                     continue;
@@ -512,34 +607,32 @@ namespace Dahomey.Cbor.Generator
             model.ObjectFormat = _options.ObjectFormat;
             model.DiscriminatorPolicy = _options.DiscriminatorPolicy;
 
-            AttributeData? stringDiscriminator = null;
-            AttributeData? intDiscriminator = null;
+            AttributeData? objectFormat = NearestAttribute(
+                type, "CborObjectFormatAttribute", out ITypeSymbol? formatDeclaredOn,
+                attribute => attribute.ConstructorArguments.Length == 1);
 
-            foreach (AttributeData attribute in type.GetAttributes())
+            if (objectFormat is not null)
             {
-                switch (attribute.AttributeClass?.Name)
+                model.ObjectFormatDeclared = true;
+                model.ObjectFormatInheritedFrom =
+                    SymbolEqualityComparer.Default.Equals(formatDeclaredOn, type)
+                        ? null
+                        : formatDeclaredOn!.ToDisplayString();
+                model.ObjectFormat = objectFormat.ConstructorArguments[0].Value switch
                 {
-                    case "CborObjectFormatAttribute":
-                        if (attribute.ConstructorArguments.Length == 1)
-                        {
-                            model.ObjectFormat = attribute.ConstructorArguments[0].Value switch
-                            {
-                                1 => "IntKeyMap",
-                                2 => "Array",
-                                _ => "StringKeyMap",
-                            };
-                        }
-                        break;
-
-                    case "CborDiscriminatorAttribute":
-                        stringDiscriminator = attribute;
-                        break;
-
-                    case "CborIntDiscriminatorAttribute":
-                        intDiscriminator = attribute;
-                        break;
-                }
+                    1 => "IntKeyMap",
+                    2 => "Array",
+                    _ => "StringKeyMap",
+                };
             }
+
+            // Read the way reflection reads them: GetCustomAttribute<T>() inherits, so an undecorated
+            // subtype takes its base's discriminator, and a base with one kind and a subtype with the
+            // other is the both-attributes conflict reflection throws for.
+            AttributeData? stringDiscriminator =
+                NearestAttribute(type, "CborDiscriminatorAttribute", out _);
+            AttributeData? intDiscriminator =
+                NearestAttribute(type, "CborIntDiscriminatorAttribute", out _);
 
             if (stringDiscriminator is not null && intDiscriminator is not null)
             {
@@ -628,11 +721,13 @@ namespace Dahomey.Cbor.Generator
             ITypeSymbol type,
             out ITypeSymbol? element,
             out ITypeSymbol? value,
-            out ITypeSymbol? underlying)
+            out ITypeSymbol? underlying,
+            out string? backing)
         {
             element = null;
             value = null;
             underlying = null;
+            backing = null;
 
             if (type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Enum)
             {
@@ -686,6 +781,19 @@ namespace Dahomey.Cbor.Generator
                     return TypeKind.Tuple;
                 }
 
+                // The collection interfaces, before the tests below: IList<T> implements ICollection<T>,
+                // so it would otherwise be taken for a concrete collection and then refused for having
+                // no parameterless constructor -- which is exactly the CBOR1002 this replaces.
+                if (named.TypeKind == Microsoft.CodeAnalysis.TypeKind.Interface)
+                {
+                    TypeKind interfaceKind = ClassifyCollectionInterface(named, out element, out value, out backing);
+
+                    if (interfaceKind != TypeKind.Unsupported)
+                    {
+                        return interfaceKind;
+                    }
+                }
+
                 // Dictionary<K,V> and anything implementing IDictionary<K,V>.
                 INamedTypeSymbol? dictionaryInterface = named.AllInterfaces.FirstOrDefault(
                     i => i.ConstructedFrom.ToDisplayString() == "System.Collections.Generic.IDictionary<TKey, TValue>");
@@ -737,8 +845,7 @@ namespace Dahomey.Cbor.Generator
         /// </summary>
         private static bool HasNoConcreteConverter(ITypeSymbol type)
         {
-            return type.SpecialType == SpecialType.System_Object
-                || type.ToDisplayString() is "System.DateTimeOffset";
+            return type.SpecialType == SpecialType.System_Object;
         }
 
         private static bool IsPrimitive(ITypeSymbol type)
@@ -780,14 +887,19 @@ namespace Dahomey.Cbor.Generator
                 case "Dahomey.Cbor.CborDecimalFraction":
                 case "Dahomey.Cbor.CborBigFloat":
                 case "System.Guid":
+                // Reachable only from a target where these exist at all; on netstandard2.0 the
+                // library compiles no converter for them and the consumer has no type to name.
+                case "System.DateOnly":
+                case "System.TimeOnly":
+                case "System.DateTimeOffset":
                 case "System.Half":
                     return true;
             }
 
-            // System.DateTimeOffset and System.Object are deliberately absent.
-            // PrimitiveConverterProvider has no case for any of them, so at run time they fall through
-            // to ObjectConverterProvider and reach MakeGenericType -- the exact failure a generated
-            // context exists to prevent, and one the AOT analyzer cannot see either. Classifying them
+            // System.Object is deliberately absent.
+            // PrimitiveConverterProvider has no case for it, so at run time it falls through to
+            // ObjectConverterProvider and reaches MakeGenericType -- the exact failure a generated
+            // context exists to prevent, and one the AOT analyzer cannot see either. Classifying it
             // as unsupported turns that into a build error. See UnsupportedReason.
             return false;
         }
@@ -864,6 +976,39 @@ namespace Dahomey.Cbor.Generator
             return "unrecognised shape";
         }
 
+        /// <summary>
+        /// The attribute <c>type.GetCustomAttribute&lt;T&gt;()</c> would return: the nearest declaration
+        /// on the type or any base class.
+        /// </summary>
+        /// <remarks>
+        /// Every type-level Cbor attribute is inheritable (none sets <c>Inherited = false</c>) and the
+        /// reflection path reads them all with <c>GetCustomAttribute</c>, which inherits. But
+        /// <c>ISymbol.GetAttributes()</c> returns only what the symbol itself declares, so reading it
+        /// directly treats a subtype of a decorated base as undecorated -- a silent difference in the
+        /// bytes, or in what is refused. One helper for all of them keeps the rule in one place.
+        /// </remarks>
+        private static AttributeData? NearestAttribute(
+            ITypeSymbol type,
+            string attributeName,
+            out ITypeSymbol? declaredOn,
+            System.Func<AttributeData, bool>? accept = null)
+        {
+            for (ITypeSymbol? current = type; current is not null; current = current.BaseType)
+            {
+                foreach (AttributeData attribute in current.GetAttributes())
+                {
+                    if (attribute.AttributeClass?.Name == attributeName && (accept is null || accept(attribute)))
+                    {
+                        declaredOn = current;
+                        return attribute;
+                    }
+                }
+            }
+
+            declaredOn = null;
+            return null;
+        }
+
         private static bool HasAttribute(ISymbol symbol, string attributeName)
         {
             return symbol.GetAttributes().Any(a => a.AttributeClass?.Name == attributeName);
@@ -897,6 +1042,177 @@ namespace Dahomey.Cbor.Generator
             {
                 yield return overridden;
             }
+        }
+
+        /// <summary>
+        /// The <c>[CborRequired]</c> policy for a member, as the <c>RequirementPolicy</c> member name to
+        /// emit, or null where the member is not required.
+        /// </summary>
+        /// <remarks>
+        /// The attribute's constructor defaults to <c>Always</c>, so an argumentless <c>[CborRequired]</c>
+        /// means <c>Always</c> — the same default <c>CborRequiredAttribute</c> itself applies, rather
+        /// than a second copy of the policy living here.
+        /// <para>
+        /// The value is rendered by <c>TypedConstant.ToCSharpString()</c> rather than mapped from its
+        /// underlying number, so a reordering of <c>RequirementPolicy</c> cannot silently turn one policy
+        /// into another here — the emitted text names the member the caller wrote.
+        /// </para>
+        /// </remarks>
+        private static string? ReadRequirementPolicy(ISymbol member)
+        {
+            foreach (ISymbol declaration in WithOverriddenDeclarations(member))
+            {
+                foreach (AttributeData attribute in declaration.GetAttributes())
+                {
+                    if (attribute.AttributeClass?.Name != "CborRequiredAttribute")
+                    {
+                        continue;
+                    }
+
+                    // The constructor argument first, or its default; then the named Policy, because
+                    // reflection applies the property after the constructor has run, so a named value
+                    // wins when both are written.
+                    string policy = DefaultRequirementPolicy;
+
+                    foreach (TypedConstant argument in attribute.ConstructorArguments)
+                    {
+                        policy = RenderEnumConstant(argument) ?? DefaultRequirementPolicy;
+                        break;
+                    }
+
+                    foreach (KeyValuePair<string, TypedConstant> named in attribute.NamedArguments)
+                    {
+                        if (named.Key == "Policy")
+                        {
+                            policy = RenderEnumConstant(named.Value) ?? policy;
+                        }
+                    }
+
+                    return policy;
+                }
+            }
+
+            return null;
+        }
+
+        private const string DefaultRequirementPolicy =
+            "global::Dahomey.Cbor.Attributes.RequirementPolicy.Always";
+
+        /// <summary>
+        /// An enum-valued attribute argument as the fully qualified member the caller wrote.
+        /// </summary>
+        /// <remarks>
+        /// Resolved from the enum's own symbol rather than mapped from the underlying number, so a
+        /// reordering of the enum cannot silently turn one member into another here.
+        /// </remarks>
+        private static string? RenderEnumConstant(TypedConstant constant)
+        {
+            if (constant.Type is not INamedTypeSymbol enumType || constant.Value is null)
+            {
+                return null;
+            }
+
+            foreach (ISymbol candidate in enumType.GetMembers())
+            {
+                if (candidate is IFieldSymbol { HasConstantValue: true } field
+                    && Equals(field.ConstantValue, constant.Value))
+                {
+                    return enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                        + "." + field.Name;
+                }
+            }
+
+            // A value the enum does not name, such as (RequirementPolicy)7: reflection keeps the raw
+            // number, so it is cast through rather than folded onto a member it was not written as.
+            long raw = System.Convert.ToInt64(constant.Value, CultureInfo.InvariantCulture);
+            string literal = raw < 0
+                ? "(" + raw.ToString(CultureInfo.InvariantCulture) + ")"
+                : raw.ToString(CultureInfo.InvariantCulture);
+
+            return "(" + enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")" + literal;
+        }
+
+        /// <summary>
+        /// The <c>ShouldSerialize&lt;Member&gt;()</c> method the reflection path would use for this
+        /// member, or null where there is none -- including every member of a struct. When the
+        /// reflection path would instead <b>throw</b> building the mapping, <paramref name="refused"/>
+        /// is the method it chokes on and <paramref name="refusal"/> says why.
+        /// </summary>
+        /// <remarks>
+        /// <c>DefaultObjectMappingConvention.ProcessShouldSerializeMethod</c> calls
+        /// <c>GetMethod(name, no parameters)</c> on the member's <b>declaring</b> type, so the search
+        /// starts there and goes up its bases, never down: a predicate declared only on a derived type
+        /// is invisible to a member a base declares, and one hiding the base's with <c>new</c> loses to
+        /// it. That lookup sees public methods only, so a non-public one is skipped rather than ending
+        /// the search, and it is not <c>FlattenHierarchy</c>, so a static method inherited from a base
+        /// is skipped too. At the level that has candidates, the outcome is:
+        /// <list type="bullet">
+        /// <item>two public candidates (<c>M()</c> and <c>M&lt;T&gt;()</c>): <c>AmbiguousMatchException</c>;</item>
+        /// <item>one that does not return <c>bool</c>: ignored, whatever else it is;</item>
+        /// <item>a <c>bool</c> one that is static (only possible on the declaring type) or generic: the
+        /// expression tree cannot be built, and an <c>ArgumentException</c> escapes;</item>
+        /// <item>otherwise it is the predicate.</item>
+        /// </list>
+        /// Each throw is reported rather than ignored: the generated path would otherwise write the
+        /// member for a type the reflection path refuses outright. A struct's member converter never
+        /// consults a predicate, but the convention still builds the lambda, so a struct is refused
+        /// for the same shapes and simply never emits one.
+        /// </remarks>
+        private static IMethodSymbol? FindShouldSerializeMethod(
+            ITypeSymbol type, ISymbol member, out IMethodSymbol? refused, out string? refusal)
+        {
+            refused = null;
+            refusal = null;
+
+            string name = "ShouldSerialize" + member.Name;
+            ITypeSymbol? declaring = member.ContainingType;
+
+            for (ITypeSymbol? current = declaring;
+                 current is not null && current.SpecialType != SpecialType.System_Object;
+                 current = current.BaseType)
+            {
+                bool onDeclaringType = SymbolEqualityComparer.Default.Equals(current, declaring);
+
+                List<IMethodSymbol> candidates = current.GetMembers(name)
+                    .OfType<IMethodSymbol>()
+                    .Where(m => m.MethodKind == MethodKind.Ordinary
+                        && m.Parameters.Length == 0
+                        && m.DeclaredAccessibility == Accessibility.Public
+                        && (onDeclaringType || !m.IsStatic))
+                    .ToList();
+
+                if (candidates.Count == 0)
+                {
+                    continue;
+                }
+
+                if (candidates.Count > 1)
+                {
+                    refused = candidates[0];
+                    refusal = "it declares both a generic and a non-generic version, which makes the lookup ambiguous";
+                    return null;
+                }
+
+                IMethodSymbol method = candidates[0];
+
+                if (method.ReturnType.SpecialType != SpecialType.System_Boolean)
+                {
+                    return null;
+                }
+
+                if (method.IsStatic || method.IsGenericMethod)
+                {
+                    refused = method;
+                    refusal = method.IsStatic
+                        ? "it is static, and an instance call cannot be built over a static method"
+                        : "it is generic, and a call cannot be built over an open generic method";
+                    return null;
+                }
+
+                return type.TypeKind == Microsoft.CodeAnalysis.TypeKind.Struct ? null : method;
+            }
+
+            return null;
         }
 
         private static bool HasInheritedAttribute(ISymbol member, string attributeName)

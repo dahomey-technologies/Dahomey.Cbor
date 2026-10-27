@@ -44,6 +44,160 @@ using Dahomey.Cbor.Serialization;
                     + string.Join(", ", diagnostics.Select(d => d.Id + ": " + d.GetMessage())));
         }
 
+        private const string InheritedFormatPreamble = @"
+using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization;
+";
+
+        /// <summary>
+        /// A base that lives in another assembly reaches the generator as a metadata symbol, whose
+        /// attributes are read from the compiled image rather than from source. The inherited format
+        /// has to be found there too.
+        /// </summary>
+        [Fact]
+        public void AFormatInheritedFromAnotherAssemblyIsStated()
+        {
+            (IReadOnlyList<Diagnostic> diagnostics, string generated) = GeneratorHarness.RunAgainstLibrary(
+                InheritedFormatPreamble + @"
+namespace Lib { [CborObjectFormat(CborObjectFormat.Array)] public class ArrBase { [CborProperty(0)] public int Id { get; set; } } }",
+                InheritedFormatPreamble + @"
+public class ArrDerived : Lib.ArrBase { [CborProperty(1)] public string Name { get; set; } }
+
+[CborSerializable(typeof(ArrDerived))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Empty(diagnostics);
+            Assert.Contains("SetObjectFormat(CborObjectFormat.Array)", generated);
+        }
+
+        [Fact]
+        public void ABaseFromAnotherAssemblyWithNoFormatLeavesTheSubtypeUnstated()
+        {
+            (IReadOnlyList<Diagnostic> diagnostics, string generated) = GeneratorHarness.RunAgainstLibrary(
+                InheritedFormatPreamble + @"
+namespace Lib { public class Base { public int Id { get; set; } } }",
+                InheritedFormatPreamble + @"
+public class Derived : Lib.Base { public string Name { get; set; } }
+
+[CborSerializable(typeof(Derived))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Empty(diagnostics);
+            Assert.DoesNotContain("SetObjectFormat", generated);
+        }
+
+        /// <summary>
+        /// The mutation target for a walk that stops at the immediate base: only the grandparent
+        /// declares the format.
+        /// </summary>
+        [Fact]
+        public void AFormatDeclaredByAGrandparentIsStated()
+        {
+            string generated = GeneratorHarness.GeneratedSource(Preamble + @"
+[CborObjectFormat(CborObjectFormat.Array)]
+public class Grand { [CborProperty(0)] public int Id { get; set; } }
+public class Parent : Grand { [CborProperty(1)] public string Name { get; set; } }
+public class Leaf : Parent { [CborProperty(2)] public int Extra { get; set; } }
+
+[CborSerializable(typeof(Leaf))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Contains("SetObjectFormat(CborObjectFormat.Array)", generated);
+        }
+
+        [Fact]
+        public void TheIndexDiagnosticSaysWhereAnInheritedFormatCameFrom()
+        {
+            IReadOnlyList<Diagnostic> diagnostics = Run(@"
+[CborObjectFormat(CborObjectFormat.Array)]
+public class ArrBase { [CborProperty(0)] public int Id { get; set; } }
+public class ArrDerived : ArrBase { public string Name { get; set; } }
+
+[CborSerializable(typeof(ArrDerived))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Diagnostic missing = Assert.Single(diagnostics, diagnostic => diagnostic.Id == "CBOR1005");
+            Assert.Contains("inherited from 'ArrBase'", missing.GetMessage());
+        }
+
+        /// <summary>
+        /// Reflection honours a base's [CborNamingConvention] and [CborLengthMode] on its subtypes
+        /// (see <c>InheritedTypeAttributeReflectionTests</c>), so a subtype of one is as unsupported as
+        /// the base is -- and was reported for the base only.
+        /// </summary>
+        [Theory]
+        [InlineData("[CborNamingConvention(typeof(Dahomey.Cbor.Serialization.Conventions.CamelCaseNamingConvention))]", "[CborNamingConvention] (inherited from Base)")]
+        [InlineData("[CborLengthMode(LengthMode = LengthMode.IndefiniteLength)]", "[CborLengthMode] (inherited from Base)")]
+        public void AnAttributeInheritedFromABaseIsReportedAsUnsupported(string attribute, string expected)
+        {
+            IReadOnlyList<Diagnostic> diagnostics = Run(@"
+" + attribute + @"
+public class Base { public int Id { get; set; } }
+public class Derived : Base { public string Name { get; set; } }
+
+[CborSerializable(typeof(Derived))]
+public partial class Context : CborSerializerContext { }
+");
+
+            Assert.Contains(
+                diagnostics,
+                diagnostic => diagnostic.Id == "CBOR1007" && diagnostic.GetMessage().Contains(expected));
+        }
+
+        /// <summary>
+        /// A base with one discriminator kind and a subtype with the other is the both-attributes
+        /// conflict reflection throws for, because it reads the base's by inheritance.
+        /// </summary>
+        [Fact]
+        public void ASubtypeWithTheOtherDiscriminatorKindThanItsBaseConflicts()
+        {
+            AssertReports("CBOR1004", @"
+[CborDiscriminator(""a"")]
+public class Base { public int Id { get; set; } }
+[CborIntDiscriminator(1)]
+public class Derived : Base { public string Name { get; set; } }
+
+[CborSerializable(typeof(Base))]
+[CborSerializable(typeof(Derived))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// [CborObjectFormat] is inherited on the reflection path, so a subtype of an Array base is an
+        /// Array type and its members need indexes there too. CBOR1005 is what the reflection path's
+        /// "expecting all fields/properties to get a member index" becomes at build time.
+        /// </summary>
+        [Fact]
+        public void ASubtypeOfAnArrayBaseNeedsMemberIndexes()
+        {
+            AssertReports("CBOR1005", @"
+[CborObjectFormat(CborObjectFormat.Array)]
+public class ArrBase { [CborProperty(0)] public int Id { get; set; } }
+public class ArrDerived : ArrBase { public string Name { get; set; } }
+
+[CborSerializable(typeof(ArrDerived))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        [Fact]
+        public void ASubtypeOfAnArrayBaseWithIndexesReportsNothing()
+        {
+            AssertClean(@"
+[CborObjectFormat(CborObjectFormat.Array)]
+public class ArrBase { [CborProperty(0)] public int Id { get; set; } }
+public class ArrDerived : ArrBase { [CborProperty(1)] public string Name { get; set; } }
+
+[CborSerializable(typeof(ArrDerived))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
         [Fact]
         public void APlainTypeReportsNothing()
         {
@@ -62,7 +216,6 @@ public partial class Context : CborSerializerContext { }
         /// </summary>
         [Theory]
         [InlineData("object")]
-        [InlineData("System.DateTimeOffset")]
         public void TypesWithNoConcreteConverterAreReported(string memberType)
         {
             AssertReports("CBOR1002", $@"
@@ -114,7 +267,6 @@ public partial class Context : CborSerializerContext {{ }}
         }
 
         [Theory]
-        [InlineData("[CborRequired]")]
         [InlineData("[CborIgnoreIfDefault]")]
         [InlineData("[DefaultValue(3)]")]
         [InlineData("[CborLengthMode(LengthMode = LengthMode.IndefiniteLength)]")]
@@ -162,15 +314,139 @@ public partial class Context : CborSerializerContext { }
 ");
         }
 
+        /// <summary>
+        /// Both are expressible through the delegate mappings — <c>SetRequired</c> and
+        /// <c>SetShouldSerializeMethod</c> have always been there — so refusing them was the generator
+        /// not emitting a call it could make, rather than a shape it could not reproduce.
+        /// </summary>
         [Fact]
-        public void AShouldSerializeMethodIsReported()
+        public void ARequiredMemberIsNotReported()
         {
-            AssertReports("CBOR1007", @"
+            AssertClean(@"
+public class Holder { [CborRequired] public int Value { get; set; } }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        [Fact]
+        public void AShouldSerializeMethodIsNotReported()
+        {
+            AssertClean(@"
 public class Holder
 {
     public int Value { get; set; }
 
     public bool ShouldSerializeValue() => true;
+}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        private static string ShouldSerializeHolder(string declarations) => $@"
+public class Holder
+{{
+    public int Value {{ get; set; }}
+
+    {declarations}
+}}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
+";
+
+        /// <summary>
+        /// The shapes where the reflection path throws while building the mapping, each confirmed
+        /// against it by <c>ShouldSerializeReflectionRefusalTests</c> in the library tests: a
+        /// <c>public bool</c> predicate that is static or generic on the declaring type, and a
+        /// generic and a non-generic version side by side.
+        /// </summary>
+        [Theory]
+        [InlineData("public static bool ShouldSerializeValue() => false;")]
+        [InlineData("public bool ShouldSerializeValue<T>() => false;")]
+        [InlineData("public bool ShouldSerializeValue() => false; public bool ShouldSerializeValue<T>() => false;")]
+        [InlineData("public int ShouldSerializeValue() => 0; public bool ShouldSerializeValue<T>() => false;")]
+        public void AShouldSerializeMethodTheReflectionPathThrowsOnIsReported(string declarations)
+        {
+            AssertReports("CBOR1017", ShouldSerializeHolder(declarations));
+        }
+
+        [Fact]
+        public void AGenericShouldSerializeMethodFoundOnABaseIsReported()
+        {
+            AssertReports("CBOR1017", @"
+public class Base { public bool ShouldSerializeValue<T>() => false; }
+public class Holder : Base { public int Value { get; set; } }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        [Fact]
+        public void AStaticShouldSerializeMethodOnAStructIsReported()
+        {
+            AssertReports("CBOR1017", @"
+public struct Holder { public int Value { get; set; } public static bool ShouldSerializeValue() => false; }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        [Fact]
+        public void AStaticShouldSerializeMethodOnTheBaseOfTheDeclaringTypeIsReportedAgainstAMemberItDeclares()
+        {
+            // Value is declared on Holder, whose own static is found first.
+            AssertReports("CBOR1017", @"
+public class Base { public bool ShouldSerializeValue() => false; }
+public class Holder : Base { public int Value { get; set; } public new static bool ShouldSerializeValue() => true; }
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// The shapes the reflection path does not throw on, which must stay silent: a static
+        /// inherited from a base is invisible to a lookup that is not FlattenHierarchy, a method that
+        /// does not return bool is ignored whatever else it is, and a non-public one is not seen.
+        /// </summary>
+        [Theory]
+        [InlineData("public class Base { public static bool ShouldSerializeValue() => false; } public class Holder : Base { public int Value { get; set; } }")]
+        [InlineData("public class Base { public bool ShouldSerializeValue() => false; } public class Mid : Base { public new static bool ShouldSerializeValue() => true; } public class Holder : Mid { public int Value { get; set; } }")]
+        [InlineData("public class Holder { public int Value { get; set; } public static int ShouldSerializeValue() => 0; }")]
+        [InlineData("public class Holder { public int Value { get; set; } public int ShouldSerializeValue<T>() => 0; }")]
+        [InlineData("public class Holder { public int Value { get; set; } internal static bool ShouldSerializeValue() => false; }")]
+        [InlineData("public class Holder { public int Value { get; set; } internal bool ShouldSerializeValue<T>() => false; public bool ShouldSerializeValue() => false; }")]
+        [InlineData("public class Base { public bool ShouldSerializeValue<T>() => false; } public class Holder : Base { public int Value { get; set; } public bool ShouldSerializeValue() => false; }")]
+        [InlineData("public struct Holder { public int Value { get; set; } public bool ShouldSerializeValue() => false; }")]
+        public void AShouldSerializeShapeTheReflectionPathAcceptsIsNotReported(string types)
+        {
+            AssertClean(types + @"
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// A <c>ShouldSerialize</c> method the reflection path ignores — it takes a parameter, so it is
+        /// not the convention — must not be picked up here either, or the two paths disagree about
+        /// whether the member is written at all.
+        /// </summary>
+        [Fact]
+        public void AShouldSerializeMethodTheReflectionPathIgnoresIsNotUsed()
+        {
+            AssertClean(@"
+public class Holder
+{
+    public int Value { get; set; }
+
+    public bool ShouldSerializeValue(int unused) => false;
 }
 
 [CborSerializable(typeof(Holder))]
@@ -410,6 +686,31 @@ public class IntHolder : Holder<int> { public override int Value { get; set; } }
 
 [CborSerializable(typeof(IntHolder))]
 public partial class Context : CborSerializerContext { }
+");
+        }
+
+        /// <summary>
+        /// The collection interfaces the reflection path resolves through
+        /// <c>InterfaceCollectionConverter</c>, and <c>IDictionary&lt;K,V&gt;</c> through
+        /// <c>InterfaceDictionaryConverter</c>. Declaring one is ordinary — a model that says
+        /// <c>IList&lt;T&gt;</c> rather than <c>List&lt;T&gt;</c> is expressing a contract, not being
+        /// awkward — so refusing it made the generated path unusable for that model.
+        /// </summary>
+        [Theory]
+        [InlineData("System.Collections.Generic.IList<int>")]
+        [InlineData("System.Collections.Generic.ICollection<int>")]
+        [InlineData("System.Collections.Generic.IEnumerable<int>")]
+        [InlineData("System.Collections.Generic.IReadOnlyList<int>")]
+        [InlineData("System.Collections.Generic.IReadOnlyCollection<int>")]
+        [InlineData("System.Collections.Generic.ISet<int>")]
+        [InlineData("System.Collections.Generic.IDictionary<string, int>")]
+        public void ACollectionInterfaceMemberIsNotReported(string memberType)
+        {
+            AssertClean($@"
+public class Holder {{ public {memberType} Value {{ get; set; }} }}
+
+[CborSerializable(typeof(Holder))]
+public partial class Context : CborSerializerContext {{ }}
 ");
         }
 

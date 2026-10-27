@@ -167,11 +167,11 @@ namespace Harness
         // here that a diagnostic stays silent says nothing about what was emitted instead.
 
         /// <summary>
-        /// DateTimeOffset has no scalar converter either -- only System.DateTime does, via
-        /// DateTimeConverter.
+        /// DateTimeOffset renders: DateTimeOffsetConverter writes the same pair of tags
+        /// DateTimeConverter does.
         /// </summary>
         [Fact]
-        public void DateTimeOffsetHasNoCddlRepresentation()
+        public void DateTimeOffsetHasACddlRepresentation()
         {
             ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
     public class Logged { public System.DateTimeOffset When { get; set; } }
@@ -182,8 +182,7 @@ namespace Harness
 }
 ");
 
-            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1011");
-            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
+            Assert.DoesNotContain(diagnostics, d => d.Id == "CBOR1011");
         }
 
         /// <summary>

@@ -38,6 +38,27 @@ indexes: inserting a member with an index that sorts between two existing ones s
 it by one position, where `IntKeyMap` would not move. Use `IntKeyMap` where indexes need to be stable
 addresses across versions.
 
+## A subtype takes its base's format
+
+`[CborObjectFormat]` is inherited: a class with no attribute of its own is laid out in the format of the
+nearest base class that declares one, however many levels up, and a subtype that declares its own
+overrides it. Under `Array` that means the subtype's members need `[CborProperty(n)]` indexes too.
+
+```csharp
+[CborObjectFormat(CborObjectFormat.Array)]
+public class Shape { [CborProperty(0)] public int Id { get; set; } }
+
+public class Circle : Shape { [CborProperty(1)] public int Radius { get; set; } }   // an array, as well
+```
+
+The same holds for `[CborDiscriminator]`, `[CborIntDiscriminator]`, `[CborNamingConvention]` and
+`[CborLengthMode]` — a base's declaration governs its subtypes. A type with no `[CborObjectFormat]`
+anywhere in its ancestry takes the `ObjectFormat` of the `CborOptions` in use.
+
+A source-generated context follows the same rules for the format and the discriminators. It does not
+reproduce `[CborNamingConvention]` or `[CborLengthMode]` on a type, so a subtype of a base carrying
+either is refused with `CBOR1007`, as the base itself is.
+
 ## `Array` writes every member
 
 For the same reason, `Array` writes every member of the type on every document. A member omitted by

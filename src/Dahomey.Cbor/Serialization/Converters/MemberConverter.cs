@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
@@ -511,29 +512,96 @@ namespace Dahomey.Cbor.Serialization.Converters
     public class DiscriminatorMemberConverter<T> : IDiscriminatorMemberConverter
     {
         private readonly CborOptions _options;
-        private readonly IDiscriminatorConvention _discriminatorConvention;
+        private readonly DiscriminatorConventionRegistry _conventionRegistry;
         private readonly CborDiscriminatorPolicy _discriminatorPolicy;
         private readonly CborObjectFormat _objectFormat;
-        private readonly ReadOnlyMemory<byte> _memberName;
+        private readonly IObjectMapping? _objectMapping;
+
+        /// <summary>
+        /// The convention and its member name, stamped with the registry version they were resolved at,
+        /// as one object so a racing resolver cannot pair an old convention with a new version. Re-resolved
+        /// when the registry's version moves, because <c>ClearConventions</c> and a later registration
+        /// replace the convention a type resolves to.
+        /// </summary>
+        private Resolved _resolved;
+
+        private sealed class Resolved
+        {
+            public readonly int Version;
+            public readonly IDiscriminatorConvention? Convention;
+            public readonly ReadOnlyMemory<byte> MemberName;
+
+            public Resolved(int version, IDiscriminatorConvention? convention)
+            {
+                Version = version;
+                Convention = convention;
+                MemberName = convention != null ? convention.MemberName.ToArray() : ReadOnlyMemory<byte>.Empty;
+            }
+        }
 
         public DiscriminatorMemberConverter(
             CborOptions options,
             IDiscriminatorConvention discriminatorConvention,
             CborDiscriminatorPolicy discriminatorPolicy,
             CborObjectFormat objectFormat)
+            : this(options, discriminatorConvention, discriminatorPolicy, objectFormat, null)
+        {
+        }
+
+        /// <summary>
+        /// As the overload without a mapping, and given the mapping of the type this member is written
+        /// for: a convention resolved after the mapping was validated is then checked against that
+        /// type's members, as <c>MemberMappingErrors.ThrowIfDiscriminatorNameCollides</c> describes.
+        /// </summary>
+        public DiscriminatorMemberConverter(
+            CborOptions options,
+            IDiscriminatorConvention discriminatorConvention,
+            CborDiscriminatorPolicy discriminatorPolicy,
+            CborObjectFormat objectFormat,
+            IObjectMapping? objectMapping)
         {
             _options = options;
-            _discriminatorConvention = discriminatorConvention;
+            _conventionRegistry = options.Registry.DiscriminatorConventionRegistry;
             _discriminatorPolicy = discriminatorPolicy;
             _objectFormat = objectFormat;
+            _objectMapping = objectMapping;
 
-            if (discriminatorConvention != null)
+            // Stamped with a version no registry has, not with the current one: the caller resolved
+            // the convention before this constructor ran, and a registration landing in between would
+            // otherwise be stamped as already accounted for. The first use asks again instead, which
+            // costs one lookup and returns the same answer when nothing moved.
+            _resolved = new Resolved(-1, discriminatorConvention);
+        }
+
+        private Resolved Current
+        {
+            get
             {
-                _memberName = discriminatorConvention.MemberName.ToArray();
+                Resolved resolved = Volatile.Read(ref _resolved);
+                int version = _conventionRegistry.Version;
+
+                if (resolved.Version == version)
+                {
+                    return resolved;
+                }
+
+                // Sampled before the lookup, so a registration landing in between is seen next time.
+                IDiscriminatorConvention? convention = _conventionRegistry.GetConvention(typeof(T));
+
+                // Nothing has validated this name against the type's other members, if it is not the
+                // one the mapping was built with. Refused before it is kept, so every use asks again.
+                if (_objectMapping != null)
+                {
+                    MemberMappingErrors.ThrowIfDiscriminatorNameCollides(_objectMapping, convention);
+                }
+
+                resolved = new Resolved(version, convention);
+                Volatile.Write(ref _resolved, resolved);
+                return resolved;
             }
         }
 
-        public ReadOnlySpan<byte> MemberName => _memberName.Span;
+        public ReadOnlySpan<byte> MemberName => Current.MemberName.Span;
         public int? MemberIndex => 0; // discriminator gets always the first index
         public bool IgnoreIfDefault => false;
         public RequirementPolicy RequirementPolicy => RequirementPolicy.Never;
@@ -555,7 +623,7 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public bool ShouldSerialize(object obj, Type declaredType, CborOptions options)
         {
-            if (_discriminatorConvention == null)
+            if (Current.Convention == null)
             {
                 return false;
             }
@@ -574,7 +642,14 @@ namespace Dahomey.Cbor.Serialization.Converters
                 // we need a Semantic Tag to check if the discriminator is present
                 writer.WriteSemanticTag(_options.DiscriminatorSemanticTag);
             }
-            _discriminatorConvention.WriteDiscriminator(ref writer, obj.GetType());
+            IDiscriminatorConvention? convention = Current.Convention;
+
+            if (convention == null)
+            {
+                throw new CborException($"Cannot find a discriminator convention for type {typeof(T)}");
+            }
+
+            convention.WriteDiscriminator(ref writer, obj.GetType());
         }
     }
 }

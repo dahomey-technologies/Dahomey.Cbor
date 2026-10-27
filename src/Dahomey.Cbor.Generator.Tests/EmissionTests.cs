@@ -176,6 +176,55 @@ namespace App
         }
 
         /// <summary>
+        /// A struct's member converter never consults a predicate, so the reflection path ignores a
+        /// <c>ShouldSerialize</c> on one; emitting the call chained a method that
+        /// <c>DelegateStructMemberMapping</c> does not have, which did not compile.
+        /// </summary>
+        [Fact]
+        public void AShouldSerializeMethodOnAStructCompilesAndIsNotEmitted()
+        {
+            string body = @"
+namespace App
+{
+    public struct Point { public int X { get; set; } public bool ShouldSerializeX() => false; }
+
+    [CborSerializable(typeof(Point))]
+    public partial class Context : CborSerializerContext { }
+}
+";
+            AssertCompiles(body);
+            Assert.DoesNotContain("SetShouldSerializeMethod", GeneratorHarness.GeneratedSource(Preamble + body));
+        }
+
+        /// <summary>
+        /// The reflection path looks the predicate up on the member's declaring type, so one declared
+        /// only on a derived type is not used for a member the base declares, and a hiding one does not
+        /// replace the base's.
+        /// </summary>
+        [Fact]
+        public void AShouldSerializeMethodIsLookedUpFromTheMembersDeclaringType()
+        {
+            string generated = GeneratorHarness.GeneratedSource(Preamble + @"
+namespace App
+{
+    public class Base { public int A { get; set; } public int B { get; set; } public bool ShouldSerializeB() => true; }
+    public class Derived : Base
+    {
+        public bool ShouldSerializeA() => false;
+        public new bool ShouldSerializeB() => false;
+    }
+
+    [CborSerializable(typeof(Derived))]
+    public partial class Context : CborSerializerContext { }
+}
+");
+
+            Assert.DoesNotContain("ShouldSerializeA", generated);
+            Assert.Contains("((global::App.Base)o).ShouldSerializeB()", generated);
+            Assert.DoesNotContain("((global::App.Derived)o)", generated);
+        }
+
+        /// <summary>
         /// A <c>Half</c> is a scalar the emitter registers nothing for, and <c>Half[]</c> is the tenth
         /// RFC 8746 element type, which makes it the one member shape that emits
         /// <c>TypedArrayConverter&lt;System.Half&gt;</c>.
