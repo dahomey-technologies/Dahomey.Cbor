@@ -174,6 +174,57 @@ namespace Dahomey.Cbor
         DecimalFraction = 1,
     }
 
+    /// <summary>
+    /// How a <see cref="TimeSpan"/> is written.
+    /// </summary>
+    /// <remarks>
+    /// A <see cref="TimeSpan"/> has always been written by the object mapping, over its public
+    /// properties, and that round-trips -- so unlike the types with no working encoding at all, changing
+    /// it is a wire-format break rather than a fix. <see cref="Members"/> therefore stays the default and
+    /// no existing document changes shape underneath a caller who has not asked for it.
+    /// <para>
+    /// The setting governs reading as well as writing, which <see cref="DecimalFormat"/> does not need
+    /// to: there is no converter for a <see cref="TimeSpan"/> under <see cref="Members"/> at all, so the
+    /// object mapping reads it, and a converter that read tag 1002 as well would have to be registered
+    /// -- which would itself stop the historical form being readable. Documents in the two forms cannot
+    /// be read by one setting.
+    /// </para>
+    /// </remarks>
+    public enum TimeSpanFormat
+    {
+        /// <summary>
+        /// A map of the type's own public properties, as the object mapping produces. The historical
+        /// form, and the default.
+        /// </summary>
+        /// <remarks>
+        /// 259 bytes for a value of three components, and meaningful only to a decoder that knows the
+        /// CLR type's shape -- <c>Ticks</c>, <c>Days</c>, <c>TotalMicroseconds</c> and the rest. Keep it
+        /// for a contract whose only participants are Dahomey.Cbor, or while documents written by an
+        /// earlier version are still in circulation.
+        /// </remarks>
+        Members = 0,
+
+        /// <summary>
+        /// The RFC 9581 section 4 duration: tag 1002 over a map carrying whole seconds under key 1 and,
+        /// when the value has a fractional part, nanoseconds under key -9.
+        /// </summary>
+        /// <remarks>
+        /// Carries every value <see cref="TimeSpan"/> holds, since its resolution is 100ns and key -9 is
+        /// finer. The fraction is an unsigned count added to the base (RFC 9581 section 3.3), so a
+        /// negative duration floors its base: <c>-1.5s</c> is <c>{1: -2, -9: 500000000}</c>.
+        /// <para>
+        /// On read, keys 1 (integer or float), -3, -6, -9, -12, -15 and -18 are understood, and a
+        /// timescale (keys -1, -13, 13) of UTC or TAI. A fraction finer than 100ns is refused unless it
+        /// is an exact number of ticks; a negative fraction, a second fraction key, a base under key 4
+        /// or 5, an unknown critical (unsigned) key, another timescale, and a value outside the range of
+        /// <see cref="TimeSpan"/> are each a <see cref="CborException"/>. Unknown elective keys (text
+        /// strings and unrecognised negative integers) are skipped, as is an elective timescale (-1 or
+        /// -13) whose value is not 0 or 1; only the critical timescale key 13 with such a value is refused.
+        /// </para>
+        /// </remarks>
+        Duration = 1,
+    }
+
     public class CborOptions
     {
         public static CborOptions Default { get; } = new CborOptions()
@@ -297,6 +348,13 @@ namespace Dahomey.Cbor
         /// </para>
         /// </remarks>
         public DecimalFormat DecimalFormat { get; set; }
+
+        /// <summary>
+        /// How a <see cref="TimeSpan"/> is written and read. Defaults to
+        /// <see cref="TimeSpanFormat.Members"/>, the historical form, so no existing document changes
+        /// shape.
+        /// </summary>
+        public TimeSpanFormat TimeSpanFormat { get; set; }
 
         /// <summary>
         /// How a <see cref="System.Guid"/> held in an untagged byte string is read. Default

@@ -368,6 +368,12 @@ namespace Dahomey.Cbor.Generator
                 wrote = true;
             }
 
+            if (options.TimeSpanFormat is not null)
+            {
+                builder.AppendLine($"{indent}        options.TimeSpanFormat = TimeSpanFormat.{options.TimeSpanFormat};");
+                wrote = true;
+            }
+
             if (options.UntaggedGuidFormat is not null)
             {
                 builder.AppendLine($"{indent}        options.UntaggedGuidFormat = UntaggedGuidFormat.{options.UntaggedGuidFormat};");

@@ -595,6 +595,22 @@ namespace Dahomey.Cbor.Tests
                 };
             }
 
+            // A fractional value and a negative one, so both the nanosecond entry and the sign
+            // convention are compared against the reflection path rather than only whole seconds.
+            if (type == typeof(GeneratedDurationHolder))
+            {
+                return new GeneratedDurationHolder
+                {
+                    Elapsed = new TimeSpan(0, 1, 2, 3, 500),
+                    Timeout = TimeSpan.FromSeconds(-30),
+                };
+            }
+
+            if (type == typeof(Cddl.CddlDurationHolder))
+            {
+                return new Cddl.CddlDurationHolder { Elapsed = new TimeSpan(0, 1, 2, 3, 500) };
+            }
+
             // Carried by three contexts differing only in DateTimeFormat, so the date stays a day count
             // across both numeric settings while the time beside it is the same string under all
             // three. The fractional second keeps the time's fraction in view.
@@ -787,6 +803,7 @@ namespace Dahomey.Cbor.Tests
                 EnumFormat = generated.EnumFormat,
                 DateTimeFormat = generated.DateTimeFormat,
                 DecimalFormat = generated.DecimalFormat,
+                TimeSpanFormat = generated.TimeSpanFormat,
                 UntaggedGuidFormat = generated.UntaggedGuidFormat,
             };
 

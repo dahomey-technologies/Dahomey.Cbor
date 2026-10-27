@@ -848,7 +848,7 @@ namespace Dahomey.Cbor.Generator
             return type.SpecialType == SpecialType.System_Object;
         }
 
-        private static bool IsPrimitive(ITypeSymbol type)
+        private bool IsPrimitive(ITypeSymbol type)
         {
             switch (type.SpecialType)
             {
@@ -894,6 +894,12 @@ namespace Dahomey.Cbor.Generator
                 case "System.DateTimeOffset":
                 case "System.Half":
                     return true;
+
+                // The only classification that depends on an option. Under the default there is no
+                // TimeSpanConverter to resolve, so the type is collected as an object -- which is what
+                // the reflection path does with it too, and the corpus compares the two.
+                case "System.TimeSpan":
+                    return _options.WritesDurations;
             }
 
             // System.Object is deliberately absent.
