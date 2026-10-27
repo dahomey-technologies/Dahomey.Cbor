@@ -18,9 +18,9 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 return converter.Read(ref reader);
             }
-            catch (CborException exception)
+            catch (CborException exception) when (exception.PrependPathIndexAndDecline(index))
             {
-                exception.PrependPathIndex(index);
+                // Not entered: the filter records the position and declines.
                 throw;
             }
         }

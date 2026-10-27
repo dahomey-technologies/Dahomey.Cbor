@@ -52,6 +52,61 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
+        /// The empty key is a key like any other: <c>[CborProperty("")]</c> names a member with it.
+        /// </summary>
+        /// <remarks>
+        /// It has no eight-byte segment, so it is stored on the root node, which the lookup never
+        /// looked at: the entry was added and could not be found.
+        /// </remarks>
+        [Fact]
+        public void TheEmptyKeyIsFound()
+        {
+            ByteBufferDictionary<int> dictionary = new ByteBufferDictionary<int>();
+            Assert.False(dictionary.TryGetValue(ReadOnlySpan<byte>.Empty, out int _));
+
+            dictionary.Add(Encoding.UTF8.GetBytes("short"), 1);
+            dictionary.Add(ReadOnlySpan<byte>.Empty, 2);
+            dictionary.Add(Encoding.UTF8.GetBytes("longervaluethaneightbytes"), 3);
+
+            Assert.True(dictionary.TryGetValue(ReadOnlySpan<byte>.Empty, out int found));
+            Assert.Equal(2, found);
+            Assert.False(dictionary.TryGetValue(new byte[] { 0 }, out int _));
+            Assert.Throws<ArgumentException>(() => dictionary.Add(ReadOnlySpan<byte>.Empty, 4));
+        }
+
+        /// <summary>
+        /// A key and the same key followed by zero bytes are different keys.
+        /// </summary>
+        /// <remarks>
+        /// A segment shorter than eight bytes is padded with zeros, so both ended on the same node and
+        /// a document key "a\0" read into the member "a".
+        /// </remarks>
+        [Theory]
+        [InlineData("a")]
+        [InlineData("eightchr")]
+        [InlineData("longervaluethaneightbytes")]
+        public void TrailingZeroBytesAreNotIgnored(string key)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(key);
+            byte[] padded = Encoding.UTF8.GetBytes(key + "\0");
+
+            ByteBufferDictionary<int> dictionary = new ByteBufferDictionary<int>();
+            dictionary.Add(bytes, 12);
+
+            Assert.False(dictionary.TryGetValue(padded, out int _));
+            Assert.True(dictionary.TryGetValue(bytes, out int found));
+            Assert.Equal(12, found);
+
+            // the same the other way round
+            dictionary = new ByteBufferDictionary<int>();
+            dictionary.Add(padded, 13);
+
+            Assert.False(dictionary.TryGetValue(bytes, out int _));
+            Assert.True(dictionary.TryGetValue(padded, out found));
+            Assert.Equal(13, found);
+        }
+
+        /// <summary>
         /// Adding a key twice is refused rather than silently replacing the first entry.
         /// </summary>
         /// <remarks>

@@ -55,12 +55,12 @@ namespace Dahomey.Cbor.Serialization.Converters
                     {
                         return ReadTypedArray(ref reader, tag);
                     }
-                    catch (CborException exception)
+                    catch (CborException exception) when (exception.MarkPathKnownAndDecline())
                     {
-                        // A typed array is decoded whole rather than item by item, so a failure is a
-                        // property of the array, not of a position in it. The collection itself is
-                        // still a position worth reporting.
-                        exception.MarkPathKnown();
+                        // Not entered: the filter marks the path and declines. A typed array is
+                        // decoded whole rather than item by item, so a failure is a property of the
+                        // array, not of a position in it. The collection itself is still a position
+                        // worth reporting.
                         throw;
                     }
                 }
@@ -86,17 +86,10 @@ namespace Dahomey.Cbor.Serialization.Converters
             {
                 reader.ReadArray(this, ref context);
             }
-            catch (CborException exception)
+            catch (CborException exception) when (exception.PrependPathIndexAndDecline(context.index))
             {
-                if (context.index >= 0)
-                {
-                    exception.PrependPathIndex(context.index);
-                }
-                else
-                {
-                    exception.MarkPathKnown();
-                }
-
+                // Not entered: the filter records the position and declines. A negative index is
+                // the array header itself and is marked as seen without naming a position.
                 throw;
             }
 

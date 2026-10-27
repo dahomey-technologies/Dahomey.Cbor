@@ -120,6 +120,13 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override void Write(ref CborWriter writer, CborValue value, LengthMode lengthMode)
         {
+            // A CborValue member, element or root left null, rather than set to CborValue.Null.
+            if (value is null)
+            {
+                writer.WriteNull();
+                return;
+            }
+
             // Containers emit their own tag: the map and array writers are reachable without passing
             // through here at all - a member declared CborObject resolves straight to them - so
             // emitting it for them here as well would double the tag on that route.

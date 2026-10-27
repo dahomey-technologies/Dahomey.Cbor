@@ -341,6 +341,12 @@ namespace Dahomey.Cbor.Generator
                 case "Dahomey.Cbor.CborBigFloat":
                     return "#6.5([int, (int / #6.2(bstr) / #6.3(bstr))])";
 
+                // Reachable only under TimeSpanFormat.Duration -- otherwise the type is an object and
+                // never arrives here. The nanosecond entry, an unsigned fraction added to the base, is
+                // written only for a value that has a fractional part, so it is optional in the schema.
+                case "System.TimeSpan":
+                    return "#6.1002({1 => int, ? -9 => uint})";
+
                 // The two RFC 8943 tags, chosen by the same option that governs a DateTime: 1004 over
                 // a full-date string, 100 over a count of days. Both numeric formats write the day
                 // count, since a date has no time of day to carry milliseconds.
@@ -371,11 +377,15 @@ namespace Dahomey.Cbor.Generator
                 // than merely permitted.
                 case "System.Half":
                     return "float16";
+
+                // RFC 9562's binary UUID. Always tagged and always sixteen bytes, so no option
+                // reaches it and the size is part of the schema.
+                case "System.Guid":
+                    return "#6.37(bstr .size 16)";
             }
 
-            // Guid has no scalar converter. System.Decimal reaches here only in its default encoding,
-            // which is likewise indescribable. Each falls through to CBOR1011 rather than asserting a
-            // row no converter backs.
+            // System.Decimal reaches here only in its default encoding, which is indescribable: it
+            // falls through to CBOR1011 rather than asserting a row no converter backs.
             return null;
         }
 

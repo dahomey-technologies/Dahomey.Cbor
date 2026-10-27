@@ -57,6 +57,26 @@ public override Payload Read(ref CborReader reader)
 Each frame adds only its own segment, outermost last, and nothing is built until something has
 actually failed.
 
+A converter that can reach itself again, such as one for a tree, should add its segment from an
+exception filter rather than from the `catch` block. A `catch` block runs on top of the frames that
+threw, and rethrowing from it starts another dispatch on top of that, so a path built this way costs
+about 16 KB of stack per `catch` on the way up, and a document nested a few dozen levels deep can
+exhaust a 1 MB stack before the failure is reported. A filter runs before anything is unwound, one
+after another, and the path it builds is the same. The converters in this library work this way.
+
+```csharp
+catch (CborException exception) when (AddBody(exception))
+{
+    throw;   // not entered: the filter always returns false
+}
+
+private static bool AddBody(CborException exception)
+{
+    exception.PrependPathMember("Body");
+    return false;
+}
+```
+
 Member names and map keys read the same way — ``$.Map.key`` — and are bracketed and escaped when they
 would otherwise be ambiguous: a member genuinely named ``a.b`` is written ``$['a.b']``. Text taken from
 the document is also truncated, so a message's length follows the shape of a document rather than the

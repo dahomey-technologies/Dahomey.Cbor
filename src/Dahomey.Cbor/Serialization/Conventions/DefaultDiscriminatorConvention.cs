@@ -61,9 +61,42 @@ namespace Dahomey.Cbor.Serialization.Conventions
                 return false;
             }
 
+            _typesByDiscriminator.AddOrUpdate(
+                discriminator, type, (_, registered) => ResolveSharedDiscriminator(registered, type, discriminator));
             _discriminatorsByType.TryAdd(type, discriminator);
-            _typesByDiscriminator.TryAdd(discriminator, type);
             return true;
+        }
+
+        /// <summary>
+        /// Picks the type a discriminator value reads as when two types carry it, or refuses the pair.
+        /// </summary>
+        /// <remarks>
+        /// A subtype with no discriminator attribute of its own inherits its base's value, so it writes
+        /// that value too. That has always been allowed, and the value keeps reading as the type
+        /// registered first: a program that only uses the subtype reads it back as itself, which
+        /// handing the value to the base would break. Anything else is two types claiming one value -
+        /// unrelated types, or a subtype declaring its base's value again - and a document carrying it
+        /// would read as whichever came first, so it is refused.
+        /// </remarks>
+        private static Type ResolveSharedDiscriminator(Type registered, Type type, T discriminator)
+        {
+            if (registered == type)
+            {
+                return registered;
+            }
+
+            Type? derivedType = registered.IsAssignableFrom(type) ? type
+                : type.IsAssignableFrom(registered) ? registered
+                : null;
+
+            if (derivedType != null && !DiscriminatorConventionRegistry.DeclaresDiscriminator(derivedType))
+            {
+                return registered;
+            }
+
+            throw new CborException(
+                $"Types {registered} and {type} have the same discriminator {discriminator}: "
+                + "a document carrying it cannot tell them apart. Give each type its own value.");
         }
 
         public Type ReadDiscriminator(ref CborReader reader)

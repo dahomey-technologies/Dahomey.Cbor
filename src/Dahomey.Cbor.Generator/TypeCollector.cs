@@ -410,7 +410,6 @@ namespace Dahomey.Cbor.Generator
         private static readonly (string Attribute, string Description)[] UnsupportedTypeFeatures =
         {
             ("CborConverterAttribute", "[CborConverter]"),
-            ("CborConstructorAttribute", "[CborConstructor]"),
             ("CborNamingConventionAttribute", "[CborNamingConvention]"),
             ("CborLengthModeAttribute", "[CborLengthMode]"),
         };
@@ -429,9 +428,9 @@ namespace Dahomey.Cbor.Generator
             {
                 // [CborNamingConvention] and [CborLengthMode] are inherited, as reflection reads them
                 // (GetCustomAttribute): a base's governs its subtypes there, so a subtype of one is as
-                // unsupported as the base. [CborConstructor] targets a constructor, not a type. [CborConverter]
-                // is inheritable too, but a converter is written for one type, so what reflection does
-                // with a subtype of one is not something to reproduce; it is left as it was.
+                // unsupported as the base. [CborConverter] is inheritable too, but a converter is written
+                // for one type, so what reflection does with a subtype of one is not something to
+                // reproduce; it is left as it was.
                 bool inheritable = attribute is "CborNamingConventionAttribute" or "CborLengthModeAttribute";
                 ITypeSymbol? declaredOn = type;
 
@@ -445,6 +444,20 @@ namespace Dahomey.Cbor.Generator
                         SymbolEqualityComparer.Default.Equals(declaredOn, type)
                             ? description
                             : $"{description} (inherited from {declaredOn!.ToDisplayString()})");
+                }
+            }
+
+            // [CborConstructor] targets a constructor, not the type. Reflection maps it as the creator of
+            // a concrete type, from that type's own constructors; a generated factory is `new T()` plus
+            // the setters, so it would build the value without the constructor ever running.
+            if (type is INamedTypeSymbol { IsAbstract: false } namedType)
+            {
+                foreach (IMethodSymbol constructor in namedType.InstanceConstructors)
+                {
+                    if (HasAttribute(constructor, "CborConstructorAttribute"))
+                    {
+                        Report(constructor.Locations.FirstOrDefault(), type.ToDisplayString(), "[CborConstructor]");
+                    }
                 }
             }
 
@@ -507,9 +520,11 @@ namespace Dahomey.Cbor.Generator
         }
 
         /// <summary>
-        /// Members in the order the reflection path sees them: most-derived type first, then each base.
-        /// Matching that order matters because it determines the order members appear on the wire, and
-        /// the generated output is required to be byte-identical.
+        /// Members in the order the reflection path sees them: every property, then every field, each
+        /// most-derived type first, then each base (<c>DefaultObjectMappingConvention</c> maps the
+        /// result of <c>GetProperties</c>, then that of <c>GetFields</c>). Matching that order matters
+        /// because it determines the order members appear on the wire, and the generated output is
+        /// required to be byte-identical.
         /// </summary>
         /// <remarks>
         /// An overridden property is declared on both types and is one member, so the base declaration
@@ -527,6 +542,12 @@ namespace Dahomey.Cbor.Generator
         /// </remarks>
         private IEnumerable<ISymbol> EnumerateMembers(ITypeSymbol type)
         {
+            return EnumerateMembers<IPropertySymbol>(type).Concat(EnumerateMembers<IFieldSymbol>(type));
+        }
+
+        private IEnumerable<ISymbol> EnumerateMembers<TMember>(ITypeSymbol type)
+            where TMember : ISymbol
+        {
             HashSet<ISymbol> overriddenByADerivedMember =
                 new HashSet<ISymbol>(SymbolEqualityComparer.Default);
 
@@ -534,12 +555,8 @@ namespace Dahomey.Cbor.Generator
                  current is not null && current.SpecialType != SpecialType.System_Object;
                  current = current.BaseType)
             {
-                foreach (ISymbol member in current.GetMembers())
+                foreach (ISymbol member in current.GetMembers().OfType<TMember>())
                 {
-                    if (member is not (IPropertySymbol or IFieldSymbol))
-                    {
-                        continue;
-                    }
 
                     if (overriddenByADerivedMember.Contains(member))
                     {
@@ -912,11 +929,10 @@ namespace Dahomey.Cbor.Generator
         /// </summary>
         private static bool HasNoConcreteConverter(ITypeSymbol type)
         {
-            return type.SpecialType == SpecialType.System_Object
-                || type.ToDisplayString() is "System.Guid";
+            return type.SpecialType == SpecialType.System_Object;
         }
 
-        private static bool IsPrimitive(ITypeSymbol type)
+        private bool IsPrimitive(ITypeSymbol type)
         {
             switch (type.SpecialType)
             {
@@ -954,6 +970,7 @@ namespace Dahomey.Cbor.Generator
                 case "System.Numerics.BigInteger":
                 case "Dahomey.Cbor.CborDecimalFraction":
                 case "Dahomey.Cbor.CborBigFloat":
+                case "System.Guid":
                 // Reachable only from a target where these exist at all; on netstandard2.0 the
                 // library compiles no converter for them and the consumer has no type to name.
                 case "System.DateOnly":
@@ -961,12 +978,18 @@ namespace Dahomey.Cbor.Generator
                 case "System.DateTimeOffset":
                 case "System.Half":
                     return true;
+
+                // The only classification that depends on an option. Under the default there is no
+                // TimeSpanConverter to resolve, so the type is collected as an object -- which is what
+                // the reflection path does with it too, and the corpus compares the two.
+                case "System.TimeSpan":
+                    return _options.WritesDurations;
             }
 
-            // System.Guid and System.Object are deliberately absent.
-            // PrimitiveConverterProvider has no case for any of them, so at run time they fall through
-            // to ObjectConverterProvider and reach MakeGenericType -- the exact failure a generated
-            // context exists to prevent, and one the AOT analyzer cannot see either. Classifying them
+            // System.Object is deliberately absent.
+            // PrimitiveConverterProvider has no case for it, so at run time it falls through to
+            // ObjectConverterProvider and reaches MakeGenericType -- the exact failure a generated
+            // context exists to prevent, and one the AOT analyzer cannot see either. Classifying it
             // as unsupported turns that into a build error. See UnsupportedReason.
             return false;
         }

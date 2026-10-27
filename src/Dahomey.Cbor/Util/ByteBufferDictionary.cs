@@ -28,6 +28,15 @@ namespace Dahomey.Cbor.Util
             /// stored default from an absent value, so the distinction has to be recorded.
             /// </remarks>
             public bool hasValue;
+
+            /// <summary>
+            /// The length of the key ending here, when <see cref="hasValue"/> is set.
+            /// </summary>
+            /// <remarks>
+            /// A segment shorter than eight bytes is padded with zeros, so "a" and "a\0" end on the
+            /// same node. Without the length, a document key "a\0" found the member "a".
+            /// </remarks>
+            public int keyLength;
         }
 
         private class NodeCollection
@@ -166,11 +175,15 @@ namespace Dahomey.Cbor.Util
             if (last.hasValue)
             {
                 throw new ArgumentException(
-                    $"An entry with the same key already exists: {Encoding.UTF8.GetString(key.ToArray())}", nameof(key));
+                    last.keyLength == len
+                        ? $"An entry with the same key already exists: {Encoding.UTF8.GetString(key.ToArray())}"
+                        : $"An entry whose key differs only by trailing zero bytes already exists: {Encoding.UTF8.GetString(key.ToArray())}",
+                    nameof(key));
             }
 
             last.value = value;
             last.hasValue = true;
+            last.keyLength = len;
         }
 
         public bool TryGetValue(ReadOnlySpan<byte> key, [MaybeNullWhen(false)] out T value)
@@ -178,7 +191,12 @@ namespace Dahomey.Cbor.Util
             Node? node;
             int len = key.Length;
 
-            if (len <= 8)
+            if (len == 0)
+            {
+                // Add stores the empty key on the root itself, as it has no segment to walk.
+                node = _root;
+            }
+            else if (len <= 8)
             {
                 ulong singleKey = 0;
 
@@ -209,7 +227,7 @@ namespace Dahomey.Cbor.Util
                 }
             }
 
-            if (!node.hasValue)
+            if (!node.hasValue || node.keyLength != len)
             {
                 value = default!;
                 return false;

@@ -329,5 +329,51 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(0, array1.CompareTo(array2));
             Assert.Equal(array1, array2);
         }
+
+        [Fact]
+        public void DecimalOutsideInt32Range()
+        {
+            foreach (decimal value in new[] { 3_000_000_000m, decimal.MaxValue, decimal.MinValue })
+            {
+                CborValue cborValue = value;
+                Assert.Equal(value, cborValue.Value<decimal>());
+            }
+        }
+
+        [Fact]
+        public void NumbersKeepTheirExactValue()
+        {
+            // Values equal to a small integer but not identical to it: the DOM must write the
+            // same bytes as the native value, and read them back unchanged.
+            AssertSameAsNative(1.0m, 1.0m);
+            AssertSameAsNative(-2.50m, -2.50m);
+            AssertSameAsNative(decimal.Negate(0m), decimal.Negate(0m));
+            AssertSameAsNative(-0.0, -0.0);
+            AssertSameAsNative(-0.0f, -0.0f);
+        }
+
+        [Fact]
+        public void SmallIntegersAreShared()
+        {
+            Assert.Same((CborValue)5m, (CborValue)5m);
+            Assert.Same((CborValue)5.0, (CborValue)5.0);
+            Assert.Same((CborValue)5.0f, (CborValue)5.0f);
+        }
+
+        private static void AssertSameAsNative<T>(T value, CborValue cborValue)
+        {
+            string expected = Helper.Write(value);
+            Assert.Equal(expected, Helper.Write(cborValue));
+            Assert.Equal(expected, Helper.Write(Helper.Read<CborValue>(expected)));
+        }
+
+        [Fact]
+        public void WriteNullCborValue()
+        {
+            Helper.TestWrite<CborValue>(null, "F6");
+            Helper.TestWrite(new CborValueObject { CborValue = null }, "A16943626F7256616C7565F6");
+            Helper.TestWrite(new List<CborValue> { null }, "81F6");
+            Helper.TestWrite(new Dictionary<string, CborValue> { ["a"] = null }, "A16161F6");
+        }
     }
 }

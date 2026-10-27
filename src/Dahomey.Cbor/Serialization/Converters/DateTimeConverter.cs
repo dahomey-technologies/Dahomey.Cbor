@@ -30,12 +30,40 @@ namespace Dahomey.Cbor.Serialization.Converters
                 case CborDataItemType.Signed:
                 case CborDataItemType.Unsigned:
                     long unixTime = reader.ReadInt64();
-                    return DateTimeOffset.FromUnixTimeSeconds(unixTime).UtcDateTime;
+
+                    try
+                    {
+                        return DateTimeOffset.FromUnixTimeSeconds(unixTime).UtcDateTime;
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        throw reader.BuildException(
+                            $"Invalid date format {unixTime.ToString(CultureInfo.InvariantCulture)}: "
+                            + "outside the range a DateTime holds");
+                    }
 
                 case CborDataItemType.Double:
                 case CborDataItemType.Single:
                     double unixTimeDouble = reader.ReadDouble();
-                    return DateTimeOffset.FromUnixTimeSeconds(0).UtcDateTime.AddSeconds(unixTimeDouble);
+
+                    // An infinity names no instant, so it is refused as DateTimeOffsetConverter
+                    // refuses it rather than reported as out of range.
+                    if (double.IsInfinity(unixTimeDouble))
+                    {
+                        throw reader.BuildException(
+                            "Invalid date format: a time stamp must be a finite number");
+                    }
+
+                    try
+                    {
+                        return DateTimeOffset.FromUnixTimeSeconds(0).UtcDateTime.AddSeconds(unixTimeDouble);
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
+                        throw reader.BuildException(
+                            $"Invalid date format {unixTimeDouble.ToString("R", CultureInfo.InvariantCulture)}: "
+                            + "outside the range a DateTime holds");
+                    }
 
                 default:
                     throw reader.BuildException($"Invalid date format");
@@ -43,6 +71,22 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         private bool TryRead(ReadOnlySpan<byte> buffer, out DateTime value)
+        {
+            try
+            {
+                return TryReadCore(buffer, out value);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // A component the calendar refuses -- month 13, February 30, a leap second -- or an
+                // offset that moves the instant outside DateTime's range. Refused as a format error
+                // rather than escaping as an exception a caller's catch(CborException) would miss.
+                value = default;
+                return false;
+            }
+        }
+
+        private bool TryReadCore(ReadOnlySpan<byte> buffer, out DateTime value)
         {
             if (!TryReadInt32(ref buffer, 4, out int year))
             {

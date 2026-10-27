@@ -77,7 +77,10 @@ registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Regi
 `RegisterType<T>()` afterwards. Reading the abstract base does not do it for you: the first read of a
 document fails with `no type is registered for the discriminator …` until the subtype is registered.
 Converters that already exist notice the change and use the new convention, so the call is safe after
-(de)serialization has started.
+(de)serialization has started. Call `RegisterConvention` straight after `ClearConventions`, though: a
+type first used (serialized, deserialized or looked up) while no convention is registered is mapped
+without a discriminator, and keeps writing none once a convention is registered again. Configure the
+registry before the first use of the types it covers.
 
 For a discriminator that is neither a plain string nor a plain int, implement `IDiscriminatorConvention`
 and register it the same way.

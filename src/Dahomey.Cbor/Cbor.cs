@@ -29,7 +29,7 @@ namespace Dahomey.Cbor
                 return new ValueTask<T>(Deserialize<T>(span, options));
             }
 
-            ValueTask<IMemoryOwner<byte>> task = stream.ReadAsync(256, token);
+            ValueTask<AsyncReadResult> task = stream.ReadAndGivePreciseLengthAsync(256, token);
 
             if (task.IsCompletedSuccessfully)
             {
@@ -40,15 +40,17 @@ namespace Dahomey.Cbor
 
             return FinishDeserializeAsync(task);
 
-            T Deserialize(IMemoryOwner<byte> memoryOwner)
+            T Deserialize(AsyncReadResult asyncResult)
             {
-                using (memoryOwner)
+                // The rented buffer is longer than what was read into it, so only the bytes that were
+                // read are the document; the rest is whatever the buffer held before.
+                using (asyncResult.MemoryOwner)
                 {
-                    return Deserialize<T>(memoryOwner.Memory.Span, options);
+                    return Deserialize<T>(asyncResult.MemoryOwner!.Memory.Span.Slice(0, asyncResult.DataRead), options);
                 }
             }
 
-            async ValueTask<T> FinishDeserializeAsync(ValueTask<IMemoryOwner<byte>> localTask)
+            async ValueTask<T> FinishDeserializeAsync(ValueTask<AsyncReadResult> localTask)
             {
                 return Deserialize(await localTask.ConfigureAwait(false));
             }
@@ -67,7 +69,7 @@ namespace Dahomey.Cbor
                 return new ValueTask<object?>(Cbor.Deserialize(objectType, span, options));
             }
 
-            ValueTask<IMemoryOwner<byte>> task = stream.ReadAsync(256, token);
+            ValueTask<AsyncReadResult> task = stream.ReadAndGivePreciseLengthAsync(256, token);
 
             if (task.IsCompletedSuccessfully)
             {
@@ -78,15 +80,17 @@ namespace Dahomey.Cbor
 
             return FinishDeserializeAsync(task);
 
-            object? Deserialize(IMemoryOwner<byte> memoryOwner)
+            object? Deserialize(AsyncReadResult asyncResult)
             {
-                using (memoryOwner)
+                // The rented buffer is longer than what was read into it, so only the bytes that were
+                // read are the document; the rest is whatever the buffer held before.
+                using (asyncResult.MemoryOwner)
                 {
-                    return Cbor.Deserialize(objectType, memoryOwner.Memory.Span, options);
+                    return Cbor.Deserialize(objectType, asyncResult.MemoryOwner!.Memory.Span.Slice(0, asyncResult.DataRead), options);
                 }
             }
 
-            async ValueTask<object?> FinishDeserializeAsync(ValueTask<IMemoryOwner<byte>> localTask)
+            async ValueTask<object?> FinishDeserializeAsync(ValueTask<AsyncReadResult> localTask)
             {
                 return Deserialize(await localTask.ConfigureAwait(false));
             }
