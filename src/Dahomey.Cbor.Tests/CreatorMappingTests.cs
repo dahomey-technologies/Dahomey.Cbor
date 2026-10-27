@@ -234,5 +234,140 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(12, person.Id);
             Assert.Equal("Foo", person.Name);
         }
+
+        [CborNamingConvention(typeof(SnakeCaseNamingConvention))]
+        private class SnakeCaseGetOnly
+        {
+            public int FirstValue { get; }
+            public string SecondValue { get; }
+
+            [CborConstructor]
+            public SnakeCaseGetOnly(int firstValue, string secondValue)
+            {
+                FirstValue = firstValue;
+                SecondValue = secondValue;
+            }
+        }
+
+        [Fact]
+        public void ConstructorWithNamingConvention()
+        {
+            // {"first_value": 12, "second_value": "foo"}: the parameters are matched on the C# member
+            // name, so a naming convention no longer hands them their default value.
+            SnakeCaseGetOnly obj = Helper.Read<SnakeCaseGetOnly>("A26B66697273745F76616C75650C6C7365636F6E645F76616C756563666F6F");
+
+            Assert.Equal(12, obj.FirstValue);
+            Assert.Equal("foo", obj.SecondValue);
+        }
+
+        [CborNamingConvention(typeof(SnakeCaseNamingConvention))]
+        private class SnakeCaseInit
+        {
+            public int FirstValue { get; init; }
+            public int SeenByConstructor { get; }
+
+            [CborConstructor]
+            public SnakeCaseInit(int firstValue)
+            {
+                FirstValue = firstValue;
+                SeenByConstructor = firstValue;
+            }
+        }
+
+        [Fact]
+        public void ConstructorWithNamingConventionReceivesTheValue()
+        {
+            // {"first_value": 12}: the value goes through the constructor, not through the init accessor
+            // after the constructor has run with the default value.
+            SnakeCaseInit obj = Helper.Read<SnakeCaseInit>("A16B66697273745F76616C75650C");
+
+            Assert.Equal(12, obj.FirstValue);
+            Assert.Equal(12, obj.SeenByConstructor);
+        }
+
+        private class RenamedGetOnly
+        {
+            [CborProperty("k")]
+            public int Value { get; }
+
+            [CborConstructor]
+            public RenamedGetOnly(int value)
+            {
+                Value = value;
+            }
+        }
+
+        [Fact]
+        public void ConstructorWithRenamedProperty()
+        {
+            // {"k": 12}
+            RenamedGetOnly obj = Helper.Read<RenamedGetOnly>("A1616B0C");
+
+            Assert.Equal(12, obj.Value);
+        }
+
+        private class ParameterNamedAfterKey
+        {
+            [CborProperty("key")]
+            public int Value { get; }
+
+            [CborConstructor]
+            public ParameterNamedAfterKey(int key)
+            {
+                Value = key;
+            }
+        }
+
+        [Fact]
+        public void ConstructorParameterNamedAfterKey()
+        {
+            // {"key": 12}: a parameter named after the CBOR key, not the member, still matches.
+            ParameterNamedAfterKey obj = Helper.Read<ParameterNamedAfterKey>("A1636B65790C");
+
+            Assert.Equal(12, obj.Value);
+        }
+
+        private class ListedNameWithOtherCase
+        {
+            public int Value { get; }
+
+            [CborConstructor("value")]
+            public ListedNameWithOtherCase(int v)
+            {
+                Value = v;
+            }
+        }
+
+        [Fact]
+        public void ConstructorListedNameWithOtherCase()
+        {
+            // {"Value": 12}: the listed name matches the member ignoring case, and the value is looked up
+            // under the name as it appears in the document.
+            ListedNameWithOtherCase obj = Helper.Read<ListedNameWithOtherCase>("A16556616C75650C");
+
+            Assert.Equal(12, obj.Value);
+        }
+
+        [CborObjectFormat(CborObjectFormat.IntKeyMap)]
+        private class IntKeyGetOnly
+        {
+            [CborProperty(1)]
+            public int FirstValue { get; }
+
+            [CborConstructor]
+            public IntKeyGetOnly(int firstValue)
+            {
+                FirstValue = firstValue;
+            }
+        }
+
+        [Fact]
+        public void ConstructorWithIntKeyMap()
+        {
+            // {1: 12}
+            IntKeyGetOnly obj = Helper.Read<IntKeyGetOnly>("A1010C");
+
+            Assert.Equal(12, obj.FirstValue);
+        }
     }
 }
