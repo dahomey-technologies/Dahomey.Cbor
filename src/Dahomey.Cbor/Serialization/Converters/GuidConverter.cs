@@ -102,7 +102,7 @@ namespace Dahomey.Cbor.Serialization.Converters
                         throw reader.BuildException("Invalid UUID: tag 37 is defined over a byte string");
                     }
 
-                    string text = reader.ReadString();
+                    string? text = reader.ReadString();
 
                     if (text is null
                         || text.Length != CanonicalTextLength
