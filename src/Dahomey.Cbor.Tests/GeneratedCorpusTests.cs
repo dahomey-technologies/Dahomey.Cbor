@@ -75,6 +75,11 @@ namespace Dahomey.Cbor.Tests
     {
         private static object Sample(Type type)
         {
+            if (GeneratedCreatorTests.Samples.TryGetValue(type, out Func<object> creatorSample))
+            {
+                return creatorSample();
+            }
+
             if (type == typeof(CorpusBytes))
             {
                 return new CorpusBytes { Blob = new byte[] { 1, 2, 3 }, Name = "blob" };
@@ -230,141 +235,6 @@ namespace Dahomey.Cbor.Tests
             if (type == typeof(GeneratedTupleHolder))
             {
                 return GeneratedTupleTests.Sample();
-            }
-
-            if (type == typeof(GeneratedRecord))
-            {
-                return GeneratedCreatorTests.SampleRecord();
-            }
-
-            if (type == typeof(GeneratedIndexedRecord))
-            {
-                return new GeneratedIndexedRecord(7, "seven");
-            }
-
-            if (type == typeof(GeneratedSwappedRecord))
-            {
-                return new GeneratedSwappedRecord(1, "one");
-            }
-
-            if (type == typeof(GeneratedSparseRecord))
-            {
-                return new GeneratedSparseRecord(7, "seven");
-            }
-
-            if (type == typeof(GeneratedListedIndexes))
-            {
-                return new GeneratedListedIndexes(2, 1);
-            }
-
-            if (type == typeof(GeneratedListedNames))
-            {
-                return new GeneratedListedNames(2, 1);
-            }
-
-            if (type == typeof(GeneratedSealedRecord))
-            {
-                return new GeneratedSealedRecord(7);
-            }
-
-            if (type == typeof(GeneratedSnakeRecord))
-            {
-                return new GeneratedSnakeRecord(1, 2);
-            }
-
-            if (type == typeof(GeneratedSnakeMethodUse))
-            {
-                return new GeneratedSnakeMethodUse(500);
-            }
-
-            if (type == typeof(GeneratedKebabRecord))
-            {
-                return new GeneratedKebabRecord(1, 2);
-            }
-
-            if (type == typeof(GeneratedRenamedRecord))
-            {
-                return new GeneratedRenamedRecord(1, 2);
-            }
-
-            if (type == typeof(GeneratedSnakeClass))
-            {
-                return new GeneratedSnakeClass(1, 2);
-            }
-
-            if (type == typeof(GeneratedSnakeTransform))
-            {
-                return new GeneratedSnakeTransform(1, 2);
-            }
-
-            if (type == typeof(GeneratedTupleCreator))
-            {
-                return new GeneratedTupleCreator((1, 2));
-            }
-
-            if (type == typeof(GeneratedCaseLower))
-            {
-                return new GeneratedCaseLower(1, 2);
-            }
-
-            if (type == typeof(GeneratedCaseUpper))
-            {
-                return new GeneratedCaseUpper(1, 2);
-            }
-
-            if (type == typeof(GeneratedPartialStruct))
-            {
-                return new GeneratedPartialStruct { X = 1, Y = 2 };
-            }
-
-            if (type == typeof(GeneratedCompleteStruct))
-            {
-                return new GeneratedCompleteStruct(1, 2);
-            }
-
-            if (type == typeof(GeneratedDiscriminatedRecord))
-            {
-                return new GeneratedDiscriminatedRecord(7, "seven");
-            }
-
-            if (type == typeof(GeneratedInheritedArrayRecord))
-            {
-                return new GeneratedInheritedArrayRecord("n") { Id = 7 };
-            }
-
-            if (type == typeof(GeneratedInheritedIntKeyRecord))
-            {
-                return new GeneratedInheritedIntKeyRecord("n") { Id = 7 };
-            }
-
-            if (type == typeof(GeneratedWide17))
-            {
-                return GeneratedCreatorTests.SampleWide17();
-            }
-
-            if (type == typeof(GeneratedWide20))
-            {
-                return GeneratedCreatorTests.SampleWide20();
-            }
-
-            if (type == typeof(GeneratedRequiredCreator))
-            {
-                return new GeneratedRequiredCreator("n");
-            }
-
-            if (type == typeof(GeneratedRequiredStruct))
-            {
-                return new GeneratedRequiredStruct(7);
-            }
-
-            if (type == typeof(GeneratedCreatorMemberFeatures))
-            {
-                return new GeneratedCreatorMemberFeatures(7, "n");
-            }
-
-            if (type == typeof(GeneratedCreatorHolder))
-            {
-                return GeneratedCreatorTests.SampleHolder();
             }
 
             if (type == typeof(ShouldSerializeOnDerivedOnly))
@@ -1001,13 +871,6 @@ namespace Dahomey.Cbor.Tests
             typeof(Cddl.CddlEventLog),
             typeof(Cddl.CddlOutbox),
             typeof(Cddl.CddlEscapedHolder),
-
-            // Deliberately do not round-trip: the first transforms its arguments, and the other two
-            // list names that differ in case from the document's keys -- the behaviour the creator
-            // tests pin, against the reflection path, one by one.
-            typeof(GeneratedSnakeTransform),
-            typeof(GeneratedCaseLower),
-            typeof(GeneratedCaseUpper),
         };
 
         public static IEnumerable<object[]> RoundTrippableTypes()

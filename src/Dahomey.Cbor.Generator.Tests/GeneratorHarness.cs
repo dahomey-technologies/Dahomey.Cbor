@@ -79,34 +79,6 @@ namespace Dahomey.Cbor.GeneratorTests
                 string.Join(Environment.NewLine, output.SyntaxTrees.Skip(1).Select(tree => tree.ToString())));
         }
 
-        /// <summary>
-        /// Like <see cref="RunAgainstLibrary"/>, but returns the errors from compiling the generator's
-        /// output instead of its text -- what an <c>internal</c> or <c>protected</c> member of another
-        /// assembly looks like to a generated context (CS0122).
-        /// </summary>
-        public static (IReadOnlyList<Diagnostic> Reported, IReadOnlyList<Diagnostic> CompileErrors) RunAgainstLibraryAndCompile(
-            string librarySource, string source)
-        {
-            CSharpCompilation library = CSharpCompilation.Create(
-                "GeneratorTestLibrary",
-                new[] { CSharpSyntaxTree.ParseText(librarySource) },
-                ReferenceSet(),
-                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
-
-            CSharpCompilation compilation = CSharpCompilation.Create(
-                "GeneratorTestAssembly",
-                new[] { CSharpSyntaxTree.ParseText(source) },
-                ReferenceSet().Append(library.ToMetadataReference()),
-                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
-
-            CSharpGeneratorDriver.Create(new CborSourceGenerator())
-                .RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out ImmutableArray<Diagnostic> reported);
-
-            return (
-                reported.OrderBy(d => d.Id).ToList(),
-                output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToList());
-        }
-
         public static string GeneratedSource(string source)
         {
             Run(source, out _, out Compilation output);

@@ -191,25 +191,12 @@ namespace Dahomey.Cbor.Generator
         /// parameterless one, which is what a positional record is.
         /// </summary>
         /// <remarks>
-        /// Each entry is the parameter's type, the CBOR name of the member it takes its value from and
-        /// that member's <c>[CborProperty(n)]</c> index (null for a member without one) and the
-        /// constructor parameter's own name, in constructor order. <c>StringKeyMap</c> reads by the name and the other two formats by the index. The names
-        /// are passed to <c>SetMemberNames</c> explicitly rather than left to the parameter names of the
-        /// emitted lambda: a CBOR name set by <c>[CborProperty("my-name")]</c> or by a naming convention
-        /// need not be a legal C# identifier, and a lambda's parameters have to be.
+        /// Per parameter, in constructor order: its type, the CBOR name of the member it takes its value
+        /// from, and that member's <c>[CborProperty(n)]</c> index (null without one). <c>StringKeyMap</c>
+        /// reads by the name and the other two formats by the index.
         /// </remarks>
-        public List<(string Type, string CborName, int? Index, string ParameterName)> CreatorParameters { get; } =
-            new List<(string Type, string CborName, int? Index, string ParameterName)>();
-
-        /// <summary>
-        /// True when the creator is emitted without member names, so the runtime matches each
-        /// parameter itself. Needed under <c>StringKeyMap</c> for a parameter that reflection leaves
-        /// at its default (its member is renamed and has a setter): a name cannot be listed for it,
-        /// because listing a name that matches no member throws when the mapping is built. The runtime
-        /// reads the names off the creator delegate's parameters, so the emitted lambda then carries
-        /// the constructor's own parameter names instead of positional ones.
-        /// </summary>
-        public bool CreatorMatchesByName { get; set; }
+        public List<(string Type, string CborName, int? Index)> CreatorParameters { get; } =
+            new List<(string Type, string CborName, int? Index)>();
 
         /// <summary>
         /// Name of a delegate type the emitter declares for the creator, or null to use

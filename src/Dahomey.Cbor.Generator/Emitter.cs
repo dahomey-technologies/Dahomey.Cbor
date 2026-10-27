@@ -488,58 +488,26 @@ namespace Dahomey.Cbor.Generator
                 builder.AppendLine($"{indent}            }});");
             }
 
-            // A creator for a type `new T()` cannot build: a [CborConstructor], or the single
-            // constructor of a type with no parameterless one, which is what a positional record is.
-            // The member names are given explicitly rather than left to the lambda's parameter names,
-            // because a CBOR name need not be a legal C# identifier and a parameter must be.
+            // A creator for a type `new T()` cannot build: a [CborConstructor], or the only constructor
+            // of a type with no parameterless one, which is what a positional record is. The key each
+            // parameter is read under is given explicitly -- the name for StringKeyMap, the index for
+            // the other two -- because a generated member carries no MemberInfo for CreatorMapping to
+            // match the parameter's C# name against, and a CBOR name need not be a legal identifier.
             if (model.CreatorParameters.Count > 0)
             {
-                // Positional names, except where the runtime has to match parameters to members by
-                // name itself: it reads those names off the delegate, so they must be the real ones.
-                string parameters = string.Join(
-                    ", ",
-                    model.CreatorParameters.Select((p, i) => model.CreatorMatchesByName
-                        ? Microsoft.CodeAnalysis.CSharp.SyntaxFacts.GetKeywordKind(p.ParameterName) != Microsoft.CodeAnalysis.CSharp.SyntaxKind.None
-                            ? "@" + p.ParameterName
-                            : p.ParameterName
-                        : $"a{i}"));
+                string parameters = string.Join(", ", model.CreatorParameters.Select((p, i) => $"a{i}"));
                 string signature = string.Join(
                     ", ", model.CreatorParameters.Select(p => p.Type).Concat(new[] { fullName }));
-                string names = string.Join(
-                    ", ",
-                    model.CreatorParameters.Select(
-                        p => Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(p.CborName, quote: true)));
+                string keys = model.ObjectFormat == "StringKeyMap"
+                    ? ".SetMemberNames(" + string.Join(", ", model.CreatorParameters.Select(
+                        p => Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(p.CborName, quote: true))) + ")"
+                    : ".SetMemberIndexes(" + string.Join(", ", model.CreatorParameters.Select(
+                        p => p.Index!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))) + ")";
 
-                string delegateType = model.CreatorDelegateName ?? $"System.Func<{signature}>";
-                string mapCreator =
+                builder.AppendLine(
                     $"{indent}            objectMapping.MapCreator("
-                    + $"new {delegateType}(({parameters}) => new {fullName}({parameters})))";
-
-                // CreatorMapping matches parameters to members itself when told nothing, but for
-                // IntKeyMap and Array it does so through MemberInfo, which a generated member has
-                // none of -- so the key each format reads by is always given explicitly. Under
-                // StringKeyMap it is left to the runtime only when a parameter has to stay unlisted
-                // (see TypeModel.CreatorMatchesByName).
-                if (model.ObjectFormat == "StringKeyMap")
-                {
-                    if (model.CreatorMatchesByName)
-                    {
-                        builder.AppendLine(mapCreator + ";");
-                    }
-                    else
-                    {
-                        builder.AppendLine(mapCreator);
-                        builder.AppendLine($"{indent}                .SetMemberNames({names});");
-                    }
-                }
-                else
-                {
-                    string indexes = string.Join(
-                        ", ", model.CreatorParameters.Select(p => p.Index!.Value.ToString(
-                            System.Globalization.CultureInfo.InvariantCulture)));
-                    builder.AppendLine(mapCreator);
-                    builder.AppendLine($"{indent}                .SetMemberIndexes({indexes});");
-                }
+                    + $"new {model.CreatorDelegateName ?? $"System.Func<{signature}>"}(({parameters}) => new {fullName}({parameters})))");
+                builder.AppendLine($"{indent}                {keys};");
             }
 
             // SetDiscriminator inserts the discriminator entry at index 0 of the member list, so it
