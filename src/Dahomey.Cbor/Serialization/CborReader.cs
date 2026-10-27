@@ -1723,27 +1723,76 @@ namespace Dahomey.Cbor.Serialization
                         case CborPrimitive.True:
                         case CborPrimitive.Null:
                         case CborPrimitive.Undefined:
-                        case CborPrimitive.SimpleValue:
-                        case CborPrimitive.Break:
                             _state = CborReaderState.Data;
                             break;
 
                         case CborPrimitive.HalfFloat:
+                            ExpectLength(2);
                             Advance(2);
                             break;
 
                         case CborPrimitive.SingleFloat:
+                            ExpectLength(4);
                             Advance(4);
                             break;
 
                         case CborPrimitive.DoubleFloat:
+                            ExpectLength(8);
                             Advance(8);
                             break;
 
                         case CborPrimitive.DecimalFloat:
+                            ExpectLength(16);
                             Advance(16);
                             break;
+
+                        default:
+                            SkipUncommonPrimitive(header);
+                            break;
                     }
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// The rest of major type 7, kept out of <see cref="SkipDataItem"/> so the values that make up
+        /// nearly every skipped member do not pay for them.
+        /// </summary>
+        /// <remarks>
+        /// Simple values 0-19 and 32-255 are well-formed and unassigned (RFC 8949 §3.3), so they are
+        /// skipped. What is not well-formed is a <see cref="CborException"/>: a two-byte simple value
+        /// below 32, which <see cref="CborDataItemScanner"/> refuses as well, the reserved additional
+        /// information 29 and 30, and a break code, which ends an indefinite-length item and is taken by
+        /// the loop that is reading one before it asks for another item - arriving here, it stands where
+        /// an item was expected.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void SkipUncommonPrimitive(CborReaderHeader header)
+        {
+            if (header.AdditionalValue < (byte)CborPrimitive.False)
+            {
+                _state = CborReaderState.Data;
+                return;
+            }
+
+            switch (header.Primitive)
+            {
+                case CborPrimitive.SimpleValue:
+                    // The number of a simple value from 32 up is the byte behind the initial byte.
+                    byte simpleValue = ReadBytes(1)[0];
+
+                    if (simpleValue < 32)
+                    {
+                        ThrowCbor($"Invalid simple value {simpleValue}: a number below 32 is not written behind F8");
+                    }
+                    break;
+
+                case CborPrimitive.Break:
+                    ThrowCbor("Unexpected break code: it ends an indefinite-length item, it is not an item itself");
+                    break;
+
+                default:
+                    ThrowCbor($"Invalid primitive {header.AdditionalValue}: this additional information is reserved");
                     break;
             }
         }
