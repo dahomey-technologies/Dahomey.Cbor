@@ -98,6 +98,16 @@ public partial class Holder
             Assert.DoesNotContain("MapCreator", Generated(declaration));
         }
 
+        /// <summary>A member with no setter is never read, so it does not stop the constructor filling the struct.</summary>
+        [Fact]
+        public void AStructWhoseConstructorFillsEveryWritableMemberIsBuiltThroughIt()
+        {
+            string declaration = "public readonly struct Holder { public Holder(int x, int y) { X = x; Y = y; } public int X { get; } public int Y { get; } public int Sum => X + Y; }";
+
+            Assert.Contains("MapCreator", Generated(declaration));
+            AssertCompiles(declaration);
+        }
+
         [Theory]
         // the context cannot call the constructor
         [InlineData("CBOR1015", "public class Holder { [CborConstructor] protected Holder(int id) { Id = id; } public Holder() { } public int Id { get; set; } }")]

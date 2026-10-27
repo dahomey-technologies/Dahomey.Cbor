@@ -470,12 +470,14 @@ namespace Dahomey.Cbor.Generator
             bool resolved = creator is null || ResolveCreator(type, model, creator, walked, quiet: isStruct && !marked, supplied);
             bool creatorReported = creatorUnreachable || (!resolved && (!isStruct || marked));
 
-            // A struct whose only constructor does not fill every member is read as it always was:
-            // `new T()` and the setters. Built through the constructor, its unsupplied members would be
-            // left to a setter lambda, which a struct member cannot take. The reflection path refuses
+            // A struct whose only constructor does not fill every writable member is read as it always
+            // was: `new T()` and the setters. Built through the constructor, its unsupplied members would
+            // be left to a setter lambda, which a struct member cannot take. The reflection path refuses
             // such a struct (NotSupportedException); the generated path stays lenient unless the
-            // constructor is marked [CborConstructor], which asks for it and is reported.
-            if (creator is not null && isStruct && (!resolved || walked.Any(w => !supplied.Contains(w.Name))))
+            // constructor is marked [CborConstructor], which asks for it and is reported. A member with
+            // no setter (a computed property) is never read, on either path, so it does not count.
+            if (creator is not null && isStruct
+                && (!resolved || model.Members.Any(m => m.CanWrite && !supplied.Contains(m.Name))))
             {
                 if (resolved && marked)
                 {
