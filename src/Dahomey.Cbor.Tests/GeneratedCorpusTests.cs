@@ -268,6 +268,11 @@ namespace Dahomey.Cbor.Tests
                 return new Issues.Issue0240.HalfHolder { Value = (System.Half)1.5f };
             }
 
+            if (type == typeof(GeneratedInterfaceHolder))
+            {
+                return GeneratedCollectionInterfaceTests.Sample();
+            }
+
             if (type == typeof(GeneratedOverrideHolder))
             {
                 return new GeneratedOverrideHolder { Id = 7, Name = "seven" };
