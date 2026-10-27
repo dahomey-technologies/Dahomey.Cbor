@@ -186,10 +186,16 @@ namespace Dahomey.Cbor
         /// </summary>
         /// <remarks>
         /// Carries every value <see cref="TimeSpan"/> holds, since its resolution is 100ns and key -9 is
-        /// finer. A negative duration writes both components negative, so that the value is their sum in
-        /// every case; RFC 9581 does not pin the sign convention for a negative base, so a peer may
-        /// render <c>-1.5s</c> as <c>-2s + 0.5s</c> instead. Both read back here as the same
-        /// <see cref="TimeSpan"/>.
+        /// finer. The fraction is an unsigned count added to the base (RFC 9581 section 3.3), so a
+        /// negative duration floors its base: <c>-1.5s</c> is <c>{1: -2, -9: 500000000}</c>.
+        /// <para>
+        /// On read, keys 1 (integer or float), -3, -6, -9, -12, -15 and -18 are understood, and a
+        /// timescale (keys -1, -13, 13) of UTC or TAI. A fraction finer than 100ns is refused unless it
+        /// is an exact number of ticks; a negative fraction, a second fraction key, a base under key 4
+        /// or 5, an unknown critical (positive) key, another timescale, and a value outside the range of
+        /// <see cref="TimeSpan"/> are each a <see cref="CborException"/>. Unknown elective (negative)
+        /// keys are skipped.
+        /// </para>
         /// </remarks>
         Duration = 1,
     }

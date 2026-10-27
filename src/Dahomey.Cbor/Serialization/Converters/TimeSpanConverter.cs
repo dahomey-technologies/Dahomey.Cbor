@@ -16,36 +16,48 @@ namespace Dahomey.Cbor.Serialization.Converters
         /// <summary>RFC 9581's tag for a duration.</summary>
         public const ulong DurationTag = 1002;
 
-        /// <summary>The base value, in whole seconds. RFC 9581 §3's key 1, shared with tag 1001.</summary>
+        /// <summary>The base value, in seconds. RFC 9581 section 3.1's key 1, shared with tag 1001.</summary>
         private const int SecondsKey = 1;
 
-        private const int MillisecondsKey = -3;
-        private const int MicrosecondsKey = -6;
+        private const int DecimalFractionBaseKey = 4;
+        private const int BigFloatBaseKey = 5;
+
+        /// <summary>The timescale: -1 and -13 elective, 13 critical (section 3.4).</summary>
+        private const int TimescaleElectiveKey = -1;
+        private const int TimescaleElectiveAlternateKey = -13;
+        private const int TimescaleCriticalKey = 13;
+
         private const int NanosecondsKey = -9;
 
         private const long NanosecondsPerTick = 100;
 
         public override TimeSpan Read(ref CborReader reader)
         {
-            // A plain number is accepted as whole seconds. Not a form this writes, and not one RFC 9581
+            // A plain number is accepted as seconds. Not a form this writes, and not one RFC 9581
             // defines -- a duration is always a map there -- but it is the obvious shape for a peer that
             // never adopted the tag, and refusing it would buy nothing.
             switch (reader.GetCurrentDataItemType())
             {
                 case CborDataItemType.Signed:
                 case CborDataItemType.Unsigned:
-                    return TimeSpan.FromTicks(
-                        checked(reader.ReadInt64() * TimeSpan.TicksPerSecond));
+                    return FromWholeSeconds(reader.ReadInt64(), 0);
 
                 case CborDataItemType.Double:
                 case CborDataItemType.Single:
-                    return TimeSpan.FromSeconds(reader.ReadDouble());
+                    return FromFloatSeconds(reader.ReadDouble());
             }
 
             reader.ReadBeginMap();
 
             int size = reader.ReadSize();
-            long ticks = 0;
+
+            bool hasSeconds = false;
+            bool hasFloatSeconds = false;
+            long seconds = 0;
+            double floatSeconds = 0;
+            bool hasFraction = false;
+            long fractionTicks = 0;
+            bool hasTimescale = false;
 
             for (int read = 0; size == -1 || read < size; read++)
             {
@@ -59,43 +71,238 @@ namespace Dahomey.Cbor.Serialization.Converters
                 switch (key)
                 {
                     case SecondsKey:
-                        ticks = checked(ticks + reader.ReadInt64() * TimeSpan.TicksPerSecond);
+                        if (hasSeconds || hasFloatSeconds)
+                        {
+                            throw new CborException("A duration holds key 1 twice");
+                        }
+
+                        // Section 3.1: key 1 is "int or float", exactly as tag 1 is. A float base is
+                        // only meaningful with no fraction key beside it (section 3.3).
+                        if (reader.GetCurrentDataItemType() is CborDataItemType.Single or CborDataItemType.Double)
+                        {
+                            floatSeconds = reader.ReadDouble();
+                            hasFloatSeconds = true;
+                        }
+                        else
+                        {
+                            seconds = reader.ReadInt64();
+                            hasSeconds = true;
+                        }
                         break;
 
-                    case MillisecondsKey:
-                        ticks = checked(ticks + reader.ReadInt64() * TimeSpan.TicksPerMillisecond);
+                    case -3:
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 3);
                         break;
 
-                    case MicrosecondsKey:
-                        ticks = checked(ticks + reader.ReadInt64() * (TimeSpan.TicksPerMillisecond / 1000));
+                    case -6:
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 6);
                         break;
 
                     case NanosecondsKey:
-                        // TimeSpan resolves to 100ns, so anything finer is truncated rather than
-                        // refused: a peer whose clock is more precise is interoperating correctly.
-                        ticks = checked(ticks + reader.ReadInt64() / NanosecondsPerTick);
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 9);
                         break;
 
+                    case -12:
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 12);
+                        break;
+
+                    case -15:
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 15);
+                        break;
+
+                    case -18:
+                        fractionTicks = ReadFraction(ref reader, ref hasFraction, 18);
+                        break;
+
+                    case TimescaleElectiveKey:
+                    case TimescaleElectiveAlternateKey:
+                    case TimescaleCriticalKey:
+                        // Section 3.4. A length in SI seconds is the same on UTC and TAI, so both are
+                        // accepted; any other timescale is one this cannot vouch for. Keys -1 and -13
+                        // are the *timescale* (not a floating-point fraction), at most one of the three.
+                        if (hasTimescale)
+                        {
+                            throw new CborException("A duration holds more than one timescale key");
+                        }
+
+                        hasTimescale = true;
+
+                        if (reader.GetCurrentDataItemType() != CborDataItemType.Unsigned
+                            || reader.ReadUInt64() > 1)
+                        {
+                            throw new CborException("A duration in an unsupported timescale; only UTC (0) and TAI (1) are read");
+                        }
+                        break;
+
+                    case DecimalFractionBaseKey:
+                    case BigFloatBaseKey:
+                        // Section 3.2: a base time as a decimal fraction or bigfloat. Not read here, and
+                        // skipping it would drop the whole value.
+                        throw new CborException(
+                            $"A duration with its base under key {key} is not supported; use key 1");
+
                     default:
-                        // RFC 9581 defines further keys -- a decimal or bigfloat base, a timescale, a
-                        // clock quality -- none of which change the length this reads. Skipping keeps
-                        // an unrecognised one from failing a document that is otherwise readable.
+                        if (key > 0)
+                        {
+                            // Section 3: a positive key is critical, and a critical key this does not
+                            // understand means the value cannot be read faithfully.
+                            throw new CborException($"A duration holds the unsupported critical key {key}");
+                        }
+
+                        // Elective: clock quality, uncertainty, guarantee and the like. None changes the
+                        // length being described.
                         reader.SkipDataItem();
                         break;
                 }
             }
 
-            return TimeSpan.FromTicks(ticks);
+            if (size == -1)
+            {
+                reader.ConsumeBreak();
+            }
+
+            if (hasFloatSeconds)
+            {
+                if (hasFraction)
+                {
+                    throw new CborException("A duration with a fraction key needs an integer under key 1");
+                }
+
+                return FromFloatSeconds(floatSeconds);
+            }
+
+            if (!hasSeconds)
+            {
+                throw new CborException("A duration needs a base under key 1");
+            }
+
+            return FromWholeSeconds(seconds, fractionTicks);
+        }
+
+        /// <summary>
+        /// Reads a fraction key's unsigned count of 10^-<paramref name="exponent"/> seconds as ticks.
+        /// </summary>
+        /// <remarks>
+        /// The value is unsigned by definition (section 3.3), so a negative one is refused rather than
+        /// read as a subtraction -- a sign there has no defined meaning. A TimeSpan resolves to 100ns,
+        /// so a finer fraction is refused unless it is an exact multiple of a tick: truncating would
+        /// make a peer's value silently read as a different duration.
+        /// </remarks>
+        private static long ReadFraction(ref CborReader reader, ref bool hasFraction, int exponent)
+        {
+            if (hasFraction)
+            {
+                throw new CborException("A duration holds more than one fraction key");
+            }
+
+            hasFraction = true;
+
+            if (reader.GetCurrentDataItemType() != CborDataItemType.Unsigned)
+            {
+                throw new CborException($"A duration's fraction key -{exponent} must be an unsigned integer");
+            }
+
+            ulong count = reader.ReadUInt64();
+
+            // Ticks are 10^-7 s. Coarser keys scale up, finer ones divide down.
+            if (exponent <= 7)
+            {
+                ulong scale = 1;
+                for (int i = exponent; i < 7; i++)
+                {
+                    scale *= 10;
+                }
+
+                if (count > long.MaxValue / scale)
+                {
+                    throw new CborException("A duration's fraction is out of range for a TimeSpan");
+                }
+
+                return (long)(count * scale);
+            }
+
+            ulong divisor = 1;
+            for (int i = 7; i < exponent; i++)
+            {
+                divisor *= 10;
+            }
+
+            if (count % divisor != 0)
+            {
+                throw new CborException(
+                    $"A duration's fraction is finer than a TimeSpan's 100ns resolution ({count} x 1e-{exponent} s)");
+            }
+
+            ulong ticks = count / divisor;
+
+            if (ticks > long.MaxValue)
+            {
+                throw new CborException("A duration's fraction is out of range for a TimeSpan");
+            }
+
+            return (long)ticks;
+        }
+
+        /// <summary>
+        /// <c>seconds + fraction</c>, the fraction being non-negative (section 3.3), checked against the
+        /// range of a <see cref="TimeSpan"/>.
+        /// </summary>
+        private static TimeSpan FromWholeSeconds(long seconds, long fractionTicks)
+        {
+            try
+            {
+                long ticks;
+
+                if (seconds < 0)
+                {
+                    // seconds * 1e7 alone can fall below long.MinValue while the sum with a positive
+                    // fraction does not -- TimeSpan.MinValue is exactly that case -- so one second is
+                    // moved from the first term to the second.
+                    ticks = checked((seconds + 1) * TimeSpan.TicksPerSecond
+                        + (fractionTicks - TimeSpan.TicksPerSecond));
+                }
+                else
+                {
+                    ticks = checked(seconds * TimeSpan.TicksPerSecond + fractionTicks);
+                }
+
+                return TimeSpan.FromTicks(ticks);
+            }
+            catch (OverflowException)
+            {
+                throw new CborException("A duration is out of range for a TimeSpan");
+            }
+        }
+
+        /// <summary>
+        /// A float base is inexact by nature, so it is rounded to the nearest tick; NaN, infinity and
+        /// anything outside a <see cref="TimeSpan"/>'s range are refused.
+        /// </summary>
+        private static TimeSpan FromFloatSeconds(double seconds)
+        {
+            double ticks = Math.Round(seconds * TimeSpan.TicksPerSecond);
+
+            if (double.IsNaN(ticks) || ticks < long.MinValue || ticks >= 9223372036854775808.0)
+            {
+                throw new CborException("A duration is out of range for a TimeSpan");
+            }
+
+            return TimeSpan.FromTicks((long)ticks);
         }
 
         public override void Write(ref CborWriter writer, TimeSpan value)
         {
             long ticks = value.Ticks;
             long seconds = ticks / TimeSpan.TicksPerSecond;
-
-            // Truncation is toward zero on both sides, so the remainder carries the sign of the value
-            // and the two components sum back to it without a case for negatives.
             long remainder = ticks % TimeSpan.TicksPerSecond;
+
+            // Section 3.3 makes the fraction an unsigned count added to the base, so it can never be
+            // negative: the base is floored, and -1.5s is {1: -2, -9: 500000000}.
+            if (remainder < 0)
+            {
+                seconds--;
+                remainder += TimeSpan.TicksPerSecond;
+            }
 
             writer.WriteSemanticTag(DurationTag);
 

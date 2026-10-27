@@ -40,8 +40,9 @@ namespace Dahomey.Cbor.Tests
         [InlineData("D903EAA101390E0F", 0, -1, 0, 0, 0)]
         // A fractional part adds nanoseconds under key -9.
         [InlineData("D903EAA20101281A1DCD6500", 0, 0, 0, 1, 500)]
-        // Both components go negative together, so the value is their sum in every case.
-        [InlineData("D903EAA20120283A1DCD64FF", 0, 0, 0, -1, -500)]
+        // RFC 9581 3.3: the fraction is an unsigned count added to the base, so -1.5s is -2 + 0.5.
+        // Hand-written: A2 {01: 21 (-2), 28 (-9): 1A 1DCD6500 (500000000)}.
+        [InlineData("D903EAA20121281A1DCD6500", 0, 0, 0, -1, -500)]
         public void DurationRoundTrips(
             string hexBuffer, int days, int hours, int minutes, int seconds, int milliseconds)
         {
@@ -82,17 +83,88 @@ namespace Dahomey.Cbor.Tests
         }
 
         /// <summary>
-        /// RFC 9581 §3 defines keys this converter does not act on -- a timescale, a clock quality --
-        /// and none of them change the length being described, so an unrecognised one is skipped rather
-        /// than failing a document that is otherwise readable.
+        /// RFC 9581 3.4: key -1 is the timescale (1 = TAI), not a fraction. A length in SI seconds is
+        /// the same on UTC and TAI. An unknown elective key (negative, e.g. clock class -2) is skipped.
         /// </summary>
         [Fact]
-        public void AnUnrecognisedKeyIsSkipped()
+        public void TheTimescaleAndAnUnknownElectiveKeyAreAccepted()
         {
-            // 1002({1: 3723, -1: 1}) -- key -1 is the timescale indicator.
+            // 1002({1: 3723, -1: 1})
             Assert.Equal(
                 TimeSpan.FromSeconds(3723),
                 Helper.Read<TimeSpan>("D903EAA201190E8B2001", Duration()));
+            // 1002({1: 3723, -2: 5})
+            Assert.Equal(
+                TimeSpan.FromSeconds(3723),
+                Helper.Read<TimeSpan>("D903EAA201190E8B2105", Duration()));
+        }
+
+        /// <summary>The same -1.5s through both signs of base: the sum is what counts, and only the floored form is written.</summary>
+        [Fact]
+        public void NegativeFractionalDurationsFollowTheRfc()
+        {
+            TimeSpan value = TimeSpan.FromSeconds(-1.5);
+
+            Helper.TestWrite(value, "D903EAA20121281A1DCD6500", null, Duration());
+            Assert.Equal(value, Helper.Read<TimeSpan>(Helper.Write(value, Duration()), Duration()));
+            // -0.25s: base -1, fraction 750000000 (hand-written).
+            Helper.TestWrite(TimeSpan.FromSeconds(-0.25), "D903EAA20120281A2CB41780", null, Duration());
+            // -1 + 0.5 = -0.5s read from a hand-written payload.
+            Assert.Equal(TimeSpan.FromSeconds(-0.5), Helper.Read<TimeSpan>("D903EAA20120281A1DCD6500", Duration()));
+        }
+
+        [Theory]
+        [InlineData(long.MinValue)]
+        [InlineData(long.MaxValue)]
+        [InlineData(-1L)]
+        [InlineData(-9999999L)]
+        [InlineData(0L)]
+        public void TickExtremesRoundTrip(long ticks)
+        {
+            TimeSpan value = TimeSpan.FromTicks(ticks);
+            Assert.Equal(value, Helper.Read<TimeSpan>(Helper.Write(value, Duration()), Duration()));
+        }
+
+        [Theory]
+        // negative fraction (-9: -1)
+        [InlineData("D903EAA201002820")]
+        // two fraction keys: -3 and -9
+        [InlineData("D903EAA3010022012801")]
+        // base under key 4 (decimal fraction)
+        [InlineData("D903EAA104822101")]
+        // sub-tick fraction, 1ns under key -9
+        [InlineData("D903EAA201002801")]
+        // out of range: 2^62 seconds
+        [InlineData("D903EAA1011B4000000000000000")]
+        // seconds + fraction past MaxValue: 922337203685 s + 0.6 s
+        [InlineData("D903EAA2011B000000D6BF94D5E5281A23C34600")]
+        // missing base
+        [InlineData("D903EAA1281A1DCD6500")]
+        // unsupported timescale 2
+        [InlineData("D903EAA201012002")]
+        // unknown critical key 7
+        [InlineData("D903EAA201000700")]
+        // float base together with a fraction
+        [InlineData("D903EAA201F93E002801")]
+        public void AnUnreadableDurationIsACborException(string hexBuffer)
+        {
+            Assert.Throws<CborException>(() => Helper.Read<TimeSpan>(hexBuffer, Duration()));
+        }
+
+        [Fact]
+        public void AFinerFractionIsAcceptedWhenItIsAWholeNumberOfTicks()
+        {
+            // -9: 200 ns = 2 ticks
+            Assert.Equal(TimeSpan.FromTicks(2), Helper.Read<TimeSpan>("D903EAA2010028" + "18C8", Duration()));
+            // -12: 100000 ps = 100 ns = 1 tick
+            Assert.Equal(TimeSpan.FromTicks(1), Helper.Read<TimeSpan>("D903EAA201002B1A000186A0", Duration()));
+        }
+
+        [Fact]
+        public void AFloatBaseIsRead()
+        {
+            // 1002({1: 1.5})
+            Assert.Equal(TimeSpan.FromSeconds(1.5), Helper.Read<TimeSpan>("D903EAA101F93E00", Duration()));
         }
 
         /// <summary>

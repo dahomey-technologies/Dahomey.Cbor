@@ -27,7 +27,7 @@ namespace Dahomey.Cbor.Tests.Cddl
         public void DurationIsTagOneThousandTwoOverAMap()
         {
             Assert.Contains(
-                "\"Elapsed\": #6.1002({1 => int, ? -9 => int}),",
+                "\"Elapsed\": #6.1002({1 => int, ? -9 => uint}),",
                 CddlDurationContext.CddlSchema.Replace("\r\n", "\n"));
         }
 
@@ -56,6 +56,23 @@ namespace Dahomey.Cbor.Tests.Cddl
         {
             byte[] cbor = Helper.Write(
                 new CddlDurationHolder { Elapsed = new TimeSpan(0, 1, 2, 3, 500) },
+                Context.Options).HexToBytes();
+
+            CddlResult result = CddlTool.Validate(
+                CddlDurationContext.CddlSchema, "CddlDurationHolder", cbor);
+
+            Assert.True(result.Ok, result.Output);
+        }
+
+        /// <summary>
+        /// A negative fractional value, whose fraction is the unsigned remainder the schema's uint
+        /// admits (RFC 9581 3.3).
+        /// </summary>
+        [CddlFact]
+        public void ANegativeFractionalValueValidatesAgainstTheSchema()
+        {
+            byte[] cbor = Helper.Write(
+                new CddlDurationHolder { Elapsed = TimeSpan.FromSeconds(-1.5) },
                 Context.Options).HexToBytes();
 
             CddlResult result = CddlTool.Validate(
