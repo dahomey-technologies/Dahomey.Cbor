@@ -28,14 +28,15 @@ namespace Dahomey.Cbor.Serialization.Conventions
         private readonly ConcurrentDictionary<Type, IDiscriminatorConvention> _conventionsByType = new ConcurrentDictionary<Type, IDiscriminatorConvention>();
 
         /// <summary>
-        /// Incremented whenever a registration makes a type resolve to a convention it did not resolve
-        /// to before. Lets a holder of a resolved convention tell "still the same answer" from "worth
-        /// asking again" without asking.
+        /// Incremented whenever a registration, or <see cref="ClearConventions"/>, may change what a
+        /// type resolves to. Lets a holder of a resolved convention tell "still the same answer" from
+        /// "worth asking again" without asking.
         /// </summary>
         /// <remarks>
-        /// Only ever needed by a holder whose answer was <c>null</c>: resolution is monotone - a type
-        /// that resolves to a convention keeps it, since nothing unregisters a type - so a non-null
-        /// answer can be held forever, and a null one is the only one that can go stale.
+        /// Every holder - the object converters, the discriminator mapping and its member converter -
+        /// compares it against the version its answer was stamped with, null answers and non-null ones
+        /// alike. A non-null answer used to be kept forever on the grounds that nothing unregisters a
+        /// type, which <see cref="ClearConventions"/> contradicts.
         /// </remarks>
         private int _version;
 

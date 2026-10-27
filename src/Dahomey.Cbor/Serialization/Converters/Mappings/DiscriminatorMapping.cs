@@ -13,13 +13,14 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
     public class DiscriminatorMapping<T> : IDiscriminatorMapping
     {
         /// <remarks>
-        /// Volatile because <see cref="EnsureInitialize"/> reads it outside the lock and the caller
-        /// goes straight on to read <see cref="_memberName"/>. The two writes are ordered here and
-        /// have to be seen in that order by a reader that never takes the lock; without the barrier
-        /// a weak memory model may hand it the flag ahead of the name it stands for, and
-        /// <see cref="MemberName"/> answers <c>null</c> for a mapping that is in fact initialized.
+        /// The registry <see cref="DiscriminatorConventionRegistry.Version"/> that <see cref="_memberName"/>
+        /// was resolved at, or -1 before the first resolution. Volatile because
+        /// <see cref="EnsureInitialize"/> reads it outside the lock and the caller goes straight on to
+        /// read <see cref="_memberName"/>: the name is written first and the version after, and a reader
+        /// has to see them in that order, or <see cref="MemberName"/> answers a stale name for a mapping
+        /// that is in fact current.
         /// </remarks>
-        private volatile bool _isInitialized = false;
+        private volatile int _initializedVersion = -1;
         private readonly object _lock = new object();
         private readonly CborOptions _options;
         private readonly DiscriminatorConventionRegistry _discriminatorConventionRegistry;
@@ -54,28 +55,30 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
         }
 
         /// <remarks>
-        /// The flag latches on having <em>resolved a convention</em>, not on having looked for one.
-        /// The registry answers <c>null</c> for a type whose subtypes are not registered yet, and a
-        /// registration that arrives later has to reach this mapping; latching on the attempt would
-        /// freeze <see cref="MemberName"/> at <c>null</c> for the lifetime of the options. Once a
-        /// convention is in hand the answer no longer moves — the registry never displaces a
-        /// resolved convention with another one — so the name is safe to keep.
+        /// Resolved again whenever the registry's version has moved. The name was once latched on the
+        /// first non-null answer on the grounds that a resolved convention never changes, which holds
+        /// until <see cref="DiscriminatorConventionRegistry.ClearConventions"/>: a different convention
+        /// may then govern the type under another member name. A type with no convention resolves to
+        /// <c>null</c> and is simply stamped, so asking again costs one int compare until something is
+        /// registered.
         /// </remarks>
         public void EnsureInitialize()
         {
-            if (!_isInitialized)
+            if (_initializedVersion != _discriminatorConventionRegistry.Version)
             {
                 lock (_lock)
                 {
-                    if (!_isInitialized)
+                    // Sampled before the lookup, so a registration landing in between is seen next time.
+                    int version = _discriminatorConventionRegistry.Version;
+
+                    if (_initializedVersion != version)
                     {
                         IDiscriminatorConvention? discriminatorConvention = _discriminatorConventionRegistry.GetConvention(_objectMapping.ObjectType);
-                        if (discriminatorConvention != null)
-                        {
-                            _memberName = Encoding.UTF8.GetString(discriminatorConvention.MemberName);
+                        _memberName = discriminatorConvention != null
+                            ? Encoding.UTF8.GetString(discriminatorConvention.MemberName)
+                            : null;
 
-                            _isInitialized = true;
-                        }
+                        _initializedVersion = version;
                     }
                 }
             }
