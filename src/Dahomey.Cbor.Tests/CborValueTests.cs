@@ -366,5 +366,14 @@ namespace Dahomey.Cbor.Tests
             Assert.Equal(expected, Helper.Write(cborValue));
             Assert.Equal(expected, Helper.Write(Helper.Read<CborValue>(expected)));
         }
+
+        [Fact]
+        public void WriteNullCborValue()
+        {
+            Helper.TestWrite<CborValue>(null, "F6");
+            Helper.TestWrite(new CborValueObject { CborValue = null }, "A16943626F7256616C7565F6");
+            Helper.TestWrite(new List<CborValue> { null }, "81F6");
+            Helper.TestWrite(new Dictionary<string, CborValue> { ["a"] = null }, "A16161F6");
+        }
     }
 }
