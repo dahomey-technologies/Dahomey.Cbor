@@ -515,6 +515,7 @@ namespace Dahomey.Cbor.Serialization.Converters
         private readonly DiscriminatorConventionRegistry _conventionRegistry;
         private readonly CborDiscriminatorPolicy _discriminatorPolicy;
         private readonly CborObjectFormat _objectFormat;
+        private readonly IObjectMapping? _objectMapping;
 
         /// <summary>
         /// The convention and its member name, stamped with the registry version they were resolved at,
@@ -542,13 +543,20 @@ namespace Dahomey.Cbor.Serialization.Converters
             CborOptions options,
             IDiscriminatorConvention discriminatorConvention,
             CborDiscriminatorPolicy discriminatorPolicy,
-            CborObjectFormat objectFormat)
+            CborObjectFormat objectFormat,
+            IObjectMapping? objectMapping = null)
         {
             _options = options;
             _conventionRegistry = options.Registry.DiscriminatorConventionRegistry;
             _discriminatorPolicy = discriminatorPolicy;
             _objectFormat = objectFormat;
-            _resolved = new Resolved(_conventionRegistry.Version, discriminatorConvention);
+            _objectMapping = objectMapping;
+
+            // Stamped with a version no registry has, not with the current one: the caller resolved
+            // the convention before this constructor ran, and a registration landing in between would
+            // otherwise be stamped as already accounted for. The first use asks again instead, which
+            // costs one lookup and returns the same answer when nothing moved.
+            _resolved = new Resolved(-1, discriminatorConvention);
         }
 
         private Resolved Current
@@ -564,7 +572,16 @@ namespace Dahomey.Cbor.Serialization.Converters
                 }
 
                 // Sampled before the lookup, so a registration landing in between is seen next time.
-                resolved = new Resolved(version, _conventionRegistry.GetConvention(typeof(T)));
+                IDiscriminatorConvention? convention = _conventionRegistry.GetConvention(typeof(T));
+
+                // Nothing has validated this name against the type's other members, if it is not the
+                // one the mapping was built with. Refused before it is kept, so every use asks again.
+                if (_objectMapping != null)
+                {
+                    MemberMappingErrors.ThrowIfDiscriminatorNameCollides(_objectMapping, convention);
+                }
+
+                resolved = new Resolved(version, convention);
                 Volatile.Write(ref _resolved, resolved);
                 return resolved;
             }

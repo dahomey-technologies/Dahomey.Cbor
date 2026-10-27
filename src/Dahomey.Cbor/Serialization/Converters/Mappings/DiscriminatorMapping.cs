@@ -94,7 +94,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Mappings
             }
 
             IMemberConverter memberConverter = new DiscriminatorMemberConverter<T>(
-                _options, discriminatorConvention, _objectMapping.DiscriminatorPolicy, _objectMapping.ObjectFormat);
+                _options, discriminatorConvention, _objectMapping.DiscriminatorPolicy, _objectMapping.ObjectFormat, _objectMapping);
 
             return memberConverter;
         }

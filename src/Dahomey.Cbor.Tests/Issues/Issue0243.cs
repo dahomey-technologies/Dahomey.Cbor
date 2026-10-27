@@ -1,6 +1,16 @@
-﻿using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Attributes;
+using Dahomey.Cbor.Serialization;
 using Dahomey.Cbor.Serialization.Conventions;
+using Dahomey.Cbor.Serialization.Converters;
+using Dahomey.Cbor.Serialization.Converters.Mappings;
 using Dahomey.Cbor.Tests.Extensions;
+using System;
+using System.Buffers;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Dahomey.Cbor.Tests.Issues
@@ -90,7 +100,6 @@ namespace Dahomey.Cbor.Tests.Issues
             DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
             registry.RegisterType<KnownChannel>();
 
-            // {"_t": 1, "Id": 7}
             Assert.IsType<KnownChannel>(Cbor.Deserialize<BaseChannel>(KnownSubtype.HexToBytes(), options));
 
             registry.ClearConventions();
@@ -103,7 +112,7 @@ namespace Dahomey.Cbor.Tests.Issues
 
         /// <summary>
         /// Clearing and registering nothing after a read leaves the hierarchy undiscriminated for the
-        /// converters that already exist, not governed by the convention they resolved earlier.
+        /// converters that already exist, rather than governed by the convention they resolved earlier.
         /// </summary>
         [Fact]
         public void ClearingAfterAReadStopsTheConverterUsingTheClearedConvention()
@@ -115,8 +124,9 @@ namespace Dahomey.Cbor.Tests.Issues
 
             registry.ClearConventions();
 
-            // The discriminator is now just an unknown member of an abstract type.
-            Assert.ThrowsAny<System.Exception>(
+            // The discriminator is now an unknown member of an abstract type, and nothing says how to
+            // build one. The refusal is the library's own, not an accident of a stale convention.
+            Assert.Throws<CborException>(
                 () => Cbor.Deserialize<BaseChannel>(KnownSubtype.HexToBytes(), options));
 
             // And a convention registered later governs it again.
@@ -146,46 +156,6 @@ namespace Dahomey.Cbor.Tests.Issues
         }
 
         /// <summary>
-        /// Readers racing a clear-and-reregister settle on the registry's final answer, and none of them
-        /// throws anything but the refusal an unregistered discriminator is entitled to.
-        /// </summary>
-        [Fact]
-        public void ReadsRacingAClearSettleOnTheFinalConvention()
-        {
-            CborOptions options = new CborOptions { UnhandledNameMode = UnhandledNameMode.Silent };
-            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
-            registry.RegisterType<KnownChannel>();
-            Cbor.Deserialize<BaseChannel>(KnownSubtype.HexToBytes(), options);
-
-            using var stop = new System.Threading.CancellationTokenSource();
-            var readers = new System.Collections.Generic.List<System.Threading.Tasks.Task>();
-            for (int i = 0; i < 4; i++)
-            {
-                readers.Add(System.Threading.Tasks.Task.Run(() =>
-                {
-                    while (!stop.IsCancellationRequested)
-                    {
-                        try { Cbor.Deserialize<BaseChannel>(UnknownSubtype.HexToBytes(), options); }
-                        catch (CborException) { }
-                    }
-                }));
-            }
-
-            for (int i = 0; i < 200; i++)
-            {
-                registry.ClearConventions();
-                registry.RegisterConvention(
-                    new DefaultDiscriminatorConvention<int>(options.Registry, "_t", typeof(FallbackChannel)));
-                registry.RegisterType<KnownChannel>();
-            }
-
-            stop.Cancel();
-            System.Threading.Tasks.Task.WaitAll(readers.ToArray());
-
-            Assert.IsType<FallbackChannel>(Cbor.Deserialize<BaseChannel>(UnknownSubtype.HexToBytes(), options));
-        }
-
-        /// <summary>
         /// The write side holds a convention too, in the discriminator's member converter.
         /// </summary>
         [Fact]
@@ -195,23 +165,215 @@ namespace Dahomey.Cbor.Tests.Issues
             DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
             registry.RegisterType<KnownChannel>();
 
-            byte[] before = Write(new KnownChannel { Id = 7 }, options);
-            Assert.Equal(KnownSubtype.HexToBytes(), before);
+            Assert.Equal(KnownSubtype.HexToBytes(), Write(new KnownChannel { Id = 7 }, options));
 
             registry.ClearConventions();
             registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "kind"));
             registry.RegisterType<KnownChannel>();
 
             // {"kind": 1, "Id": 7}
-            byte[] after = Write(new KnownChannel { Id = 7 }, options);
-            Assert.Equal("A264" + "6B696E64" + "01" + "62" + "4964" + "07", System.BitConverter.ToString(after).Replace("-", ""));
+            Assert.Equal(
+                "A2646B696E6401624964" + "07",
+                Convert.ToHexString(Write(new KnownChannel { Id = 7 }, options)));
+        }
+
+        /// <summary>
+        /// The discriminator mapping reports the member name of the convention now in force. That is
+        /// what the mapping's other consumers read, so it is pinned directly.
+        /// </summary>
+        [Fact]
+        public void TheDiscriminatorMappingFollowsTheConventionInForce()
+        {
+            CborOptions options = new CborOptions();
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.RegisterType<KnownChannel>();
+
+            IDiscriminatorMapping mapping = options.Registry.ObjectMappingRegistry.Lookup<KnownChannel>()
+                .MemberMappings.OfType<IDiscriminatorMapping>().Single();
+            Assert.Equal("_t", mapping.MemberName);
+
+            registry.ClearConventions();
+            registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "kind"));
+            registry.RegisterType<KnownChannel>();
+
+            Assert.Equal("kind", mapping.MemberName);
+        }
+
+        /// <summary>
+        /// A discriminator name that a fresh <c>CborOptions</c> refuses when the mapping is built must
+        /// not become writable because the convention arrived later.
+        /// </summary>
+        [Fact]
+        public void ADiscriminatorNameCollidingWithAMemberIsRefusedAfterTheFact()
+        {
+            const string Expected = "maps several fields/properties to the member name 'Id'";
+
+            // What fresh options say.
+            CborOptions fresh = new CborOptions { DiscriminatorPolicy = CborDiscriminatorPolicy.Always };
+            fresh.Registry.DiscriminatorConventionRegistry.ClearConventions();
+            fresh.Registry.DiscriminatorConventionRegistry.RegisterConvention(
+                new DefaultDiscriminatorConvention<int>(fresh.Registry, "Id"));
+            fresh.Registry.DiscriminatorConventionRegistry.RegisterType<KnownChannel>();
+            CborException freshException = Assert.Throws<CborException>(() => Write(new KnownChannel { Id = 7 }, fresh));
+            Assert.Contains(Expected, freshException.Message);
+
+            // The same registrations arriving after the type was mapped and written once.
+            CborOptions options = new CborOptions { DiscriminatorPolicy = CborDiscriminatorPolicy.Always };
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.RegisterType<KnownChannel>();
+            Write(new KnownChannel { Id = 7 }, options);
+
+            registry.ClearConventions();
+            registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "Id"));
+            registry.RegisterType<KnownChannel>();
+
+            CborException written = Assert.Throws<CborException>(() => Write(new KnownChannel { Id = 7 }, options));
+            Assert.Contains(Expected, written.Message);
+
+            CborException read = Assert.Throws<CborException>(
+                () => Cbor.Deserialize<KnownChannel>(KnownSubtype.HexToBytes(), options));
+            Assert.Contains(Expected, read.Message);
+        }
+
+        /// <summary>
+        /// A member converter handed a convention that the registry has since replaced does not trust
+        /// it: the caller resolved it before the constructor ran, so the version it is stamped with has
+        /// to be one the registry has not reached.
+        /// </summary>
+        [Fact]
+        public void AMemberConverterBuiltFromAnOutdatedConventionAsksAgain()
+        {
+            CborOptions options = new CborOptions();
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            DefaultDiscriminatorConvention<int> outdated = new DefaultDiscriminatorConvention<int>(options.Registry, "old");
+
+            registry.ClearConventions();
+            registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "kind"));
+            registry.RegisterType<KnownChannel>();
+
+            DiscriminatorMemberConverter<KnownChannel> converter = new DiscriminatorMemberConverter<KnownChannel>(
+                options, outdated, CborDiscriminatorPolicy.Always, CborObjectFormat.StringKeyMap);
+
+            Assert.Equal("kind", System.Text.Encoding.UTF8.GetString(converter.MemberName));
+        }
+
+        /// <summary>
+        /// The version a resolution is stamped with is the one taken before the lookup. A convention
+        /// that changes the registry from inside the lookup - here by swapping the conventions and
+        /// registering a subtype - makes the answer it returns outdated on arrival, and stamping it
+        /// with the version read afterwards would call it current for good.
+        /// </summary>
+        [Fact]
+        public void ARegistrationDuringAResolutionIsNotStampedAsAccountedFor()
+        {
+            CborOptions options = new CborOptions { UnhandledNameMode = UnhandledNameMode.Silent };
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.RegisterConvention(new SwappingConvention(options));
+
+            // The converter for BaseChannel is built, and resolves, inside this call. The resolution
+            // finds nothing and swaps the conventions on its way, and the read has to notice.
+            Assert.IsType<FallbackChannel>(Cbor.Deserialize<BaseChannel>(UnknownSubtype.HexToBytes(), options));
+        }
+
+        /// <summary>
+        /// Readers racing a series of clears and re-registrations, each installing a different fallback,
+        /// refuse only with a <see cref="CborException"/> and settle on the last one installed.
+        /// </summary>
+        [Fact]
+        public async Task ReadsRacingAClearSettleOnTheFinalConventionAsync()
+        {
+            CborOptions options = new CborOptions { UnhandledNameMode = UnhandledNameMode.Silent };
+            DiscriminatorConventionRegistry registry = options.Registry.DiscriminatorConventionRegistry;
+            registry.RegisterType<KnownChannel>();
+            Cbor.Deserialize<BaseChannel>(KnownSubtype.HexToBytes(), options);
+
+            using CancellationTokenSource stop = new CancellationTokenSource();
+            ConcurrentBag<Exception> unexpected = new ConcurrentBag<Exception>();
+            int reads = 0;
+
+            List<Task> readers = Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+            {
+                while (!stop.IsCancellationRequested)
+                {
+                    try
+                    {
+                        Cbor.Deserialize<BaseChannel>(UnknownSubtype.HexToBytes(), options);
+                    }
+                    catch (CborException)
+                    {
+                        // Between a clear and the registration that follows, nothing resolves.
+                    }
+                    catch (Exception exception)
+                    {
+                        unexpected.Add(exception);
+                    }
+
+                    Interlocked.Increment(ref reads);
+                }
+            })).ToList();
+
+            // Nothing is changed until every reader has been through the loop at least once.
+            while (Volatile.Read(ref reads) < 16)
+            {
+                await Task.Yield();
+            }
+
+            for (int i = 0; i < 200; i++)
+            {
+                registry.ClearConventions();
+                registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(
+                    options.Registry, "_t", i % 2 == 0 ? typeof(FallbackChannel) : typeof(OtherFallbackChannel)));
+                registry.RegisterType<KnownChannel>();
+            }
+
+            await stop.CancelAsync();
+            await Task.WhenAll(readers);
+
+            Assert.Empty(unexpected);
+            Assert.IsType<OtherFallbackChannel>(Cbor.Deserialize<BaseChannel>(UnknownSubtype.HexToBytes(), options));
         }
 
         private static byte[] Write(BaseChannel value, CborOptions options)
         {
-            using var stream = new System.IO.MemoryStream();
-            Cbor.SerializeAsync<BaseChannel>(value, stream, options).GetAwaiter().GetResult();
-            return stream.ToArray();
+            ArrayBufferWriter<byte> buffer = new ArrayBufferWriter<byte>();
+            Cbor.Serialize<BaseChannel>(value, buffer, options);
+            return buffer.WrittenSpan.ToArray();
+        }
+
+        /// <summary>
+        /// Resolves nothing, but the first time it is asked about the base channel it replaces the
+        /// conventions and registers a subtype under the new one, which is what makes the base resolve
+        /// from then on.
+        /// </summary>
+        private sealed class SwappingConvention : IDiscriminatorConvention
+        {
+            private static readonly byte[] Name = { (byte)'_', (byte)'t' };
+            private readonly CborOptions _options;
+            private bool _swapped;
+
+            public SwappingConvention(CborOptions options) => _options = options;
+
+            public ReadOnlySpan<byte> MemberName => Name;
+
+            public Type ReadDiscriminator(ref CborReader reader) => throw new NotSupportedException();
+
+            public void WriteDiscriminator(ref CborWriter writer, Type actualType) => throw new NotSupportedException();
+
+            public bool TryRegisterType(Type type)
+            {
+                if (type == typeof(BaseChannel) && !_swapped)
+                {
+                    _swapped = true;
+
+                    DiscriminatorConventionRegistry registry = _options.Registry.DiscriminatorConventionRegistry;
+                    registry.ClearConventions();
+                    registry.RegisterConvention(
+                        new DefaultDiscriminatorConvention<int>(_options.Registry, "_t", typeof(FallbackChannel)));
+                    registry.RegisterType<KnownChannel>();
+                }
+
+                return false;
+            }
         }
 
         public class PlainType
@@ -230,6 +392,10 @@ namespace Dahomey.Cbor.Tests.Issues
         }
 
         public class FallbackChannel : BaseChannel
+        {
+        }
+
+        public class OtherFallbackChannel : BaseChannel
         {
         }
     }

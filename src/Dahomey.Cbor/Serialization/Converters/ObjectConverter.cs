@@ -419,8 +419,9 @@ namespace Dahomey.Cbor.Serialization.Converters
         }
 
         /// <summary>
-        /// The convention for this type, asking the registry again if the last answer was null and
-        /// something has been registered since.
+        /// The convention for this type, asking the registry again whenever its version has moved
+        /// since the held answer was resolved - null or not, since clearing the conventions can
+        /// displace a convention as well as add one.
         /// </summary>
         /// <remarks>
         /// The version is sampled before the lookup, never after: a registration landing between the
@@ -443,6 +444,10 @@ namespace Dahomey.Cbor.Serialization.Converters
             int version = _registry.DiscriminatorConventionRegistry.Version;
             IDiscriminatorConvention? convention =
                 _registry.DiscriminatorConventionRegistry.GetConvention(typeof(T));
+
+            // A convention that arrives after the mapping was validated brings a member name that
+            // validation never saw; see the method for what it refuses.
+            MemberMappingErrors.ThrowIfDiscriminatorNameCollides(_objectMapping, convention);
 
             Volatile.Write(ref _resolvedDiscriminatorConvention, new ResolvedDiscriminatorConvention(version, convention));
 

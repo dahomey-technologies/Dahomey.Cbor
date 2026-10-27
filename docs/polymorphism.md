@@ -73,6 +73,12 @@ registry.ClearConventions();
 registry.RegisterConvention(new DefaultDiscriminatorConvention<int>(options.Registry, "t"));
 ```
 
+`ClearConventions` also forgets which subtypes were registered, so register each one again with
+`RegisterType<T>()` afterwards. Reading the abstract base does not do it for you: the first read of a
+document fails with `no type is registered for the discriminator …` until the subtype is registered.
+Converters that already exist notice the change and use the new convention, so the call is safe after
+(de)serialization has started.
+
 For a discriminator that is neither a plain string nor a plain int, implement `IDiscriminatorConvention`
 and register it the same way.
 

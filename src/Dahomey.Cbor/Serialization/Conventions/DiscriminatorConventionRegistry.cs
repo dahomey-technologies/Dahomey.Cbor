@@ -82,8 +82,8 @@ namespace Dahomey.Cbor.Serialization.Conventions
 
             _conventions.Push(convention);
 
-            // A convention that was not there before can only add resolutions, never remove one, so
-            // anything holding a null answer should ask again.
+            // A new convention changes what a type resolves to - it is consulted first - so anything
+            // holding an answer, null or not, should ask again.
             Interlocked.Increment(ref _version);
         }
 
