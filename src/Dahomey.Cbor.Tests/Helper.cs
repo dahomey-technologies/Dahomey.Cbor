@@ -42,6 +42,14 @@ namespace Dahomey.Cbor.Tests
                 Assert.Equal(collection, (ICollection)sequenceValue);
                 Assert.Equal(collection, (ICollection)fragmentizedSequenceValue);
             }
+            // IEEE 754 says NaN equals nothing, itself included, so Assert.Equal cannot state "all
+            // three readers agree" for it. Mirrors the same branch in the CborReader-method overload
+            // below; without it a NaN fixture fails here for a reason that is not the reader's.
+            else if (value is Half half && Half.IsNaN(half))
+            {
+                Assert.True(Half.IsNaN((Half)(object)sequenceValue));
+                Assert.True(Half.IsNaN((Half)(object)fragmentizedSequenceValue));
+            }
             else if (value is IEquatable<T> equatable)
             {
                 Assert.Equal(value, sequenceValue);
