@@ -1,5 +1,6 @@
 #if NET6_0_OR_GREATER
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
@@ -14,7 +15,8 @@ namespace Dahomey.Cbor.Serialization.Converters
     /// Which one is written follows <see cref="CborOptions.DateTimeFormat"/>, so a document keeps one
     /// shape throughout rather than encoding its dates differently from its timestamps. Both are read
     /// whichever is configured, since that setting describes what this end emits and says nothing
-    /// about what a peer sent.
+    /// about what a peer sent. The map earlier versions wrote for a <see cref="DateOnly"/>, before it
+    /// had a converter, is read as well and never written.
     /// </remarks>
     public class DateOnlyConverter : CborConverterBase<DateOnly>
     {
@@ -52,9 +54,42 @@ namespace Dahomey.Cbor.Serialization.Converters
                 case CborDataItemType.Unsigned:
                     return ReadEpochDay(ref reader);
 
+                case CborDataItemType.Map:
+                    return ReadLegacyMap(ref reader);
+
                 default:
                     throw reader.BuildException("Invalid date format");
             }
+        }
+
+        /// <summary>
+        /// The map earlier versions wrote for a <see cref="DateOnly"/>, an object of its public
+        /// properties. Read so that stored documents stay readable; never written.
+        /// <c>DayNumber</c> is authoritative, with <c>Year</c>, <c>Month</c> and <c>Day</c> as the
+        /// fallback.
+        /// </summary>
+        private static DateOnly ReadLegacyMap(ref CborReader reader)
+        {
+            Dictionary<string, long> members = LegacyDateTimeMap.Read(ref reader);
+
+            if (members.TryGetValue("DayNumber", out long dayNumber))
+            {
+                if (dayNumber >= DateOnly.MinValue.DayNumber && dayNumber <= DateOnly.MaxValue.DayNumber)
+                {
+                    return DateOnly.FromDayNumber((int)dayNumber);
+                }
+            }
+            else if (members.TryGetValue("Year", out long year)
+                && members.TryGetValue("Month", out long month)
+                && members.TryGetValue("Day", out long day)
+                && year >= 1 && year <= 9999
+                && month >= 1 && month <= 12
+                && day >= 1 && day <= DateTime.DaysInMonth((int)year, (int)month))
+            {
+                return new DateOnly((int)year, (int)month, (int)day);
+            }
+
+            throw reader.BuildException("Invalid date format");
         }
 
         public override void Write(ref CborWriter writer, DateOnly value)

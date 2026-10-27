@@ -74,7 +74,7 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
 
             if (type == typeof(TimeOnly))
             {
-                return new TimeOnlyConverter(options);
+                return new TimeOnlyConverter();
             }
 #endif
 

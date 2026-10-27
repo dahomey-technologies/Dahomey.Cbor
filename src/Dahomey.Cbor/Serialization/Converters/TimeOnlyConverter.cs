@@ -1,30 +1,34 @@
 #if NET6_0_OR_GREATER
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
 namespace Dahomey.Cbor.Serialization.Converters
 {
     /// <summary>
-    /// Reads and writes a <see cref="TimeOnly"/> as an RFC 3339 <c>partial-time</c> string, or as a
-    /// count of seconds since midnight.
+    /// Reads and writes a <see cref="TimeOnly"/> as an RFC 3339 <c>partial-time</c> string.
     /// </summary>
     /// <remarks>
     /// Deliberately untagged, unlike <see cref="DateOnlyConverter"/>. The CBOR tag registry has
     /// nothing for a time of day -- tags 0, 1, 4 and 5 are whole instants, and 1002 and 1003 are a
     /// duration and a period -- so there is no number to use, and occupying an unassigned one would
     /// leave documents that another decoder is entitled to reject.
+    /// <para>
+    /// There is one encoding whatever <see cref="CborOptions.DateTimeFormat"/> says: that option
+    /// chooses between representations of an instant, and a time of day is not one.
+    /// </para>
+    /// <para>
+    /// Also read, never written: the map earlier versions
+    /// wrote for a <see cref="TimeOnly"/> before it had a converter.
+    /// </para>
     /// </remarks>
     public class TimeOnlyConverter : CborConverterBase<TimeOnly>
     {
         private const long TicksPerSecond = TimeSpan.TicksPerSecond;
-        private const long SecondsPerDay = 24 * 60 * 60;
 
-        private readonly CborOptions _options;
-
-        public TimeOnlyConverter(CborOptions options)
+        public TimeOnlyConverter()
         {
-            _options = options;
         }
 
         public override TimeOnly Read(ref CborReader reader)
@@ -42,13 +46,8 @@ namespace Dahomey.Cbor.Serialization.Converters
 
                     return timeOnly;
 
-                case CborDataItemType.Signed:
-                case CborDataItemType.Unsigned:
-                    return FromSeconds(ref reader, reader.ReadInt64());
-
-                case CborDataItemType.Double:
-                case CborDataItemType.Single:
-                    return FromSeconds(ref reader, reader.ReadDouble());
+                case CborDataItemType.Map:
+                    return ReadLegacyMap(ref reader);
 
                 default:
                     throw reader.BuildException("Invalid time format");
@@ -57,46 +56,45 @@ namespace Dahomey.Cbor.Serialization.Converters
 
         public override void Write(ref CborWriter writer, TimeOnly value)
         {
-            switch (_options.DateTimeFormat)
-            {
-                case DateTimeFormat.ISO8601:
-                    // "FFFFFFF" rather than "fffffff": a whole second is written as "01:02:03", and
-                    // the fraction appears only when there is one, at the width it needs.
-                    writer.WriteString(value.ToString("HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture));
-                    break;
-
-                // Whole seconds, so a value carrying a fraction does not round-trip through this
-                // format. That matches what DateTimeFormat.Unix already does to a DateTime.
-                case DateTimeFormat.Unix:
-                    writer.WriteInt64(value.Ticks / TicksPerSecond);
-                    break;
-
-                case DateTimeFormat.UnixMilliseconds:
-                    writer.WriteDouble((double)(value.Ticks / TimeSpan.TicksPerMillisecond) / 1000.0);
-                    break;
-            }
+            // "FFFFFFF" rather than "fffffff": a whole second is written as "01:02:03", and the
+            // fraction appears only when there is one, at the width it needs.
+            writer.WriteString(value.ToString("HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture));
         }
 
-        private static TimeOnly FromSeconds(ref CborReader reader, long seconds)
+        /// <summary>
+        /// The map earlier versions wrote for a <see cref="TimeOnly"/>, an object of its public
+        /// properties. <c>Ticks</c> carries the whole value, seconds and fraction included, so it is
+        /// authoritative; <c>Hour</c>, <c>Minute</c> and the finer members are the fallback.
+        /// </summary>
+        private static TimeOnly ReadLegacyMap(ref CborReader reader)
         {
-            if (seconds < 0 || seconds >= SecondsPerDay)
+            Dictionary<string, long> members = LegacyDateTimeMap.Read(ref reader);
+
+            if (members.TryGetValue("Ticks", out long ticks))
             {
-                throw reader.BuildException($"Time out of range: {seconds} seconds since midnight");
+                if (ticks >= 0 && ticks < TimeSpan.TicksPerDay)
+                {
+                    return new TimeOnly(ticks);
+                }
+            }
+            else if (members.TryGetValue("Hour", out long hour)
+                && members.TryGetValue("Minute", out long minute))
+            {
+                members.TryGetValue("Second", out long second);
+                members.TryGetValue("Millisecond", out long millisecond);
+                members.TryGetValue("Microsecond", out long microsecond);
+
+                if (hour >= 0 && hour < 24 && minute >= 0 && minute < 60
+                    && second >= 0 && second < 60 && millisecond >= 0 && millisecond < 1000
+                    && microsecond >= 0 && microsecond < 1000)
+                {
+                    return new TimeOnly(
+                        (((hour * 60 + minute) * 60 + second) * 1000 + millisecond) * TimeSpan.TicksPerMillisecond
+                        + microsecond * (TimeSpan.TicksPerMillisecond / 1000));
+                }
             }
 
-            return new TimeOnly(seconds * TicksPerSecond);
-        }
-
-        private static TimeOnly FromSeconds(ref CborReader reader, double seconds)
-        {
-            // NaN fails every comparison, so it has to be refused by asking whether the value is in
-            // range rather than whether it is out of it.
-            if (!(seconds >= 0 && seconds < SecondsPerDay))
-            {
-                throw reader.BuildException($"Time out of range: {seconds} seconds since midnight");
-            }
-
-            return new TimeOnly((long)(seconds * TicksPerSecond));
+            throw reader.BuildException("Invalid time format");
         }
 
         /// <summary>

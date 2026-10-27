@@ -5,11 +5,15 @@
 `DateTime`, `DateOnly` and `TimeOnly` each have a converter. Which encoding they write is chosen by one
 option, `CborOptions.DateTimeFormat`, so a document keeps one shape throughout.
 
-| `DateTimeFormat` | `DateTime` | `DateOnly` | `TimeOnly` |
-|---|---|---|---|
-| `ISO8601` (default) | tag 0 over an RFC 3339 date-time | tag 1004 over an RFC 3339 `full-date` | an RFC 3339 `partial-time`, untagged |
-| `Unix` | tag 1 over seconds since the epoch | tag 100 over days since 1970-01-01 | seconds since midnight, untagged |
-| `UnixMilliseconds` | tag 1 over fractional seconds | tag 100 over days since 1970-01-01 | fractional seconds since midnight, untagged |
+| `DateTimeFormat` | `DateTime` | `DateOnly` |
+|---|---|---|
+| `ISO8601` (default) | tag 0 over an RFC 3339 date-time | tag 1004 over an RFC 3339 `full-date` |
+| `Unix` | tag 1 over seconds since the epoch | tag 100 over days since 1970-01-01 |
+| `UnixMilliseconds` | tag 1 over fractional seconds | tag 100 over days since 1970-01-01 |
+
+`TimeOnly` is not in the table because it has one encoding whatever the setting says: an untagged RFC 3339
+`partial-time` string. `DateTimeFormat` chooses between representations of an instant, and a time of day
+is not one.
 
 Reading ignores the setting: every form above is accepted whichever one is configured, tagged or not.
 The option describes what this end emits, and a peer's choice is not yours to make.
@@ -35,12 +39,19 @@ definition allows.
 Both numeric formats write the day count. A date has no time of day to carry milliseconds, so there is
 nothing for `UnixMilliseconds` to make finer.
 
+### Documents written before `DateOnly` had a converter
+
+Before it had a converter a `DateOnly` was written as a map of its public properties (`Year`, `Month`,
+`Day`, `DayOfWeek`, `DayOfYear`, `DayNumber`). That form is still **read**, whatever the setting, and is
+never written. `DayNumber` decides when present, and `Year`, `Month` and `Day` otherwise; a map with
+neither is refused. Keys match without regard to case, so a naming convention does not matter. Only the
+string-keyed map is recognised, not the `IntKeyMap` or `Array` object formats.
+
 ## `TimeOnly`
 
 ```csharp
 // 01:02:03     -> 68 30313A30323A3033         ("01:02:03")
 // 01:02:03.841 -> 6C 30313A30323A30332E383431 ("01:02:03.841")
-// 01:02:03     -> 19 0E8B                     (3723 seconds since midnight)
 ```
 
 Alone among these types, `TimeOnly` is written **untagged**. The CBOR tag registry has nothing for a time
@@ -52,12 +63,20 @@ The fraction is written only when there is one, at the width it needs, and a fra
 an incoming document is truncated rather than refused: a peer whose clock is more precise than `TimeOnly`
 is interoperating correctly.
 
-`DateTimeFormat.Unix` writes whole seconds, so a `TimeOnly` carrying a fraction does not survive a round
-trip through that setting. This is the same narrowing `Unix` already applies to a `DateTime`.
+`DateTimeFormat` has no effect on a `TimeOnly`: with `Unix` or `UnixMilliseconds` set it is still the
+string above, fraction included.
 
 A `DateTime` read from a string carrying a numeric offset is converted to UTC, and the offset itself is
 not retained — `DateTime` has nowhere to put it, only a `DateTimeKind`. A string with no offset and no
 `Z` is given the kind named by `CborOptions.UnqualifiedTimeZoneDateTimeKind`.
+
+### Documents written before `TimeOnly` had a converter
+
+A `TimeOnly` used to be written as a map of its public properties (`Hour`, `Minute`, `Second`,
+`Millisecond`, `Microsecond`, `Nanosecond`, `Ticks`). That map is still **read** and never written.
+`Ticks` carries the whole value, so seconds and fractions are recovered from it; without `Ticks`,
+`Hour` and `Minute` are required and `Second`, `Millisecond` and `Microsecond` are used when present.
+The same string-keyed-map restriction applies as for `DateOnly`.
 
 ## What has no converter
 

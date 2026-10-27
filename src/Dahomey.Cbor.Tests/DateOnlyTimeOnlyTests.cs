@@ -90,22 +90,91 @@ namespace Dahomey.Cbor.Tests
         }
 
         [Theory]
-        // Seconds since midnight, under both numeric formats. 3723 = 01:02:03.
-        [InlineData("190E8B", 1, 2, 3)]
-        [InlineData("00", 0, 0, 0)]
-        [InlineData("FB40AD160000000000", 1, 2, 3)]
-        public void ReadTimeOnlyFromSecondsSinceMidnight(string hexBuffer, int hours, int minutes, int seconds)
+        [InlineData(DateTimeFormat.ISO8601)]
+        [InlineData(DateTimeFormat.Unix)]
+        [InlineData(DateTimeFormat.UnixMilliseconds)]
+        public void TimeOnlyHasOneEncodingWhateverTheDateTimeFormat(DateTimeFormat format)
         {
-            Assert.Equal(new TimeOnly(hours, minutes, seconds), Helper.Read<TimeOnly>(hexBuffer));
+            // "01:02:03". DateTimeFormat chooses between representations of an instant, and a time of
+            // day is not one.
+            Helper.TestWrite(
+                new TimeOnly(1, 2, 3), "6830313A30323A3033", null, new CborOptions { DateTimeFormat = format });
         }
 
         [Theory]
-        [InlineData("190E8B", DateTimeFormat.Unix)]
-        [InlineData("FA4568B000", DateTimeFormat.UnixMilliseconds)]  // narrowed to a single, which holds 3723 exactly
-        public void WriteTimeOnlyAsSecondsSinceMidnight(string hexBuffer, DateTimeFormat format)
+        [InlineData("190E8B")]               // 3723, seconds since midnight
+        [InlineData("FA4568B000")]           // 3723.0
+        public void ANumberIsNotATimeOnly(string hexBuffer)
         {
-            Helper.TestWrite(
-                new TimeOnly(1, 2, 3), hexBuffer, null, new CborOptions { DateTimeFormat = format });
+            Assert.Throws<CborException>(() => Helper.Read<TimeOnly>(hexBuffer));
+        }
+
+        // The map below is what TimeOnly was written as before it had a converter: an object of its
+        // public properties, captured by serializing with a plain CborOptions on the commit before
+        // this converter existed. Documents stored in that form stay readable.
+        [Theory]
+        // 03:04:05 -- the old reader rebuilt it from Hour and Minute and returned 03:04:00; Ticks
+        // is in the document, so nothing is lost on the way in.
+        [InlineData(
+            "A764486F757203664D696E75746504665365636F6E64056B4D696C6C697365636F6E64006B4D6963726F7365636F6E64006A4E616E6F7365636F6E6400655469636B731B00000019B7554080",
+            3, 4, 5, 0)]
+        // 03:04:05.678
+        [InlineData(
+            "A764486F757203664D696E75746504665365636F6E64056B4D696C6C697365636F6E641902A66B4D6963726F7365636F6E64006A4E616E6F7365636F6E6400655469636B731B00000019B7BCB4E0",
+            3, 4, 5, 678)]
+        public void ReadTimeOnlyFromTheMapEarlierVersionsWrote(
+            string hexBuffer, int hours, int minutes, int seconds, int milliseconds)
+        {
+            Assert.Equal(new TimeOnly(hours, minutes, seconds, milliseconds), Helper.Read<TimeOnly>(hexBuffer));
+        }
+
+        [Fact]
+        public void TheGeneratedPathReadsTheLegacyMapsToo()
+        {
+            // {"Date": {"Year": 2026, "Month": 8, "Day": 17}, "Time": <the 03:04:05 map above>, "OptionalDate": null}
+            byte[] document = Convert.FromHexString(
+                "A36444617465A364596561721907EA654D6F6E74680863446179116454696D65A764486F757203664D696E75746504665365636F6E64056B4D696C6C697365636F6E64006B4D6963726F7365636F6E64006A4E616E6F7365636F6E6400655469636B731B00000019B75540806C4F7074696F6E616C44617465F6");
+
+            CborOptions options = CborSerializerContext.Default<DateContext>().Options;
+            GeneratedDateHolder holder = Cbor.Deserialize<GeneratedDateHolder>(document, options);
+
+            Assert.Equal(new DateOnly(2026, 8, 17), holder.Date);
+            Assert.Equal(new TimeOnly(3, 4, 5), holder.Time);
+            Assert.Null(holder.OptionalDate);
+        }
+
+        [Fact]
+        public void TheLegacyTimeOnlyMapFallsBackToItsComponentsWithoutTicks()
+        {
+            // {"Hour": 3, "Minute": 4, "Second": 5}
+            Assert.Equal(new TimeOnly(3, 4, 5), Helper.Read<TimeOnly>("A364486F757203664D696E75746504665365636F6E6405"));
+        }
+
+        [Fact]
+        public void ALegacyTimeOnlyMapWithNoTimeInItIsRefused()
+        {
+            Assert.Throws<CborException>(() => Helper.Read<TimeOnly>("A164486F757203"));   // {"Hour": 3}
+        }
+
+        // DateOnly was written as an object of its public properties, which is the map below. Unlike
+        // the TimeOnly map above these bytes are built from the BCL's member list rather than
+        // captured: DateOnly's creator mapping does not resolve on net10.0, where the old code
+        // throws, so there is no net10.0 capture to take.
+        // {"Year": 2026, "Month": 8, "Day": 17, "DayOfWeek": 1, "DayOfYear": 229, "DayNumber": 739844}
+        [Theory]
+        [InlineData("A664596561721907EA654D6F6E7468086344617911694461794F665765656B01694461794F665965617218E5694461794E756D6265721A000B4A04")]
+        // {"Year": 2026, "Month": 8, "Day": 17} -- DayNumber absent, so the components decide
+        [InlineData("A364596561721907EA654D6F6E7468086344617911")]
+        public void ReadDateOnlyFromTheMapEarlierVersionsWrote(string hexBuffer)
+        {
+            Assert.Equal(new DateOnly(2026, 8, 17), Helper.Read<DateOnly>(hexBuffer));
+        }
+
+        [Theory]
+        [InlineData("A1654D6F6E746808")]   // {"Month": 8}
+        public void ALegacyDateOnlyMapWithNoDateInItIsRefused(string hexBuffer)
+        {
+            Assert.Throws<CborException>(() => Helper.Read<DateOnly>(hexBuffer));
         }
 
         [Theory]

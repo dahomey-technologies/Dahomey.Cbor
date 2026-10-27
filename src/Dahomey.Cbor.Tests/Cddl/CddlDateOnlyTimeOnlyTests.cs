@@ -59,25 +59,25 @@ namespace Dahomey.Cbor.Tests.Cddl
         }
 
         [Fact]
-        public void UnixRendersRfc8943EpochDayAndAnUntaggedInt()
+        public void UnixRendersRfc8943EpochDayAndTheSameUntaggedString()
         {
             string schema = CddlDateUnixContext.CddlSchema;
 
             Assert.Contains("\"Date\": #6.100(int),", schema);
-            Assert.Contains("\"Time\": int,", schema);
+            Assert.Contains("\"Time\": tstr,", schema);
         }
 
         /// <summary>
         /// A date has no time of day to carry milliseconds, so it is the same day count under both
-        /// numeric formats -- unlike the time beside it, which does move.
+        /// numeric formats, and a time of day is the same string under every format.
         /// </summary>
         [Fact]
-        public void UnixMillisecondsKeepsTheDayCountAndFloatsOnlyTheTime()
+        public void UnixMillisecondsKeepsTheDayCountAndTheSameTime()
         {
             string schema = CddlDateUnixMillisecondsContext.CddlSchema;
 
             Assert.Contains("\"Date\": #6.100(int),", schema);
-            Assert.Contains("\"Time\": float,", schema);
+            Assert.Contains("\"Time\": tstr,", schema);
         }
 
         [CddlFact]
