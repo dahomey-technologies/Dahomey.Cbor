@@ -157,9 +157,11 @@ namespace Harness
             Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
         }
 
-        // char and BigInteger are deliberately absent from this file: both have concrete converters
-        // (CharConverter and BigIntegerConverter), so both render rather than raising CBOR1011.
-        // CddlScalarMappingTests pins what they render as.
+        // char, BigInteger and Half are deliberately absent from this file: each has a concrete
+        // converter (CharConverter, BigIntegerConverter and HalfConverter), so each renders rather than
+        // raising CBOR1011. CddlScalarMappingTests pins what they render as, where the row also reaches
+        // the gem's parse and instance checks -- which is the whole point of the split, since asserting
+        // here that a diagnostic stays silent says nothing about what was emitted instead.
 
         /// <summary>
         /// DateTimeOffset does render, unlike the Guid above: DateTimeOffsetConverter writes the same
@@ -179,27 +181,6 @@ namespace Harness
 ");
 
             Assert.DoesNotContain(diagnostics, d => d.Id == "CBOR1011");
-        }
-
-        /// <summary>
-        /// Scalar System.Half has no converter either -- the only place the library references it is the
-        /// RFC 8746 typed-array element path, a different representation entirely (`#6.84(bstr)`), not a
-        /// scalar member's.
-        /// </summary>
-        [Fact]
-        public void ScalarHalfHasNoCddlRepresentation()
-        {
-            ImmutableArray<Diagnostic> diagnostics = CddlGeneratorHarness.Run(Preamble + @"
-    public class Measurement { public System.Half Value { get; set; } }
-
-    [CborSerializable(typeof(Measurement))]
-    [CborCddlSchema]
-    public partial class HarnessContext : CborSerializerContext { }
-}
-");
-
-            Diagnostic reported = Assert.Single(diagnostics, d => d.Id == "CBOR1011");
-            Assert.Equal(DiagnosticSeverity.Error, reported.Severity);
         }
 
         /// <summary>
