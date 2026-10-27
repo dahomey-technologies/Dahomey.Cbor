@@ -96,6 +96,12 @@ namespace Dahomey.Cbor.Generator
         /// </summary>
         public string? ShouldSerializeOwner { get; set; }
 
+        /// <summary>
+        /// The fully qualified type declaring this member, set only when a more-derived type declares
+        /// something under the same name, which makes a bare <c>o.Name</c> bind to that instead.
+        /// </summary>
+        public string? ShadowedOwner { get; set; }
+
         /// <summary>The wire name, after naming convention and <c>[CborProperty]</c>.</summary>
         public string CborName { get; }
 

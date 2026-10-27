@@ -546,15 +546,19 @@ namespace Dahomey.Cbor.Generator
                 ? $"DelegateStructMemberMapping<{ownerName}, {memberTypeName}>"
                 : $"DelegateMemberMapping<{ownerName}, {memberTypeName}>";
 
+            // A member a more-derived type has put its own name over is reached through the type that
+            // declares it: `o.Name` would bind to the nearer one, whatever its getter or type.
+            string target = member.ShadowedOwner is null ? "o" : $"(({member.ShadowedOwner})o)";
+
             // Structs need ref-taking accessors so mutations are not lost on a copy.
             string getter = isStruct
                 ? $"(ref {ownerName} o) => o.{member.Name}"
-                : $"o => o.{member.Name}";
+                : $"o => {target}.{member.Name}";
 
             string setter = member.CanWrite
                 ? isStruct
                     ? $"(ref {ownerName} o, {memberTypeName} v) => o.{member.Name} = v"
-                    : $"(o, v) => o.{member.Name} = v"
+                    : $"(o, v) => {target}.{member.Name} = v"
                 : "null";
 
             string key = member.CborIndex is not null

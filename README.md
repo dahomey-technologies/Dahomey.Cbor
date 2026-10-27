@@ -27,6 +27,7 @@ High-performance [CBOR](https://cbor.io/) serialization framework for .Net (C#)
 * Required members, conditional serialization (`ShouldSerialize[PropertyName]()`), ignored default values
 * Serialization callbacks (before/after serialization/deserialization)
 * Support for collection interfaces: `IList<>`, `ICollection<>`, `IEnumerable<>`, `IReadOnlyList<>`, `IReadOnlyCollection<>`
+* Stacks and queues (`Stack<>`, `Queue<>`, their concurrent and immutable forms) as arrays in enumeration order, a stack reading back unreversed
 * Tuples of any arity, as one flat array, on the reflection and source-generated paths
 * [RFC 8746](docs/typed-arrays.md) typed arrays, opt-in per direction
 * [Arbitrary-precision numbers](docs/numbers.md): bignums (tags 2 and 3), decimal fractions (tag 4) and bigfloats (tag 5)

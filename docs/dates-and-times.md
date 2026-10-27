@@ -19,6 +19,11 @@ is not one.
 Reading ignores the setting: every form above is accepted whichever one is configured, tagged or not.
 The option describes what this end emits, and a peer's choice is not yours to make.
 
+Tag 1 over a float is read to the nearest tick, and a float that is the nearest one to a whole
+millisecond, which is what `UnixMilliseconds` writes, is read as that millisecond. A double near today's
+1.7e9 seconds resolves only about 2.4 ticks, so the exact millisecond is not in the bytes and could not
+be recovered by rounding to the tick alone. NaN and the infinities name no instant and are refused.
+
 ## `DateTime`
 
 A `DateTime` read from a string carrying a numeric offset is converted to UTC, and the offset itself is

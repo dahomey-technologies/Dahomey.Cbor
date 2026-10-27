@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -69,6 +70,19 @@ namespace Dahomey.Cbor.Serialization.Converters.Providers
                     return CreateGenericConverter(
                         options,
                         typeof(ImmutableCollectionConverter<,>), type, itemType);
+                }
+
+                if (type.GetGenericTypeDefinition() == typeof(Stack<>)
+                    || type.GetGenericTypeDefinition() == typeof(Queue<>)
+                    || type.GetGenericTypeDefinition() == typeof(ConcurrentStack<>)
+                    || type.GetGenericTypeDefinition() == typeof(ConcurrentQueue<>)
+                    || type.GetGenericTypeDefinition() == typeof(ImmutableStack<>)
+                    || type.GetGenericTypeDefinition() == typeof(ImmutableQueue<>))
+                {
+                    Type itemType = type.GetGenericArguments()[0];
+                    return CreateGenericConverter(
+                        options,
+                        typeof(StackQueueConverter<,>), type, itemType);
                 }
 
                 if (type.IsInterface

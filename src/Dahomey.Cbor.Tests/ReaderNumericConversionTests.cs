@@ -422,8 +422,8 @@ namespace Dahomey.Cbor.Tests
         [InlineData("F90000", "0")]
         [InlineData("FA6F7FFFFF", "79228160000000000000000000000")]            // the largest single below 2^96
         [InlineData("FAEF7FFFFF", "-79228160000000000000000000000")]
-        [InlineData("FB45EFFFFFFFFFFFFF", "79228162514264300000000000000")]    // the largest double below 2^96
-        [InlineData("FBC5EFFFFFFFFFFFFF", "-79228162514264300000000000000")]
+        [InlineData("FB45EFFFFFFFFFFFFF", "79228162514264330000000000000")]    // the largest double below 2^96
+        [InlineData("FBC5EFFFFFFFFFFFFF", "-79228162514264330000000000000")]
         [InlineData("FB0000000000000001", "0")]                                  // double.Epsilon underflows to zero
         [InlineData("FB3FF8000000000000", "1.5")]
         [InlineData("FA3FC00000", "1.5")]

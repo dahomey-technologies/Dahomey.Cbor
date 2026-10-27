@@ -211,7 +211,8 @@ namespace Dahomey.Cbor.Generator
                 options,
                 diagnostics,
                 symbol => compilation.IsSymbolAccessibleWithin(symbol, contextSymbol, symbol.ContainingType),
-                (a, b) => compilation.ClassifyConversion(a, b).IsIdentity);
+                (a, b) => compilation.ClassifyConversion(a, b).IsIdentity,
+                contextSymbol.ContainingAssembly);
 
             foreach (ITypeSymbol root in roots)
             {

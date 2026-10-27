@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 
@@ -34,6 +35,20 @@ namespace Dahomey.Cbor.Serialization.Converters
                 .First(m => m.IsGenericMethod && m.GetGenericMethodDefinition().Name == "CreateRange")
                 .MakeGenericMethod(typeof(TI));
             _createRangeDelegate = (Func<IEnumerable<TI>, TC>)Delegate.CreateDelegate(typeof(Func<IEnumerable<TI>, TC>), methodInfo);
+        }
+
+        public override void Write(ref CborWriter writer, TC value, LengthMode lengthMode)
+        {
+            // A default ImmutableArray<TI> - what a member holds until it is assigned - is that
+            // struct's null: it cannot be enumerated, so writing it threw InvalidOperationException.
+            // It is written as null, which already read back as the same default.
+            if (value is ImmutableArray<TI> { IsDefault: true })
+            {
+                writer.WriteNull();
+                return;
+            }
+
+            base.Write(ref writer, value, lengthMode);
         }
 
         protected override TC InstantiateCollection(ICollection<TI> tempCollection)

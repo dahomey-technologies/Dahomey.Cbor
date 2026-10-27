@@ -243,6 +243,14 @@ namespace Dahomey.Cbor.Tests
         [InlineData("FC0DED017037E8D1950000000000100000", "100.3459873459458453", null)]
         [InlineData("FCFFFFFFFFFFFFFFFFFFFFFFFF80000000", "-79228162514264337593543950335", null)]
         [InlineData("FCFFFFFFFFFFFFFFFFFFFFFFFF00000000", "79228162514264337593543950335", null)]
+        // A float is read as the shortest text that reads back as it, not to 7 or 15 significant digits.
+        [InlineData("FA4B800000", "16777216", null)]
+        [InlineData("FA3DCCCCCD", "0.1", null)]
+        [InlineData("FB3FD3333333333334", "0.30000000000000004", null)]
+        [InlineData("FB4340000000000000", "9007199254740992", null)]
+        [InlineData("FB3FB999999999999A", "0.1", null)]
+        [InlineData("F93E00", "1.5", null)]
+        [InlineData("FA00000001", "0", null)]
         public void ReadDecimal2(string hexBuffer, string expectedValue, Type expectedExceptionType)
         {
             if (!decimal.TryParse(expectedValue, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal decimalValue)) throw new InvalidCastException("Specified string cannot be cast to a decimal value");
@@ -365,6 +373,31 @@ namespace Dahomey.Cbor.Tests
             var resultValueItem2 = reader.ReadDataItem();
             Assert.Equal(expectedResultValue, resultValueItem1.BytesToHex());
             Assert.Equal(expectedResultValue, resultValueItem2.BytesToHex());
+        }
+
+        /// <summary>
+        /// A sequence-backed reader has no span to slice, and ReadDataItem threw
+        /// ArgumentOutOfRangeException on it (#265). One byte per segment, so every item spans several.
+        /// </summary>
+        [Theory]
+        [InlineData("a262696468366534306233336266726573756c74c6f6", "683665343062333362", "c6f6")]
+        [InlineData("A262696468376235356365363566726573756C7463657965", "683762353563653635", "63657965")]
+        public void ReadDataItemOnASequence(string hexBuffer, string expectedIdValue, string expectedResultValue)
+        {
+            var reader = new CborReader(Helper.Fragmentize(hexBuffer.HexToBytes()));
+
+            reader.ReadBeginMap();
+
+            int remainingItemCount = reader.ReadSize();
+
+            reader.MoveNextMapItem(ref remainingItemCount);
+            Assert.Equal("id", reader.ReadString());
+            Assert.Equal(expectedIdValue, reader.ReadDataItem(false).BytesToHex());
+            Assert.Equal(expectedIdValue, reader.ReadDataItem().BytesToHex());
+
+            reader.MoveNextMapItem(ref remainingItemCount);
+            Assert.Equal("result", reader.ReadString());
+            Assert.Equal(expectedResultValue, reader.ReadDataItem().BytesToHex());
         }
 
         [Theory]

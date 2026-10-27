@@ -84,6 +84,11 @@ refused, so `[-30, 100]` reads as `1E-28`. What a `decimal` genuinely cannot hol
 than 96 bits, or a scale that cannot be reduced to 28 — is a `CborException` rather than a rounded
 value.
 
+A float is read as the shortest decimal that reads back as that float, which is what parsing the
+float's text gives: binary64 `FB 3FD3333333333334` reads as `0.30000000000000004m` rather than `0.3m`,
+and binary32 `FA 4B800000` as `16777216m` rather than `16777220m`. A float past a `decimal`'s range is a
+`CborException`; one finer than its 28 decimal places is rounded to them, so `1E-45` reads as zero.
+
 Two things do not follow the setting. `CborWriter.WriteDecimal(value)` writes the default form, since a
 `CborWriter` holds no options; pass the format explicitly
 (`WriteDecimal(value, DecimalFormat.DecimalFraction)`) from a custom converter. And the object model
@@ -181,8 +186,12 @@ payload is written as the canonical `F9 7E00`, so a deterministic encoding admit
 rather than 2046.
 
 Reading is as tolerant as a `float` member's, because it is the same reader: an integer, a text string,
-or any of the three float widths all decode. A value past binary16's range saturates to infinity, which
-is what the IEEE conversion does; it is not an error.
+or any of the three float widths all decode. A value is rounded to the nearest binary16, as the IEEE
+conversion does, and that is not an error at either end: past the range it saturates to infinity, so an
+integer 65520 or a double `1e10` reads as `+Infinity`, and below the smallest subnormal it goes to zero,
+so a double `1e-10` reads as `0`. A `float` member narrows a double the same way, `1e300` reading as
+`+Infinity`. `System.Text.Json` also reads `1e300` into a `float` as infinity and `1e-10` into a `Half`
+as zero; `System.Formats.Cbor` refuses any narrowing.
 
 `Half` is also the tenth [typed-array](typed-arrays.md) element type, tag 84 little-endian.
 
