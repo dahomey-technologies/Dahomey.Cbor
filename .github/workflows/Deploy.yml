@@ -3,22 +3,50 @@ name: Deploy to Nuget
 on:
   release:
     types: [published]
+  # Publishes an existing tag again, e.g. after a failed push. The package is always built from the
+  # tag, while this workflow file comes from the branch the run is started on.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing release tag to publish (e.g. 1.28.0)
+        required: true
+
+# id-token lets NuGet/login exchange the job's OIDC token for a short-lived API key (Trusted
+# Publishing): no long-lived key is stored in the repository.
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      VERSION: ${{ github.event_name == 'release' && github.ref_name || inputs.version }}
+
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.VERSION }}
 
       - name: setup
-        uses: actions/setup-dotnet@v1
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
       - name: build
-        run: dotnet pack -p:Version=${GITHUB_REF##*/} -p:FileVersion=${GITHUB_REF##*/} -p:AssemblyVersion=${GITHUB_REF##*/} -c Release src/Dahomey.Cbor
+        run: dotnet pack -p:Version=$VERSION -p:FileVersion=$VERSION -p:AssemblyVersion=$VERSION -c Release src/Dahomey.Cbor
+
+      # The policy on nuget.org names this repository and this file, Deploy.yml: renaming it breaks
+      # publishing until the policy is updated.
+      - name: login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
 
       - name: deploy
-        run: dotnet nuget push src/Dahomey.Cbor/bin/Release/Dahomey.Cbor.${GITHUB_REF##*/}.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push src/Dahomey.Cbor/bin/Release/Dahomey.Cbor.$VERSION.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
