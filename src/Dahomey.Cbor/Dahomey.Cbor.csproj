@@ -13,7 +13,10 @@
     <PackageTags>cbor;serialization;json</PackageTags>
     <RepositoryUrl>https://github.com/dahomey-technologies/Dahomey.Cbor.git</RepositoryUrl>
     <RepositoryType>Git</RepositoryType>
-    <PackageIconUrl>https://avatars3.githubusercontent.com/u/29336625?s=200&amp;v=4</PackageIconUrl>
+    <PackageIcon>icon.png</PackageIcon>
+    <!-- A short page for nuget.org, whose links are absolute: the repository README links to docs/ by
+         relative path, which nuget.org cannot resolve. -->
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
     <Copyright>Copyright © Dahomey Technologies 2020</Copyright>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <!--
@@ -38,6 +41,11 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="icon.png" Pack="true" PackagePath="" Visible="false" />
+    <None Include="PACKAGE.md" Pack="true" PackagePath="" />
   </ItemGroup>
 
   <ItemGroup>
